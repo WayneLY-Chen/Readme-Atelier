@@ -1,5 +1,38 @@
 import { Solar } from "lunar-typescript";
 
+/**
+ * lunar-typescript's real supported year range, per RESEARCH.md Pitfall 2:
+ * the library computes via astronomical algorithm and never throws on its
+ * own, so "supported" here means "verified accurate against an independent
+ * public source," not "does not crash."
+ *
+ * Verified empirically against Hong Kong Observatory's official published
+ * Gregorian/lunar conversion tables (hko.gov.hk/tc/gts/time/conversion1_text
+ * .htm), which explicitly state their own coverage as "年份(1901-2100)" and
+ * 404 for 1899, 1900, and 2101. Cross-checked multiple dates at both
+ * boundaries (1901-01-01, 1901-01-06, 2100-01-01, 2100-01-10, 2100-12-22,
+ * 2100-12-31) against HKO's published day-in-month, month-boundary, and
+ * year-ganzhi values — lunar-typescript matched HKO exactly on every point
+ * checked. 1900 is deliberately excluded from the verified range (not just
+ * 1899) because HKO's own table starts at 1901, not 1900 — RESEARCH.md's
+ * Pitfall 2 example text used "1900–2100" only as an illustration, not a
+ * pre-verified boundary; this task's own empirical check is authoritative.
+ */
+const VERIFIED_MIN_YEAR = 1901;
+const VERIFIED_MAX_YEAR = 2100;
+const VERIFIED_RANGE_LABEL = `${VERIFIED_MIN_YEAR}–${VERIFIED_MAX_YEAR}`;
+
+/** UI-SPEC "Degenerate States #1" error message shape. */
+export class LunarRangeError extends Error {
+  constructor(date: Date, verifiedRange: string = VERIFIED_RANGE_LABEL) {
+    super(
+      `Almanac: cannot compute lunar date for ${date.toISOString()}\n` +
+        `Lunar-calendar library supports ${verifiedRange}. This date falls outside that range.`,
+    );
+    this.name = "LunarRangeError";
+  }
+}
+
 export interface AlmanacContent {
   gregorian: { year: number; month: number; day: number; weekday: number };
   /**
@@ -83,11 +116,18 @@ function toZonedLocalDate(date: Date, timeZone: string): Date {
 
 /**
  * Pure function: given an instant (`now`) and an IANA timezone name, compute
- * this card's full calendrical content. Year-range guarding against
- * lunar-typescript's real supported range is added in Task 3.
+ * this card's full calendrical content. Throws LunarRangeError for any
+ * timezone-local year outside lunar-typescript's verified-accurate range
+ * (see VERIFIED_MIN_YEAR/VERIFIED_MAX_YEAR above) instead of returning a
+ * result the library was never confirmed correct for.
  */
 export function getAlmanacContent(now: Date, timezone: string): AlmanacContent {
   const zonedDate = toZonedLocalDate(now, timezone);
+  const zonedYear = zonedDate.getFullYear();
+  if (zonedYear < VERIFIED_MIN_YEAR || zonedYear > VERIFIED_MAX_YEAR) {
+    throw new LunarRangeError(now);
+  }
+
   const solar = Solar.fromDate(zonedDate);
   const lunar = solar.getLunar();
   return {
