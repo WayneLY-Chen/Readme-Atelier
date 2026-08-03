@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import opentype from "opentype.js";
 import subsetFont from "subset-font";
 import { beforeAll, describe, expect, it } from "vitest";
 import { measureAdvanceWidth, registerFont, textToPathData, UnknownFontError } from "./font.js";
@@ -29,6 +30,32 @@ beforeAll(async () => {
     targetFormat: "sfnt",
   });
   registerFont(FONT_NAME, toArrayBuffer(subsetBuffer));
+});
+
+describe("Plan 02 Task 1: Source Serif 4 + Noto Serif TC subset fonts", () => {
+  // These assert against the real, already-built assets/fonts/*.subset.ttf
+  // committed by `npm run build:fonts` (Pitfall 1 self-verification, the
+  // same style of check Plan 01 wrote for IBM Plex Mono) — not against a
+  // freshly-subsetted fixture, since these two files are themselves the
+  // artifact under test.
+  it("assets/fonts/source-serif-4.subset.ttf is parseable and non-empty", () => {
+    const buffer = readFileSync(path.join("assets", "fonts", "source-serif-4.subset.ttf"));
+    const font = opentype.parse(toArrayBuffer(buffer));
+    expect(font.numGlyphs).toBeGreaterThan(0);
+    registerFont("test-serif", toArrayBuffer(buffer));
+    expect(measureAdvanceWidth("test-serif", "AV", 44)).toBeGreaterThan(0);
+  });
+
+  it("assets/fonts/noto-serif-tc.subset.ttf is parseable and non-empty", () => {
+    const buffer = readFileSync(path.join("assets", "fonts", "noto-serif-tc.subset.ttf"));
+    const font = opentype.parse(toArrayBuffer(buffer));
+    expect(font.numGlyphs).toBeGreaterThan(0);
+    registerFont("test-noto-tc", toArrayBuffer(buffer));
+    expect(measureAdvanceWidth("test-noto-tc", "中文", 17)).toBeGreaterThan(0);
+    // The merged-in fullwidth colon (see scripts/build-fonts.ts's
+    // mergeSupplementalPunctuation) must be a real glyph, not .notdef.
+    expect(font.charToGlyphIndex("：")).toBeGreaterThan(0);
+  });
 });
 
 describe("core/font", () => {

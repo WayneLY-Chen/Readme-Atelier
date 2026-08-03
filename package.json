@@ -10,11 +10,13 @@
     "preview": "tsx src/cli.ts"
   },
   "dependencies": {
-    "opentype.js": "2.0.0",
-    "lunar-typescript": "1.8.6"
+    "lunar-typescript": "1.8.6",
+    "opentype.js": "2.0.0"
   },
   "devDependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/noto-serif-tc": "^5.3.0",
+    "@fontsource/source-serif-4": "^5.3.0",
     "@types/node": "^24.0.0",
     "fontverter": "^2.0.0",
     "subset-font": "2.5.0",

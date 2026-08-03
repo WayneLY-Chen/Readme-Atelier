@@ -30,15 +30,60 @@ declare module "opentype.js" {
     toPathData(decimalPlaces?: number): string;
   }
 
+  // Extended in Plan 02 (Task 1) for scripts/build-fonts.ts's Noto Serif TC
+  // punctuation-glyph merge: Fontsource's per-unicode-range chunking splits
+  // the Fullwidth Forms block away from the CJK Hanzi chunk (verified
+  // empirically), so a small number of glyphs must be copied in from a
+  // second source font. opentype.js's documented "build a font from
+  // scratch" pattern (`new Font({...})` + `.toArrayBuffer()`) is exactly
+  // the API this merge uses.
+  export interface GlyphConstructorOptions {
+    index?: number;
+    name?: string | null;
+    unicode?: number;
+    advanceWidth?: number;
+    path?: Path;
+  }
+
+  export class Glyph {
+    constructor(options: GlyphConstructorOptions);
+    name: string | null;
+    unicode: number | undefined;
+    advanceWidth: number | undefined;
+    path: Path;
+  }
+
+  export interface GlyphSet {
+    get(index: number): Glyph;
+  }
+
+  export interface FontConstructorOptions {
+    familyName: string;
+    styleName: string;
+    unitsPerEm: number;
+    ascender: number;
+    descender: number;
+    glyphs: Glyph[];
+  }
+
   export class Font {
+    constructor(options: FontConstructorOptions);
     numGlyphs: number;
+    unitsPerEm: number;
+    ascender: number;
+    descender: number;
+    glyphs: GlyphSet;
+    /** Returns 0 (the .notdef glyph index) when `char` has no glyph. */
+    charToGlyphIndex(char: string): number;
     getAdvanceWidth(text: string, fontSize: number): number;
     getPath(text: string, x: number, y: number, fontSize: number): Path;
+    toArrayBuffer(): ArrayBuffer;
   }
 
   interface OpentypeModule {
     parse(buffer: ArrayBuffer | Buffer): Font;
     Font: typeof Font;
+    Glyph: typeof Glyph;
     Path: typeof Path;
   }
 

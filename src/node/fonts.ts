@@ -26,4 +26,22 @@ export function loadAllFonts(): void {
       semiboldBuffer.byteOffset + semiboldBuffer.byteLength,
     ) as ArrayBuffer,
   );
+
+  const serifBuffer = readFileSync("assets/fonts/source-serif-4.subset.ttf");
+  registerFont(
+    "serif",
+    serifBuffer.buffer.slice(
+      serifBuffer.byteOffset,
+      serifBuffer.byteOffset + serifBuffer.byteLength,
+    ) as ArrayBuffer,
+  );
+
+  const notoTcBuffer = readFileSync("assets/fonts/noto-serif-tc.subset.ttf");
+  registerFont(
+    "noto-tc",
+    notoTcBuffer.buffer.slice(
+      notoTcBuffer.byteOffset,
+      notoTcBuffer.byteOffset + notoTcBuffer.byteLength,
+    ) as ArrayBuffer,
+  );
 }
