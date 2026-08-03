@@ -10,10 +10,52 @@ const parseFont = opentype.parse;
  */
 const PATH_DECIMAL_PLACES = 2;
 
+/**
+ * Defensive rounding applied to the (x, y) anchor passed into
+ * font.getPath() — NOT the same knob as PATH_DECIMAL_PLACES, which governs
+ * the *output* string's precision.
+ *
+ * Discovered during Task 2 (deviation, recorded in SUMMARY.md): a caller
+ * that accumulates x positions via repeated floating-point addition (e.g.
+ * letter-spacing math: cursorX += advanceWidth + spacing, character by
+ * character) can produce a coordinate like 207.20000000000002 whose exact
+ * float64 bit pattern triggers a reproducible opentype.js bug — confirmed
+ * empirically: `font.getPath("U", 207.20000000000002, 82, 8).toPathData(2)`
+ * emits a literal "NaN" into the path data for that one glyph, while
+ * 207.2 (and a 2000-point fine scan of neighboring values) render clean.
+ * The bug reproduces identically on both the subsetted and the full,
+ * unsubsetted font, is deterministic per exact float64 value, is
+ * unaffected by toPathData's optimize/kerning/features options, and
+ * self-inspecting the raw Path.commands array afterward shows no NaN —
+ * meaning the corruption happens inside opentype.js's internal path
+ * construction for that specific bit pattern, not in anything this project
+ * controls downstream. Rounding the input coordinate destroys the exact bit
+ * pattern that triggers it without any visible effect at SVG scale.
+ */
+const INPUT_COORD_ROUNDING = 1000; // round to 3 decimal places
+
+function roundCoord(value: number): number {
+  return Math.round(value * INPUT_COORD_ROUNDING) / INPUT_COORD_ROUNDING;
+}
+
+/** Matches SVG path-data output: digits, M/L/C/Q/Z commands, decimal point,
+ * spaces, and minus sign — see textToPathData's PathCorruptionError guard. */
+const PATH_DATA_CHARSET = /^[MLCQZ0-9.,\-\s]*$/;
+
 export class UnknownFontError extends Error {
   constructor(name: string) {
     super(`UnknownFontError: no font has been registered under the name "${name}".`);
     this.name = "UnknownFontError";
+  }
+}
+
+export class PathCorruptionError extends Error {
+  constructor(fontName: string, text: string, pathData: string) {
+    super(
+      `PathCorruptionError: textToPathData("${fontName}", ${JSON.stringify(text)}, ...) ` +
+        `produced path data outside the valid SVG path-data character set: ${pathData}`,
+    );
+    this.name = "PathCorruptionError";
   }
 }
 
@@ -70,5 +112,11 @@ export function textToPathData(
     return "";
   }
   const font = getRegisteredFont(name);
-  return font.getPath(text, x, y, fontSize).toPathData(PATH_DECIMAL_PLACES);
+  const pathData = font
+    .getPath(text, roundCoord(x), roundCoord(y), fontSize)
+    .toPathData(PATH_DECIMAL_PLACES);
+  if (!PATH_DATA_CHARSET.test(pathData)) {
+    throw new PathCorruptionError(name, text, pathData);
+  }
+  return pathData;
 }
