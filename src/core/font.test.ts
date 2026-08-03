@@ -3,7 +3,15 @@ import path from "node:path";
 import opentype from "opentype.js";
 import subsetFont from "subset-font";
 import { beforeAll, describe, expect, it } from "vitest";
-import { measureAdvanceWidth, registerFont, textToPathData, UnknownFontError } from "./font.js";
+import {
+  assertCoverage,
+  GlyphCoverageError,
+  glyphPlaceholderPath,
+  measureAdvanceWidth,
+  registerFont,
+  textToPathData,
+  UnknownFontError,
+} from "./font.js";
 
 const FONT_NAME = "test-mono";
 const SOURCE_FILE = path.join(
@@ -55,6 +63,70 @@ describe("Plan 02 Task 1: Source Serif 4 + Noto Serif TC subset fonts", () => {
     // The merged-in fullwidth colon (see scripts/build-fonts.ts's
     // mergeSupplementalPunctuation) must be a real glyph, not .notdef.
     expect(font.charToGlyphIndex("：")).toBeGreaterThan(0);
+  });
+});
+
+describe("Plan 02 Task 2: assertCoverage + glyphPlaceholderPath", () => {
+  const COVERAGE_FONT = "test-coverage-noto-tc";
+
+  beforeAll(() => {
+    const buffer = readFileSync(path.join("assets", "fonts", "noto-serif-tc.subset.ttf"));
+    registerFont(COVERAGE_FONT, toArrayBuffer(buffer));
+  });
+
+  it("assertCoverage does not throw for a fully-covered string", () => {
+    expect(() => assertCoverage(COVERAGE_FONT, "正常中文", "title")).not.toThrow();
+  });
+
+  it("assertCoverage does not throw for an empty string, and does not consult the font", () => {
+    expect(() => assertCoverage("does-not-exist", "", "title")).not.toThrow();
+  });
+
+  it("assertCoverage throws GlyphCoverageError naming the context and the out-of-coverage character", () => {
+    // U+D55C (한, Hangul) is outside D-03's coverage set (no Hangul).
+    let caught: unknown;
+    try {
+      assertCoverage(COVERAGE_FONT, "正한常", "title");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(GlyphCoverageError);
+    const message = (caught as Error).message;
+    expect(message).toContain("title");
+    expect(message).toContain("한");
+  });
+
+  it("assertCoverage reports only the first out-of-coverage character (left to right), not the second", () => {
+    // Two distinct out-of-coverage characters: 한 (Hangul) then み (kana).
+    let caught: unknown;
+    try {
+      assertCoverage(COVERAGE_FONT, "한正み", "title");
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(GlyphCoverageError);
+    const message = (caught as Error).message;
+    expect(message).toContain("한");
+    expect(message).not.toContain("み");
+  });
+
+  it("glyphPlaceholderPath returns a positive, finite advanceWidth proportional to fontSize (not a fixed constant)", () => {
+    const small = glyphPlaceholderPath("serif", "X", 10, 20, 17);
+    const large = glyphPlaceholderPath("serif", "X", 10, 20, 44);
+    expect(small.advanceWidth).toBeGreaterThan(0);
+    expect(Number.isFinite(small.advanceWidth)).toBe(true);
+    expect(small.advanceWidth).toBeCloseTo(17 * 0.7, 5);
+    expect(large.advanceWidth).toBeCloseTo(44 * 0.7, 5);
+    expect(large.advanceWidth).toBeGreaterThan(small.advanceWidth);
+  });
+
+  it("glyphPlaceholderPath does not depend on the font actually having a glyph for `char`", () => {
+    // "does-not-exist" is not a registered font at all, yet this must not throw
+    // — the whole point of the placeholder is for characters/fonts that
+    // can't otherwise resolve a real glyph.
+    expect(() => glyphPlaceholderPath("does-not-exist", "한", 0, 0, 17)).not.toThrow();
+    const { path: d } = glyphPlaceholderPath("does-not-exist", "한", 0, 0, 17);
+    expect(d.length).toBeGreaterThan(0);
   });
 });
 

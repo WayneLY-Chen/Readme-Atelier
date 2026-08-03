@@ -59,6 +59,20 @@ export class PathCorruptionError extends Error {
   }
 }
 
+/**
+ * RENDER-05: engine-authored text (chrome strings, mapping-table phrases)
+ * that contains a character outside a registered font's coverage is our own
+ * bug, not a degrade-to-placeholder case (that's glyphPlaceholderPath's job,
+ * for GitHub-API-sourced text on future cards) — 01-UI-SPEC.md's "Text slot
+ * budgets" section is explicit that this must fail the build loudly.
+ */
+export class GlyphCoverageError extends Error {
+  constructor(context: string, char: string) {
+    super(`Card text exceeds glyph coverage: "${char}" in ${context}`);
+    this.name = "GlyphCoverageError";
+  }
+}
+
 const fontCache = new Map<string, Font>();
 
 /**
@@ -119,4 +133,73 @@ export function textToPathData(
     throw new PathCorruptionError(name, text, pathData);
   }
   return pathData;
+}
+
+/**
+ * RENDER-05 gate for engine-authored text: throws GlyphCoverageError on the
+ * first character (left-to-right, by Unicode code point — same iteration
+ * discipline as measureAdvanceWidth/textToPathData, so a multi-byte
+ * character is never split mid-check) that the font registered under `name`
+ * has no glyph for. `context` (e.g. "almanac title (zh-TW)") is threaded
+ * into the error message so a build failure names the offending card
+ * field, not just the character. A character resolving to glyph index 0
+ * (opentype.js's .notdef sentinel) is treated as uncovered. Empty string
+ * input returns immediately without consulting the font — there is nothing
+ * to check.
+ */
+export function assertCoverage(fontName: string, text: string, context: string): void {
+  if (text === "") {
+    return;
+  }
+  const font = getRegisteredFont(fontName);
+  for (const char of Array.from(text)) {
+    if (font.charToGlyphIndex(char) === 0) {
+      throw new GlyphCoverageError(context, char);
+    }
+  }
+}
+
+/**
+ * UI-SPEC "Glyph Coverage Fallback": the chassis-level substitute markup for
+ * a character outside a font's coverage (GitHub-API-sourced text on future
+ * cards — Almanac's own content never exercises this branch, see
+ * 01-UI-SPEC.md's `glyph-placeholder` surface). Returns a rounded-rectangle
+ * outline (corner radius 1) with a centered 2x2-unit solid dot, plus the
+ * advance width the caller should reserve so the rest of the text run isn't
+ * shifted by the substitution.
+ *
+ * advanceWidth is fontSize * 0.7 — a fixed *proportion* of the current run's
+ * em-size (UI-SPEC: "sized to 70% of the em-height"), not a hardcoded
+ * absolute width (it scales with fontSize like any other glyph's advance
+ * would) and not a font-metrics lookup: the character being replaced is by
+ * definition not in the font's coverage, so there is nothing in that font to
+ * measure. `fontName` is accepted (and unused today) so a future revision
+ * can vary the placeholder's proportions per script without an API change.
+ */
+export function glyphPlaceholderPath(
+  _fontName: string,
+  _char: string,
+  x: number,
+  y: number,
+  fontSize: number,
+): { path: string; advanceWidth: number } {
+  const advanceWidth = fontSize * 0.7;
+  const cornerRadius = 1;
+  const left = x;
+  const right = x + advanceWidth;
+  const top = y - advanceWidth / 2;
+  const bottom = y + advanceWidth / 2;
+  const r = cornerRadius;
+
+  const box =
+    `M${left + r},${top} L${right - r},${top} A${r},${r} 0 0 1 ${right},${top + r} ` +
+    `L${right},${bottom - r} A${r},${r} 0 0 1 ${right - r},${bottom} ` +
+    `L${left + r},${bottom} A${r},${r} 0 0 1 ${left},${bottom - r} ` +
+    `L${left},${top + r} A${r},${r} 0 0 1 ${left + r},${top} Z`;
+
+  const cx = x + advanceWidth / 2;
+  const cy = y;
+  const dot = `M${cx - 1},${cy - 1} L${cx + 1},${cy - 1} L${cx + 1},${cy + 1} L${cx - 1},${cy + 1} Z`;
+
+  return { path: `${box} ${dot}`, advanceWidth };
 }
