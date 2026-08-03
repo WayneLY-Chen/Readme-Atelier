@@ -17,13 +17,17 @@ export interface YijiEntry {
  * column prints. lunar-typescript's default locale is "chs" (Simplified) —
  * there is no "cht"/zh-TW locale for these internal message strings at all
  * (confirmed by reading its I18n dictionary: only "chs" and "en" exist) — so
- * getZhiXing() returns 满/开/闭 (Simplified) rather than 滿/開/閉
- * (Traditional) for three of the twelve names; the other nine happen to be
- * identical between scripts. This only matters as an internal lookup key
- * here (Task 2 is English-mode only, and the English value is unaffected by
- * which script variant the key uses) — flagged for Plan 02, which will need
- * its own Traditional-Chinese label strings for the zh-TW render path rather
- * than trusting this library's zh output directly.
+ * getZhiXing() returns 满/执/开/闭 (Simplified) rather than 滿/執/開/閉
+ * (Traditional) for four of the twelve names; the other eight happen to be
+ * identical between scripts. Verified empirically (not by manual Unicode
+ * decoding, which was tried first and got 執/执 wrong — U+6267 is actually
+ * the Simplified 执, not Traditional 執 at U+57F7 — hence the direct runtime
+ * scan): ran getZhiXing() across 400 consecutive days and printed the code
+ * point of every distinct value returned. This only matters as an internal
+ * lookup key here (Task 2 is English-mode only, and the English value is
+ * unaffected by which script variant the key uses) — flagged for Plan 02,
+ * which will need its own Traditional-Chinese label strings for the zh-TW
+ * render path rather than trusting this library's zh output directly.
  */
 export const yijiTableEn: Record<string, YijiEntry> = {
   建: {
@@ -46,7 +50,7 @@ export const yijiTableEn: Record<string, YijiEntry> = {
     auspicious: "pin dependency versions",
     avoid: "changing requirements last-minute",
   },
-  執: {
+  执: {
     auspicious: "hunt bugs, write tests",
     avoid: "adding new features",
   },
