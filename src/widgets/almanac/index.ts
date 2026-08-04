@@ -1,12 +1,16 @@
-import { measureAdvanceWidth, textToPathData } from "../../core/font.js";
+import { assertCoverage, measureAdvanceWidth, textToPathData } from "../../core/font.js";
 import type { ProfileData, RenderOptions, Theme } from "../../core/model.js";
 import type { WidgetDefinition } from "../../core/registry.js";
 import {
   chromeEn,
+  chromeZh,
   ganZhiToEnglish,
   gregorianCaptionEn,
+  gregorianCaptionZh,
   lunarValueEn,
+  lunarValueZh,
   yijiTableEn,
+  yijiTableZh,
 } from "./copy.js";
 import { getAlmanacContent } from "./lunar.js";
 
@@ -51,21 +55,90 @@ function letterSpacedPath(
   return d;
 }
 
-/** T1 eyebrow/label style: IBM Plex Mono Semibold, uppercase, letter-spaced. */
+/**
+ * Total rendered width of a letter-spaced run, for right-aligning the
+ * masthead eyebrow (UI-SPEC Header row: "right-aligned, x≈471 right edge").
+ * Mirrors letterSpacedPath's own cursor math exactly so the two never drift
+ * apart.
+ */
+function letterSpacedWidth(
+  fontName: string,
+  text: string,
+  fontSize: number,
+  letterSpacing: number,
+): number {
+  const chars = Array.from(text);
+  let width = 0;
+  chars.forEach((ch, i) => {
+    width += measureAdvanceWidth(fontName, ch, fontSize) + (i < chars.length - 1 ? letterSpacing : 0);
+  });
+  return width;
+}
+
+/**
+ * T1 eyebrow/label style for English text: IBM Plex Mono Semibold,
+ * uppercase, letter-spaced, 8px. Used for en-mode caption labels (LUNAR,
+ * SEXAGENARY DAY, the month/year caption) and for the zh-TW-only masthead
+ * eyebrow, which is always English brand furniture regardless of the card's
+ * active language (UI-SPEC Header row: "it is brand furniture, not
+ * translatable content").
+ */
 function eyebrowLabel(text: string, x: number, y: number, fill: string): string {
-  const d = letterSpacedPath("mono-semibold", text.toUpperCase(), x, y, T1_SIZE, T1_LETTER_SPACING);
+  const upper = text.toUpperCase();
+  assertCoverage("mono-semibold", upper, `almanac T1 eyebrow/label: "${text}"`);
+  const d = letterSpacedPath("mono-semibold", upper, x, y, T1_SIZE, T1_LETTER_SPACING);
   return pathElement(d, fill);
 }
 
 /**
- * T3 primary-content style. UI-SPEC calls for Source Serif 4 here; this task
- * is a deliberate single-font stopgap (see 01-01-PLAN.md Task 2 action item
- * 8) that substitutes IBM Plex Mono Regular for every serif-designated text
- * role until Plan 02 installs Source Serif 4 and swaps this call site's
- * first argument back to a serif font name.
+ * T1 label style for zh-TW Chinese caption labels (農曆/干支/the
+ * `{year}年{month}月` caption). UI-SPEC's Typography table names IBM Plex
+ * Mono for the whole T1 role, but Plex Mono carries zero CJK glyph coverage
+ * — this is the necessary interpretation already flagged in this plan's
+ * must_haves backstop: Chinese T1 labels render in Noto Serif TC instead, at
+ * the same 8px size, with no uppercase transform and no manual
+ * letter-spacing (neither concept exists for Han script).
  */
-function contentText(text: string, x: number, y: number, fill: string): string {
-  const d = textToPathData("mono-regular", text, x, y, T3_SIZE);
+function zhLabel(text: string, x: number, y: number, fill: string): string {
+  assertCoverage("noto-tc", text, `almanac T1 label (zh-TW): "${text}"`);
+  return pathElement(textToPathData("noto-tc", text, x, y, T1_SIZE), fill);
+}
+
+/**
+ * CJK/Latin mixed-composition rule (UI-SPEC "CJK/Latin mixed-composition
+ * rule"): when a single visual line mixes Noto Serif TC and Source Serif 4
+ * glyphs, Noto Serif TC renders at 92% of the token's declared size so the
+ * two faces read as optically balanced against each other. Almanac v1 never
+ * actually triggers this — every string on this card is monolingual per
+ * D-08 (each `language:` mode picks exactly one of the two serif faces) —
+ * so every call site below passes `isMixedLine = false`. The decision point
+ * is still written here, not omitted, because this is shared chassis logic
+ * (the mixed-script primitive UI-SPEC says belongs in `svg.ts`) that a
+ * future bilingual-masthead or mixed-display-name card will need to
+ * exercise for real.
+ */
+function mixedCompositionSize(fontName: string, baseSize: number, isMixedLine: boolean): number {
+  return fontName === "noto-tc" && isMixedLine ? baseSize * 0.92 : baseSize;
+}
+
+/**
+ * T3 primary-content style: Source Serif 4 (`serif`) in en mode, Noto Serif
+ * TC (`noto-tc`) in zh-TW mode — the real per-language font dispatch this
+ * task installs, replacing Plan 01's "everything in mono-regular" stopgap.
+ * `context` is threaded into assertCoverage (RENDER-05) so a coverage
+ * failure names the offending card field rather than just the character.
+ */
+function contentText(
+  fontName: string,
+  text: string,
+  x: number,
+  y: number,
+  fill: string,
+  context: string,
+): string {
+  assertCoverage(fontName, text, context);
+  const size = mixedCompositionSize(fontName, T3_SIZE, false);
+  const d = textToPathData(fontName, text, x, y, size);
   return pathElement(d, fill);
 }
 
@@ -106,9 +179,17 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
     },
   },
 
+  // Deviation from the plan text (recorded in SUMMARY.md, Plan 02 Task 3):
+  // Plan 01's stopgap threw for any non-"en" language in both describe()
+  // and renderBody(). Task 3's whole point is installing the zh-TW half —
+  // leaving describe() throwing would make the widget's own metadata method
+  // contradict its rendering method the moment a caller asks for zh-TW.
   describe(_data: ProfileData, opts: RenderOptions): { title: string; desc: string } {
-    if (opts.language !== "en") {
-      throw new Error("zh-TW not yet implemented — Plan 02");
+    if (opts.language === "zh-TW") {
+      return {
+        title: "曆日卡片",
+        desc: "顯示今日西曆日期、農曆月日、干支紀日，以及依建除十二神循環推算出的開發者宜/忌建議。",
+      };
     }
     return {
       title: "Almanac card",
@@ -119,22 +200,47 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
   },
 
   renderBody(_data: ProfileData, theme: Theme, opts: RenderOptions): string {
-    if (opts.language !== "en") {
-      throw new Error("zh-TW not yet implemented — Plan 02");
-    }
+    const language = opts.language;
+    const contentFont = language === "zh-TW" ? "noto-tc" : "serif";
+    const chrome = language === "zh-TW" ? chromeZh : chromeEn;
+    const yijiTable = language === "zh-TW" ? yijiTableZh : yijiTableEn;
 
     const content = getAlmanacContent(opts.now, opts.timezone);
-    const yiji = yijiTableEn[content.zhiXing];
+    const yiji = yijiTable[content.zhiXing];
     if (!yiji) {
-      throw new Error(`Almanac: no 宜/忌 mapping for zhiXing "${content.zhiXing}"`);
+      throw new Error(
+        `Almanac: no 宜/忌 mapping for zhiXing "${content.zhiXing}" (language: ${language})`,
+      );
     }
 
     let markup = "";
 
-    // Header: title (T3), left-aligned. English mode has no masthead
-    // eyebrow — that decorative mark is zh-TW-only per UI-SPEC Card Layout.
-    markup += contentText(chromeEn.title, PADDING, 44, theme.ink);
+    // Header: title (T3), left-aligned.
+    markup += contentText(
+      contentFont,
+      chrome.title,
+      PADDING,
+      44,
+      theme.ink,
+      `almanac title (${language})`,
+    );
     markup += `<line x1="${PADDING}" y1="58" x2="${CARD_WIDTH - PADDING}" y2="58" stroke="${theme.rule}" stroke-width="1"/>`;
+
+    // Masthead eyebrow (UI-SPEC "Header row"): decorative Latin brand mark,
+    // present in zh-TW mode only, right-aligned to the card's right padding
+    // edge (x≈471). Never rendered in en mode — D-08 guarantees en mode
+    // needs zero CJK glyphs, and en mode's header row is the title alone.
+    if (language === "zh-TW") {
+      const eyebrowText = chromeZh.mastheadEyebrow;
+      const eyebrowWidth = letterSpacedWidth(
+        "mono-semibold",
+        eyebrowText.toUpperCase(),
+        T1_SIZE,
+        T1_LETTER_SPACING,
+      );
+      const eyebrowX = CARD_WIDTH - PADDING - eyebrowWidth;
+      markup += eyebrowLabel(eyebrowText, eyebrowX, 44, theme.muted);
+    }
 
     // Isometric slab (UI-SPEC "Isometric Slab Specification"): 100x100
     // front face, 32-unit depth extrusion at a 30 degree angle.
@@ -169,7 +275,10 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
 
     // Giant day-of-month numeral: right-aligned within a fixed two-digit
     // slot, no leading zero (UI-SPEC "zero-one-many" — days 1-9 leave
-    // natural whitespace on the left instead of a leading "0").
+    // natural whitespace on the left instead of a leading "0"). Always IBM
+    // Plex Mono Semibold regardless of card language — Western Arabic
+    // numerals are never translated on this card (UI-SPEC: the slab's
+    // numeral is fixed to mono-semibold).
     const digitWidth = measureAdvanceWidth("mono-semibold", "0", T4_SIZE);
     const slotWidth = digitWidth * 2;
     const dayStr = String(content.gregorian.day);
@@ -190,18 +299,27 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
     const rowTop0 = 70;
     const metaRows: { label: string; value: string; valueFill: string }[] = [
       {
-        label: gregorianCaptionEn(content.gregorian.month, content.gregorian.year),
-        value: chromeEn.weekdayNames[content.gregorian.weekday],
+        label:
+          language === "zh-TW"
+            ? gregorianCaptionZh(content.gregorian.month, content.gregorian.year)
+            : gregorianCaptionEn(content.gregorian.month, content.gregorian.year),
+        value: chrome.weekdayNames[content.gregorian.weekday],
         valueFill: theme.ink,
       },
       {
-        label: chromeEn.lunarLabel,
-        value: lunarValueEn(content.lunarMonth, content.lunarDay),
+        label: chrome.lunarLabel,
+        value:
+          language === "zh-TW"
+            ? lunarValueZh(content.lunarMonthZh, content.lunarDayZh)
+            : lunarValueEn(content.lunarMonth, content.lunarDay),
         valueFill: theme.accent,
       },
       {
-        label: chromeEn.ganzhiLabel,
-        value: ganZhiToEnglish(content.dayGanZhi),
+        label: chrome.ganzhiLabel,
+        // zh-TW mode prints lunar-typescript's own 干支 characters directly
+        // (e.g. "甲子"); en mode translates them via ganZhiToEnglish
+        // ("Wood Rat") — UI-SPEC "干支 in English".
+        value: language === "zh-TW" ? content.dayGanZhi : ganZhiToEnglish(content.dayGanZhi),
         valueFill: theme.ink,
       },
     ];
@@ -210,8 +328,18 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
       const rowTop = rowTop0 + i * rowHeight;
       const labelBaseline = rowTop + 12;
       const valueBaseline = labelBaseline + 21;
-      markup += eyebrowLabel(row.label, metaX, labelBaseline, theme.muted);
-      markup += contentText(row.value, metaX, valueBaseline, row.valueFill);
+      markup +=
+        language === "zh-TW"
+          ? zhLabel(row.label, metaX, labelBaseline, theme.muted)
+          : eyebrowLabel(row.label, metaX, labelBaseline, theme.muted);
+      markup += contentText(
+        contentFont,
+        row.value,
+        metaX,
+        valueBaseline,
+        row.valueFill,
+        `almanac meta value row ${i} (${language})`,
+      );
       if (i < metaRows.length - 1) {
         const dividerY = rowTop + rowHeight;
         markup += `<line x1="${metaX}" y1="${dividerY}" x2="${CARD_WIDTH - PADDING}" y2="${dividerY}" stroke="${theme.rule}" stroke-width="1"/>`;
@@ -223,12 +351,21 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
     // 宜/忌 lines. 宜 uses accent, 忌 uses muted (UI-SPEC Color — no second
     // semantic/destructive hue is introduced for this card, by design).
     markup += contentText(
-      `${chromeEn.auspiciousPrefix}${yiji.auspicious}`,
+      contentFont,
+      `${chrome.auspiciousPrefix}${yiji.auspicious}`,
       PADDING,
       199,
       theme.accent,
+      `almanac 宜 line (${language})`,
     );
-    markup += contentText(`${chromeEn.avoidPrefix}${yiji.avoid}`, PADDING, 215, theme.muted);
+    markup += contentText(
+      contentFont,
+      `${chrome.avoidPrefix}${yiji.avoid}`,
+      PADDING,
+      215,
+      theme.muted,
+      `almanac 忌 line (${language})`,
+    );
 
     return markup;
   },
