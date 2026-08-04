@@ -60,6 +60,18 @@ export function get(name: string): WidgetDefinition<any> | undefined {
 }
 
 /**
+ * Every currently-registered widget name, in registration order. Added for
+ * Plan 04 (Rule 2 — missing critical functionality): `core/config.ts` needs
+ * this to validate a `widgets.yml` card's `type:` value against the real
+ * registered set and to build a did-you-mean suggestion list (D-12) — there
+ * was previously no way to enumerate registered widgets, only to look one up
+ * by exact name.
+ */
+export function listNames(): string[] {
+  return Array.from(widgets.keys());
+}
+
+/**
  * Union the `requires` arrays of every enabled widget into one
  * Set<DataCapability>, driving the single shared GraphQL fetch.
  */
