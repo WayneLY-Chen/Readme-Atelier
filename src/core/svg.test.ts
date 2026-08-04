@@ -1,6 +1,12 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { ProfileData, RenderOptions } from "./model.js";
-import { renderPair } from "./svg.js";
+import {
+  HARD_SIZE_CANARY_BYTES,
+  renderPair,
+  SizeBudgetError,
+  SOFT_SIZE_BUDGET_BYTES,
+  sizeGuard,
+} from "./svg.js";
 import { editorialDark, editorialLight } from "./theme.js";
 import { loadAllFonts } from "../node/fonts.js";
 import { almanacWidget } from "../widgets/almanac/index.js";
@@ -57,5 +63,36 @@ describe("Plan 03 Task 1: renderPair structural invariant (RENDER-03)", () => {
       dark: editorialDark,
     });
     expect(light).not.toBe(dark);
+  });
+});
+
+describe("Plan 03 Task 3: sizeGuard exact-byte boundaries (RENDER-07)", () => {
+  // 'x' is a single UTF-8 byte, so 'x'.repeat(n) has an exact, unambiguous
+  // Buffer.byteLength of n — hitting these boundaries precisely (not just
+  // "obviously large"/"obviously small" representative values) is the whole
+  // point of this test per the plan's flagged off-by-one edge probe.
+  it("SOFT_SIZE_BUDGET_BYTES: exactly 204800 bytes passes, 204801 throws", () => {
+    const atBudget = "x".repeat(SOFT_SIZE_BUDGET_BYTES);
+    const overBudget = "x".repeat(SOFT_SIZE_BUDGET_BYTES + 1);
+    expect(() => sizeGuard(atBudget, "almanac-light.svg", SOFT_SIZE_BUDGET_BYTES)).not.toThrow();
+    expect(() => sizeGuard(overBudget, "almanac-light.svg", SOFT_SIZE_BUDGET_BYTES)).toThrow(
+      SizeBudgetError,
+    );
+  });
+
+  it("HARD_SIZE_CANARY_BYTES: exactly 1048576 bytes passes, 1048577 throws", () => {
+    const atCanary = "x".repeat(HARD_SIZE_CANARY_BYTES);
+    const overCanary = "x".repeat(HARD_SIZE_CANARY_BYTES + 1);
+    expect(() => sizeGuard(atCanary, "almanac-light.svg", HARD_SIZE_CANARY_BYTES)).not.toThrow();
+    expect(() => sizeGuard(overCanary, "almanac-light.svg", HARD_SIZE_CANARY_BYTES)).toThrow(
+      SizeBudgetError,
+    );
+  });
+
+  it("error message names the label, measured bytes, and budget", () => {
+    const overBudget = "x".repeat(SOFT_SIZE_BUDGET_BYTES + 1);
+    expect(() => sizeGuard(overBudget, "almanac-light.svg", SOFT_SIZE_BUDGET_BYTES)).toThrow(
+      `almanac-light.svg exceeds size budget: ${SOFT_SIZE_BUDGET_BYTES + 1} bytes > ${SOFT_SIZE_BUDGET_BYTES} bytes budget`,
+    );
   });
 });

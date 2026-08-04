@@ -67,3 +67,39 @@ export function renderPair(
     ),
   };
 }
+
+/**
+ * RENDER-07 soft budget: 200 KiB, per-file. Any single rendered SVG over
+ * this fails the whole CLI run (or, in the real Action, the whole build) —
+ * see 01-UI-SPEC.md's `almanac-card` "overflow" backstop item.
+ */
+export const SOFT_SIZE_BUDGET_BYTES = 204800;
+
+/**
+ * PITFALLS.md's second-layer hard canary: 1 MiB, leaving safety margin below
+ * GitHub camo's 5MB hard proxy limit. Normal operation never reaches this —
+ * the soft budget above always trips first — this exists purely as a last
+ * line of defense if a future edit accidentally bypasses or removes the soft
+ * check.
+ */
+export const HARD_SIZE_CANARY_BYTES = 1048576;
+
+export class SizeBudgetError extends Error {
+  constructor(label: string, bytes: number, budgetBytes: number) {
+    super(`${label} exceeds size budget: ${bytes} bytes > ${budgetBytes} bytes budget`);
+    this.name = "SizeBudgetError";
+  }
+}
+
+/**
+ * Throws SizeBudgetError if `svg`'s UTF-8 byte length exceeds `budgetBytes`.
+ * Called twice per rendered file (once against SOFT_SIZE_BUDGET_BYTES, once
+ * against HARD_SIZE_CANARY_BYTES) by the CLI/Action before any file is
+ * written — any failure means nothing gets written at all.
+ */
+export function sizeGuard(svg: string, label: string, budgetBytes: number): void {
+  const bytes = Buffer.byteLength(svg, "utf8");
+  if (bytes > budgetBytes) {
+    throw new SizeBudgetError(label, bytes, budgetBytes);
+  }
+}
