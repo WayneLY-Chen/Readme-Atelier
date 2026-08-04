@@ -1,4 +1,5 @@
-import type { Theme, WidgetSize } from "./model.js";
+import type { ProfileData, RenderOptions, Theme, WidgetSize } from "./model.js";
+import type { WidgetDefinition } from "./registry.js";
 
 const REDUCED_MOTION_STYLE =
   "<style>@media (prefers-reduced-motion: reduce){*{animation-duration:0.01ms!important;animation-iteration-count:1!important;}}</style>";
@@ -12,7 +13,6 @@ function escapeXmlText(value: string): string {
  * inherits: root element, <title>/<desc>, background + inset border rects,
  * and the always-present prefers-reduced-motion style block. This is the one
  * place that owns the outer shell so no widget can omit or diverge from it.
- * Does not implement renderPair()/sizeGuard() yet — that's Plan 03.
  */
 export function wrapSvg(
   bodyMarkup: string,
@@ -32,4 +32,38 @@ export function wrapSvg(
     bodyMarkup +
     `</svg>`
   );
+}
+
+/**
+ * Render a widget's paired light/dark SVG output (RENDER-03). Calls
+ * `widget.renderBody` exactly twice, with only the `Theme` argument
+ * differing between the two calls — this is the entire mechanism behind the
+ * "light/dark structural invariant" (01-UI-SPEC.md): no widget author has a
+ * way to intentionally violate it, since renderPair (not the widget) owns
+ * the one place the two calls happen. `describe()` is called once, since its
+ * result depends only on `data`/`opts`, never on `theme`.
+ */
+export function renderPair(
+  widget: WidgetDefinition<RenderOptions>,
+  data: ProfileData,
+  opts: RenderOptions,
+  themes: { light: Theme; dark: Theme },
+): { light: string; dark: string } {
+  const { title, desc } = widget.describe(data, opts);
+  return {
+    light: wrapSvg(
+      widget.renderBody(data, themes.light, opts),
+      widget.size,
+      themes.light,
+      title,
+      desc,
+    ),
+    dark: wrapSvg(
+      widget.renderBody(data, themes.dark, opts),
+      widget.size,
+      themes.dark,
+      title,
+      desc,
+    ),
+  };
 }
