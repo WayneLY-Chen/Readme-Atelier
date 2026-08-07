@@ -1,0 +1,6 @@
+theme: editorial
+language: zh-TW
+timezone: Asia/Taipei
+
+cards:
+  - type: almanac
