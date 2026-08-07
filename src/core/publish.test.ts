@@ -166,7 +166,16 @@ describe("publishOutputBranch — real git CLI against a local bare repository",
   });
 
   afterEach(() => {
-    rmSync(bareRepoDir, { recursive: true, force: true });
+    // Windows keeps a handle on files a just-exited `git` process touched for a
+    // short while after it returns, so an immediate recursive delete throws
+    // EPERM. `maxRetries` makes Node back off and retry instead. This is
+    // temp-directory hygiene, not an assertion — never let it fail the run and
+    // mask the real result of the test that just passed.
+    try {
+      rmSync(bareRepoDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    } catch {
+      /* the OS reclaims its own temp directory */
+    }
   });
 
   function bareRepoUrl(): string {
@@ -189,7 +198,10 @@ describe("publishOutputBranch — real git CLI against a local bare repository",
     expect(tree.sort()).toEqual(["almanac-dark.svg", "almanac-light.svg"]);
 
     expect(git(bareRepoDir, ["show", "output:almanac-light.svg"])).toBe("light-v1");
-  });
+    // Vitest's 5s default is not enough: one publish spawns ~8 real `git`
+    // processes, and process spawn on Windows is slow enough that this test
+    // sat right on the edge of the limit and failed intermittently.
+  }, 30_000);
 
   it("scenario B — 'output' branch already exists: a second publish still leaves exactly 1 commit, with NEW content, and stale files removed", async () => {
     // First run — establishes the branch, matching a consumer's first
@@ -223,7 +235,8 @@ describe("publishOutputBranch — real git CLI against a local bare repository",
 
     expect(git(bareRepoDir, ["show", "output:almanac-light.svg"])).toBe("light-v2");
     expect(git(bareRepoDir, ["show", "output:almanac-dark.svg"])).toBe("dark-v2");
-  });
+    // Two full publishes — roughly twice scenario A's process count.
+  }, 60_000);
 });
 
 describe("publish.ts — source-level check: the constructed remoteUrl (which embeds the token) is never logged", () => {
