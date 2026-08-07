@@ -2,6 +2,16 @@
 
 為你的 GitHub 個人檔案 README 產生 SVG 卡片——一份 `widgets.yml`、一個 Action，不用 fork、不用架伺服器。
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/preview-dark.svg">
+    <img src="docs/preview-light.svg" width="495"
+         alt="曆日卡片：顯示今日西曆日期、農曆月日、干支紀日，以及依建除十二神循環推算出的開發者宜／忌建議。">
+  </picture>
+</p>
+
+<p align="center"><sub>曆日 Almanac ・ 淺色／深色會跟著你的系統佈景切換</sub></p>
+
 每張卡片都是獨立的 SVG 檔案，你要哪張就嵌哪張。卡片由 GitHub Action 定期算好，發布到你自己 repo 的
 `output` 分支；沒有任何東西在讀者開啟頁面時才運算，也就沒有哪個服務掛掉會連帶讓你的 README 破圖。
 
