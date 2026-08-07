@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { assertCoverage, measureAdvanceWidth, textToPathData } from "../../core/font.js";
 import type { ProfileData, RenderOptions, Theme } from "../../core/model.js";
 import type { WidgetDefinition } from "../../core/registry.js";
@@ -152,15 +153,42 @@ function pointsAttr(points: Point[]): string {
 }
 
 /**
+ * Almanac's own `options:` sub-block schema (D-09: `options: { timezone: ... }`
+ * is the one thing a card entry may override). Plan 04, Task 3: this is the
+ * real zod schema that replaces Plan 01's hand-written placeholder object —
+ * a genuine implementation swap-in, not a new data shape (Plan 01's own
+ * summary already flagged the placeholder as "not exercised until Plan 04
+ * wires real widgets.yml parsing").
+ *
+ * `.strict()` is load-bearing, not stylistic. `core/config.ts` types a card's
+ * `options:` as `z.record(z.string(), z.unknown())` — it validates that the
+ * block is a mapping but cannot know which keys any given widget accepts, so
+ * it lets every key through. This schema is the ONLY thing standing between
+ * an adopter and a silently-ignored option. Without `.strict()`, `timezon:`
+ * (typo) renders in UTC with no complaint, and `language: zh-TW` written at
+ * the card level is dropped on the floor rather than reported — the latter
+ * being precisely D-08's prohibition (`language` is top-level only, never a
+ * per-card override), which is enforced here by rejection instead of silence.
+ */
+const almanacOptionsSchema = z.object({ timezone: z.string().optional() }).strict();
+
+/**
  * Almanac's WidgetDefinition. Opts is the full RenderOptions shape (not a
- * narrower per-widget-options subset) — deviation from the plan text's
- * literal `optionsSchema` sketch, recorded in SUMMARY.md: renderBody needs
- * `opts.now`/`opts.timezone` directly (Task 2 action item 8 explicitly calls
- * `getAlmanacContent(opts.now, opts.timezone)`), so this widget's Opts type
- * must include them. The placeholder optionsSchema.parse() below pads in
- * `now`/`seed` defaults purely to satisfy this type — it is not exercised by
- * Task 2's cli.ts (which builds RenderOptions directly) and will be replaced
- * by a real zod schema wired to widgets.yml parsing in Plan 04.
+ * narrower per-widget-options subset) — this is required by
+ * `core/svg.ts`'s `renderPair(widget: WidgetDefinition<RenderOptions>, ...)`
+ * signature, which every widget passed to it must satisfy, and by
+ * `renderBody`/`describe` needing `opts.now`/`opts.timezone`/`opts.language`
+ * directly. `optionsSchema.parse()` below therefore has two jobs: (1) run
+ * the real `almanacOptionsSchema` validation against the card's own
+ * `options:` block (throwing zod's own error for e.g. a non-string
+ * `timezone`), and (2) still return a full `RenderOptions`-shaped value to
+ * satisfy `OptionsSchema<RenderOptions>`. The `now`/`seed`/`language`
+ * fields returned here are placeholders (this validation call's result is
+ * not what actually drives rendering) — `core/pipeline.ts`'s
+ * `renderAllCards()` builds the real merged `RenderOptions` (top-level
+ * `language`, `now`/`seed` threaded from the caller, entry-level `timezone`
+ * override) independently and passes THAT to `renderPair`, never this
+ * function's return value.
  */
 export const almanacWidget: WidgetDefinition<RenderOptions> = {
   name: "almanac",
@@ -169,12 +197,12 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
 
   optionsSchema: {
     parse(value: unknown): RenderOptions {
-      const v = (value ?? {}) as Record<string, unknown>;
+      const { timezone } = almanacOptionsSchema.parse(value ?? {});
       return {
         now: new Date(),
         seed: 0,
-        language: (v.language as RenderOptions["language"]) ?? "en",
-        timezone: (v.timezone as string) ?? "UTC",
+        language: "en",
+        timezone: timezone ?? "UTC",
       };
     },
   },
