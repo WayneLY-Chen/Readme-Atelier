@@ -1,0 +1,10 @@
+# readme-atelier — minimal consumer config.
+# Every field below is optional; deleting this whole file yields the same
+# result, and the run prints an equivalent copy of it to the job log.
+
+theme: editorial
+language: en          # or zh-TW
+timezone: Asia/Taipei
+
+cards:
+  - type: almanac

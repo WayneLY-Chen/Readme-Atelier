@@ -1,0 +1,24 @@
+name: readme-atelier cards
+
+on:
+  workflow_dispatch:        # lets you trigger it by hand from the Actions tab
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+
+# Required: the action force-pushes the rendered SVGs to this repo's
+# `output` branch. Without contents:write the push fails with a 403.
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Replace WayneLY-Chen/readme-atelier@main with your own fork/ref.
+      # Use @main while testing; @v1 once you cut a release tag.
+      - uses: WayneLY-Chen/readme-atelier@main
+        with:
+          github-token: ${{ github.token }}
+          config-path: widgets.yml
