@@ -103,6 +103,15 @@ describe("Plan 04 Task 2: parseConfig — D-12 error reporting", () => {
     expect(error.line).toBe(3);
   });
 
+  it("rejects a widgets.yml over the 1 MiB size guard before attempting to parse it (T-01-09 DoS defense)", () => {
+    const oversized = "cards:\n" + "  - type: almanac\n".repeat(70_000); // well over 1_048_576 chars
+    const result = parseConfig(oversized);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]!.message).toContain("過大");
+  });
+
   it("accepts an existing, empty cards: [] array without error (distinct from a missing widgets.yml)", () => {
     const result = parseConfig("cards: []\n");
     expect(result.ok).toBe(true);

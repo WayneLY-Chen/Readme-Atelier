@@ -345,7 +345,31 @@ function collectSemanticErrors(
  * structural issues (including `.strict()`-caught unknown keys), and the
  * cross-field D-10 checks a single-field validator cannot express.
  */
+/**
+ * T-01-09 (this plan's threat model): a defensive upper bound on
+ * `widgets.yml` size, checked before any YAML parsing is attempted. A
+ * pathologically large file — whether malicious or just an accidental
+ * paste — should fail fast with a named reason instead of spending
+ * `parseDocument`'s composition time on it. 1 MiB is generous: the largest
+ * plausible real `widgets.yml` (dozens of cards, each with a small
+ * `options:` block) is a few KB.
+ */
+const MAX_CONFIG_TEXT_LENGTH = 1_048_576;
+
 export function parseConfig(yamlTextRaw: string): ParseConfigResult {
+  if (yamlTextRaw.length > MAX_CONFIG_TEXT_LENGTH) {
+    return {
+      ok: false,
+      errors: [
+        {
+          message:
+            `widgets.yml 過大（${yamlTextRaw.length} 字元，上限 ${MAX_CONFIG_TEXT_LENGTH} 字元）。` +
+            "請確認這是你自己撰寫的設定檔，而不是誤貼了其他內容。",
+        },
+      ],
+    };
+  }
+
   // UX-01/encoding defense 1: strip a leading UTF-8 BOM. YAML permits a BOM
   // at the start of a document and it is not part of the content, but
   // whether the `yaml` package itself already strips it was not verified,
