@@ -1,0 +1,25 @@
+name: cards
+
+on:
+  workflow_dispatch:
+  push:
+    # main only. The action force-pushes to `output`, and without this filter
+    # that push would re-trigger this workflow in a loop.
+    branches: [main]
+  schedule:
+    - cron: "0 */6 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # `./` — this repository is its own consumer. Exercises runs.using:node24
+      # and dist/index.js on a real runner without needing a second repo.
+      - uses: ./
+        with:
+          github-token: ${{ github.token }}

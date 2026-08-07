@@ -1,0 +1,10 @@
+node_modules/
+*.tsbuildinfo
+.env
+.env.local
+coverage/
+.DS_Store
+Thumbs.db
+
+# Local widget preview output (the CI workflow publishes to the `output` branch)
+.preview/
