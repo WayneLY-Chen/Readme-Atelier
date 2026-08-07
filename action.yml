@@ -1,0 +1,21 @@
+name: "readme-atelier"
+description: >-
+  Renders readme-atelier's GitHub profile README cards to SVG and publishes
+  them to this repository's `output` branch.
+inputs:
+  github-token:
+    required: true
+    description: >-
+      Token used to push rendered cards to the `output` branch. Pass
+      ${{ github.token }} — no personal access token is required for the
+      default path.
+  config-path:
+    required: false
+    default: "widgets.yml"
+    description: >-
+      Path to this repository's widgets.yml. Defaults to widgets.yml at the
+      repository root. If the file does not exist, built-in defaults are used
+      and printed to the run's log/summary.
+runs:
+  using: "node24"
+  main: "dist/index.js"

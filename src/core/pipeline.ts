@@ -15,6 +15,16 @@ export interface RenderedCard {
   id: string;
   light: string;
   dark: string;
+  /**
+   * The widget's own `describe()` output for this render — carried through
+   * so `src/action-entry.ts` can build D-14's `<picture>` embed snippet
+   * (`core/embed-snippet.ts`'s `alt` text, per D-16) WITHOUT re-doing the
+   * widget lookup/option-merging `renderAllCards` already did. Added in Plan
+   * 05 (Rule 2 — missing critical functionality): the publish path needs
+   * this and `RenderedCard` previously had no way to expose it.
+   */
+  title: string;
+  desc: string;
 }
 
 /**
@@ -170,6 +180,8 @@ export function renderAllCards(
     sizeGuard(light, lightLabel, HARD_SIZE_CANARY_BYTES);
     sizeGuard(dark, darkLabel, HARD_SIZE_CANARY_BYTES);
 
-    return { id, light, dark };
+    const { title, desc } = widget.describe(data, opts);
+
+    return { id, light, dark, title, desc };
   });
 }
