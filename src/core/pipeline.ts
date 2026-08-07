@@ -44,9 +44,17 @@ export class UnknownWidgetError extends Error {
  * actionable for someone editing the file by hand.
  */
 export class InvalidCardOptionsError extends Error {
-  constructor(id: string, type: string, detail: string) {
-    super(`InvalidCardOptionsError: card "${id}" (type: ${type}) has invalid options — ${detail}`);
+  readonly lines: string[];
+
+  constructor(id: string, type: string, problems: string[]) {
+    const lines = [
+      `✗ 卡片 "${id}"（type: ${type}）的 options: 設定有誤（${problems.length} 個問題）`,
+      "",
+      ...problems.map((problem) => `  ${problem}`),
+    ];
+    super(lines.join("\n"));
     this.name = "InvalidCardOptionsError";
+    this.lines = lines;
   }
 }
 
@@ -60,18 +68,43 @@ const THEME_PAIRS: Record<ResolvedConfig["theme"], { light: Theme; dark: Theme }
   editorial: { light: editorialLight, dark: editorialDark },
 };
 
-/** Turn a zod (or any) validation failure into one readable line. */
-function describeOptionsFailure(error: unknown): string {
+interface ZodLikeIssue {
+  code?: string;
+  path: PropertyKey[];
+  message: string;
+  keys?: string[];
+}
+
+/**
+ * Turn a widget schema's validation failure into problem lines a person can
+ * act on, in the same register as `core/config.ts`'s D-12 report.
+ *
+ * The point is to keep zod's internal vocabulary out of the adopter's
+ * terminal. A raw zod issue for a typo'd key reads `(root): Unrecognized key:
+ * "timezon"` — an empty path rendered as a literal "(root)", an English
+ * sentence inside an otherwise-Chinese report, and no indication of what the
+ * accepted keys are.
+ *
+ * Known limitation, deliberately not worked around here: this cannot offer a
+ * did-you-mean suggestion the way an unknown `type:` does, because the
+ * `OptionsSchema<Opts>` plugin contract exposes only `.parse()` — there is no
+ * way to enumerate a widget's accepted option keys without widening the
+ * contract that every future card author has to satisfy. Naming the offending
+ * key precisely is the most that can be done without that change.
+ */
+function describeOptionsFailure(error: unknown): string[] {
   if (error && typeof error === "object" && "issues" in error) {
-    const issues = (error as { issues: { path: PropertyKey[]; message: string }[] }).issues;
-    return issues
-      .map((issue) => {
-        const key = issue.path.length > 0 ? issue.path.join(".") : "(root)";
-        return `${key}: ${issue.message}`;
-      })
-      .join("; ");
+    const issues = (error as { issues: ZodLikeIssue[] }).issues;
+    return issues.map((issue) => {
+      if (issue.code === "unrecognized_keys" && issue.keys && issue.keys.length > 0) {
+        const quoted = issue.keys.map((key) => `"${key}"`).join("、");
+        return `無法辨識的選項 ${quoted}，請檢查是否為拼字錯誤`;
+      }
+      const key = issue.path.length > 0 ? issue.path.join(".") : null;
+      return key ? `選項 "${key}"：${issue.message}` : issue.message;
+    });
   }
-  return error instanceof Error ? error.message : String(error);
+  return [error instanceof Error ? error.message : String(error)];
 }
 
 /**
