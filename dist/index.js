@@ -45418,10 +45418,25 @@ const defaultExec = (command, args, options) => exec/* exec */.m(command, args, 
  * passed both size-guard layers (`core/pipeline.ts`'s `renderAllCards`) —
  * `src/action-entry.ts` enforces that ordering, not this function.
  *
- * Security (T-01-10): `core.setSecret(opts.token)` is the FIRST line of this
- * function, before the remote URL string (which embeds the token) is ever
- * constructed. No line in this file passes the constructed `remoteUrl` — or
- * any string built from `opts.token` — into `console.log`/`core.info`.
+ * Security (T-01-10), two independent layers:
+ *
+ * 1. `core.setSecret(opts.token)` is the FIRST line of this function, before
+ *    the remote URL string (which embeds the token) is ever constructed. No
+ *    line in this file passes the constructed `remoteUrl` — or any string
+ *    built from `opts.token` — into `console.log`/`core.info`.
+ *
+ * 2. Every git invocation passes `silent: true`. This is NOT cosmetic and must
+ *    not be removed to make logs chattier. `@actions/exec` echoes the full
+ *    command line it is about to spawn to its output stream BEFORE spawning
+ *    (`toolrunner.js`: `if (!silent && outStream) outStream.write(commandString)`),
+ *    so without `silent` the `remote add origin <url-with-token>` invocation
+ *    writes the token to the Actions log verbatim. Layer 1 alone would leave
+ *    the token's confidentiality resting entirely on GitHub's runtime
+ *    log-masking — a control this repository does not own, cannot test, and
+ *    which does nothing at all when this function is called outside Actions.
+ *
+ * The `finally` block below removes the temp directory because `.git/config`
+ * inside it persists the token-bearing remote URL on disk after the push.
  */
 async function publishOutputBranch(files, opts) {
     core/* setSecret */.Pq(opts.token);
@@ -45433,20 +45448,35 @@ async function publishOutputBranch(files, opts) {
     for (const [filename, content] of Object.entries(files)) {
         (0,external_node_fs_.writeFileSync)(external_node_path_default().join(dir, filename), content, "utf8");
     }
-    const git = (args) => run("git", args, { cwd: dir });
-    await git(["init", "-q"]);
-    await git(["checkout", "-q", "-b", branch]);
-    await git(["config", "user.name", "github-actions[bot]"]);
-    await git(["config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"]);
-    await git(["add", "-A"]);
-    await git(["commit", "-q", "-m", "chore: publish rendered cards"]);
-    const remoteUrl = opts.remoteUrlOverride ?? `https://x-access-token:${opts.token}@github.com/${opts.repo}.git`;
-    await git(["remote", "add", "origin", remoteUrl]);
-    // --force is the mechanism that makes this a force-orphan publish: the
-    // branch was just created fresh in `dir` with a single commit, so pushing
-    // with --force replaces whatever the remote's `output` branch previously
-    // held rather than merging with it.
-    await git(["push", "--force", "origin", `${branch}:${branch}`]);
+    // `silent: true` — see the security note above. Removing it leaks the token.
+    const git = (args) => run("git", args, { cwd: dir, silent: true });
+    try {
+        await git(["init", "-q"]);
+        await git(["checkout", "-q", "-b", branch]);
+        await git(["config", "user.name", "github-actions[bot]"]);
+        await git(["config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"]);
+        await git(["add", "-A"]);
+        await git(["commit", "-q", "-m", "chore: publish rendered cards"]);
+        const remoteUrl = opts.remoteUrlOverride ?? `https://x-access-token:${opts.token}@github.com/${opts.repo}.git`;
+        await git(["remote", "add", "origin", remoteUrl]);
+        // --force is the mechanism that makes this a force-orphan publish: the
+        // branch was just created fresh in `dir` with a single commit, so pushing
+        // with --force replaces whatever the remote's `output` branch previously
+        // held rather than merging with it.
+        await git(["push", "--force", "origin", `${branch}:${branch}`]);
+    }
+    finally {
+        // `.git/config` in here holds the token-bearing remote URL. Remove it on
+        // the failure path too — a push that fails is exactly when the directory
+        // would otherwise be left behind. Cleanup must never mask the original
+        // error, so its own failure is swallowed deliberately.
+        try {
+            (0,external_node_fs_.rmSync)(dir, { recursive: true, force: true });
+        }
+        catch {
+            /* best-effort: the OS temp dir is reclaimed eventually */
+        }
+    }
 }
 
 

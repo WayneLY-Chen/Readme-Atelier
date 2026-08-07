@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,6 +45,76 @@ describe("publishOutputBranch — command sequence (fake exec, no real git spawn
 
     expect(events[0]).toBe("setSecret(fake-token)");
     expect(events[1]).toBe("git init -q");
+  });
+
+  /**
+   * Behavioral guard for the token-leak vector, replacing reliance on the
+   * source-text grep at the bottom of this file.
+   *
+   * `@actions/exec` writes the full command line it is about to spawn to its
+   * output stream BEFORE spawning it, unless `silent` is set — see
+   * `toolrunner.js`: `if (!silent && outStream) outStream.write(commandString)`.
+   * The `remote add origin` invocation carries the token inside the URL, so a
+   * single missing `silent` publishes the token to the Actions log. Asserting
+   * on EVERY call rather than just that one is deliberate: which command holds
+   * the token is an implementation detail that can move.
+   *
+   * A source grep cannot catch this, because the leak is produced by a
+   * dependency's logging, not by any `console.log` in this file.
+   */
+  it("passes silent:true to every git invocation, so @actions/exec never echoes the token-bearing remote URL", async () => {
+    const seen: { args: string[]; silent: unknown }[] = [];
+    const fakeExec: ExecFn = async (_command, args, options) => {
+      seen.push({ args, silent: (options as { silent?: unknown } | undefined)?.silent });
+      return 0;
+    };
+
+    await publishOutputBranch(
+      { "a.svg": "x" },
+      { token: "fake-token", repo: "octocat/hello-world", execFn: fakeExec },
+    );
+
+    expect(seen.length).toBeGreaterThan(0);
+    for (const call of seen) {
+      expect(call.silent, `git ${call.args.join(" ")} ran without silent:true`).toBe(true);
+    }
+  });
+
+  it("removes the temp working directory — .git/config there holds the token-bearing remote URL", async () => {
+    let capturedDir: string | undefined;
+    const fakeExec: ExecFn = async (_command, _args, options) => {
+      capturedDir = (options as { cwd?: string } | undefined)?.cwd;
+      return 0;
+    };
+
+    await publishOutputBranch(
+      { "a.svg": "x" },
+      { token: "fake-token", repo: "octocat/hello-world", execFn: fakeExec },
+    );
+
+    expect(capturedDir).toBeTruthy();
+    expect(existsSync(capturedDir as string)).toBe(false);
+  });
+
+  it("removes the temp working directory even when the push fails", async () => {
+    let capturedDir: string | undefined;
+    const fakeExec: ExecFn = async (_command, args, options) => {
+      capturedDir = (options as { cwd?: string } | undefined)?.cwd;
+      if (args[0] === "push") {
+        throw new Error("simulated push failure");
+      }
+      return 0;
+    };
+
+    await expect(
+      publishOutputBranch(
+        { "a.svg": "x" },
+        { token: "fake-token", repo: "octocat/hello-world", execFn: fakeExec },
+      ),
+    ).rejects.toThrow("simulated push failure");
+
+    expect(capturedDir).toBeTruthy();
+    expect(existsSync(capturedDir as string)).toBe(false);
   });
 
   it("runs git commands in the documented order: init, checkout -b, config x2, add, commit, remote add, push --force", async () => {
