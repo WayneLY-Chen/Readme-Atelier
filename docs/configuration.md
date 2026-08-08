@@ -11,7 +11,7 @@
 
 | 欄位 | 可用值 | 預設 |
 |---|---|---|
-| `theme` | `editorial` | `editorial` |
+| `theme` | `editorial`、`dracula`、`nord`、`tokyonight` | `editorial` |
 | `language` | `en`、`zh-TW` | `en` |
 | `timezone` | 任何 IANA 時區名，例如 `Asia/Taipei` | `UTC` |
 | `cards[].type` | 卡片名稱 | 必填 |
@@ -64,6 +64,14 @@ cards:
 | 選項 | 說明 | 預設 |
 |---|---|---|
 | `timezone` | 覆寫這張卡片的時區 | 沿用最上層的 `timezone` |
+
+不認識的選項鍵會讓執行失敗並指名是哪個鍵，不會被默默丟掉。
+
+### `editorial-stat-card`
+
+| 選項 | 說明 | 預設 |
+|---|---|---|
+| `include_forks` | 是否把 fork repository 的貢獻算進統計數字。設為 `true` 改為含入。 | `false` |
 
 不認識的選項鍵會讓執行失敗並指名是哪個鍵，不會被默默丟掉。
 
@@ -121,3 +129,10 @@ workflow 必須給 `permissions: contents: write`，否則 action 推送到 `out
 到 Actions 分頁重新啟用即可。
 
 **圖片經過 GitHub 的 camo 快取**，內容更新後可能要一段時間才看得到變化。
+
+**私人貢獻看不到。** 不論 `GITHUB_TOKEN` 被授予什麼權限範圍，GitHub 的 GraphQL API 都不會透過
+`contributionsCollection` 揭露私人貢獻的實際內容——即使這個 token 屬於帳號本人也一樣。這是 API
+本身的限制，不是這個專案可以用設定開關的行為。
+
+**組織擁有的 repository 貢獻預設會算進統計數字。** 目前沒有選項可以把它們排除在卡片顯示的數字之
+外。這與你自己 GitHub 個人檔案頁面看到的算法一致。

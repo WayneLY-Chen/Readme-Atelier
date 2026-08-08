@@ -60,6 +60,7 @@ snippet — copy it into your README. You do not need to construct the URLs your
 | Name | What it shows | Needs GitHub data |
 |---|---|---|
 | `almanac` | Today's Gregorian date, the lunar date, the sexagenary day pillar, and a developer 宜/忌 reading derived from the 建除十二神 cycle | no |
+| `editorial-stat-card` | commits, PRs, issues, stars, followers in magazine-style typography | yes |
 
 The catalog is meant to grow.
 
@@ -70,7 +71,7 @@ an equivalent copy of them to the log so you have something real to start from.
 
 | Field | Values | Default |
 |---|---|---|
-| `theme` | `editorial` | `editorial` |
+| `theme` | `editorial`, `dracula`, `nord`, `tokyonight` | `editorial` |
 | `language` | `en`, `zh-TW` | `en` |
 | `timezone` | any IANA name, e.g. `Asia/Taipei` | `UTC` |
 | `cards[].type` | a card name | required |
@@ -97,6 +98,18 @@ duplicate detection is case-sensitive, so `id: Foo` and `id: foo` both validate 
 but on Windows and default-configured macOS, `Foo-light.svg` and `foo-light.svg` are the *same
 file*, and one card silently overwrites the other with no error. Forcing lowercase makes that
 collision unrepresentable.
+
+### Card options
+
+Each card decides which options it accepts. Currently:
+
+**`editorial-stat-card`**
+
+| Option | Meaning | Default |
+|---|---|---|
+| `include_forks` | Include contributions to fork repositories in the totals. Set to `true` to include them. | `false` |
+
+Unknown option keys fail the run and name which key, rather than being silently dropped.
 
 ### When the config is wrong
 
@@ -134,6 +147,15 @@ the card, so keep it when you paste.
 stop updating, that is usually why — open the Actions tab and re-enable the workflow.
 
 **Images are served through GitHub's camo cache**, so a change can take a while to become visible.
+
+**Private contributions are not visible, no matter the token.** GitHub's GraphQL API does not expose
+the actual content of private contributions through `contributionsCollection`, regardless of what
+scopes `GITHUB_TOKEN` is granted — this holds even when the token belongs to the profile owner. It
+is a limitation of the API itself, not a setting this project can turn on.
+
+**Contributions to organization-owned repositories are counted by default.** There is currently no
+option to exclude them from the stats shown on a card. This matches what a viewer's own GitHub
+profile page shows them for the same account.
 
 ## Development
 
