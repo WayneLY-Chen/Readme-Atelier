@@ -3,15 +3,18 @@ import { loadAllFonts } from "../node/fonts.js";
 import { almanacWidget } from "../widgets/almanac/index.js";
 import { editorialStatCardWidget } from "../widgets/editorial-stat-card/index.js";
 import type { ResolvedConfig } from "./config.js";
-import type { FetchImpl } from "./fetch.js";
+import { type FetchImpl, zeroCapabilityProfileData } from "./fetch.js";
+import type { ProfileData } from "./model.js";
 import {
   fetchSharedData,
   InvalidCardOptionsError,
   renderAllCards,
   resolveCards,
+  resolveTheme,
   UnknownWidgetError,
 } from "./pipeline.js";
 import { get, register } from "./registry.js";
+import type { WidgetDefinition } from "./registry.js";
 
 const NOW = new Date("2026-08-07T12:00:00Z");
 const GLOBAL_OPTS = { now: NOW, seed: 0 };
@@ -220,15 +223,24 @@ describe("fetchSharedData", () => {
   });
 });
 
+const GLOBAL_RENDER_OPTS = { now: NOW, seed: 0, language: "en" as const };
+const EDITORIAL_THEMES = resolveTheme("editorial");
+
 describe("renderAllCards", () => {
-  it("renders one light/dark pair per card entry, in written order", () => {
-    const cards = renderAllCards(
+  it("renders one light/dark pair per resolved card, in given order (UnknownWidgetError/InvalidCardOptionsError/D-08 rejection now belong to resolveCards — see its own describe block above)", () => {
+    const cards = resolveCards(
       config({ cards: [{ type: "almanac" }, { type: "almanac", id: "almanac-utc" }] }),
-      GLOBAL_OPTS,
     );
 
-    expect(cards.map((c) => c.id)).toEqual(["almanac", "almanac-utc"]);
-    for (const card of cards) {
+    const rendered = renderAllCards(
+      cards,
+      zeroCapabilityProfileData(),
+      GLOBAL_RENDER_OPTS,
+      EDITORIAL_THEMES,
+    );
+
+    expect(rendered.map((c) => c.id)).toEqual(["almanac", "almanac-utc"]);
+    for (const card of rendered) {
       expect(card.light).toContain("<svg");
       expect(card.dark).toContain("<svg");
       // The sandbox-safety invariant the whole phase rests on (RENDER-01).
@@ -237,49 +249,8 @@ describe("renderAllCards", () => {
     }
   });
 
-  it("defaults id to type, and uses an explicit id when given (D-10)", () => {
-    expect(renderAllCards(config(), GLOBAL_OPTS)[0].id).toBe("almanac");
-    expect(
-      renderAllCards(config({ cards: [{ type: "almanac", id: "my-card" }] }), GLOBAL_OPTS)[0].id,
-    ).toBe("my-card");
-  });
-
-  it("throws UnknownWidgetError for a type with no registered widget", () => {
-    expect(() => renderAllCards(config({ cards: [{ type: "nope" }] }), GLOBAL_OPTS)).toThrow(
-      UnknownWidgetError,
-    );
-  });
-
-  it("rejects an unrecognized option key instead of ignoring it, and names it", () => {
-    let caught: unknown;
-    try {
-      renderAllCards(
-        config({ cards: [{ type: "almanac", options: { timezon: "Asia/Taipei" } }] }),
-        GLOBAL_OPTS,
-      );
-    } catch (error) {
-      caught = error;
-    }
-
-    expect(caught).toBeInstanceOf(InvalidCardOptionsError);
-    const message = (caught as Error).message;
-    expect(message).toContain("almanac");
-    expect(message).toContain("timezon");
-    expect(message).not.toContain("(root)");
-    expect(message).not.toContain("Unrecognized key");
-  });
-
-  it("rejects a card-level language override (D-08)", () => {
-    expect(() =>
-      renderAllCards(
-        config({ cards: [{ type: "almanac", options: { language: "zh-TW" } }] }),
-        GLOBAL_OPTS,
-      ),
-    ).toThrow(InvalidCardOptionsError);
-  });
-
-  it("honors a per-card timezone override while language stays top-level (D-09)", () => {
-    const [utc, taipei] = renderAllCards(
+  it("honors a per-card timezone override (already resolved onto ResolvedCard.timezone) while language stays top-level (D-09)", () => {
+    const cards = resolveCards(
       config({
         timezone: "UTC",
         cards: [
@@ -287,16 +258,88 @@ describe("renderAllCards", () => {
           { type: "almanac", id: "a-tpe", options: { timezone: "Asia/Taipei" } },
         ],
       }),
-      { now: new Date("2026-08-07T20:00:00Z"), seed: 0 },
+    );
+
+    const [utc, taipei] = renderAllCards(
+      cards,
+      zeroCapabilityProfileData(),
+      { now: new Date("2026-08-07T20:00:00Z"), seed: 0, language: "en" },
+      EDITORIAL_THEMES,
     );
 
     expect(utc.light).not.toBe(taipei.light);
   });
 
-  it("is deterministic: same config and same now produce byte-identical output", () => {
-    const a = renderAllCards(config(), GLOBAL_OPTS);
-    const b = renderAllCards(config(), GLOBAL_OPTS);
+  it("is deterministic: same cards/data/globalOpts/themes produce byte-identical output", () => {
+    const cards = resolveCards(config());
+    const data = zeroCapabilityProfileData();
+    const a = renderAllCards(cards, data, GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
+    const b = renderAllCards(cards, data, GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
     expect(a[0].light).toBe(b[0].light);
     expect(a[0].dark).toBe(b[0].dark);
+  });
+
+  it("renders a mixed Almanac + Editorial Stat Card set sharing one data/themes input", () => {
+    const cards = resolveCards(
+      config({ cards: [{ type: "almanac" }, { type: "editorial-stat-card" }] }),
+    );
+    const data: ProfileData = {
+      login: "octocat",
+      name: "The Octocat",
+      avatarUrl: "",
+      followers: 9,
+      fetchedAt: new Date().toISOString(),
+      stats: { totalCommits: 12345, totalPRs: 3, totalIssues: 1, totalStars: 42 },
+    };
+
+    const rendered = renderAllCards(cards, data, GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
+
+    expect(rendered).toHaveLength(2);
+    for (const card of rendered) {
+      expect(card.light).toContain("<path");
+      expect(card.dark).toContain("<path");
+      expect(card.light).not.toContain("<text");
+      expect(card.dark).not.toContain("<text");
+    }
+  });
+
+  it("overwrites now/seed/language/timezone on the final opts, but passes every other parsedOptions field (e.g. include_forks) through untouched", () => {
+    let capturedOpts: Record<string, unknown> | undefined;
+    const fakeWidget: WidgetDefinition<any> = {
+      name: "test-fake-opts-widget",
+      requires: [],
+      size: { width: 10, height: 10 },
+      optionsSchema: {
+        parse: () => ({
+          include_forks: true,
+          now: new Date(0),
+          seed: 999,
+          language: "zh-TW",
+          timezone: "Asia/Tokyo",
+        }),
+      },
+      describe: () => ({ title: "t", desc: "d" }),
+      renderBody: (_data, _theme, opts) => {
+        capturedOpts = opts as unknown as Record<string, unknown>;
+        return "";
+      },
+    };
+    if (!get("test-fake-opts-widget")) {
+      register(fakeWidget);
+    }
+
+    const cards = resolveCards(config({ cards: [{ type: "test-fake-opts-widget" }] }));
+    renderAllCards(
+      cards,
+      zeroCapabilityProfileData(),
+      { now: new Date("2026-01-01T00:00:00Z"), seed: 1, language: "en" },
+      EDITORIAL_THEMES,
+    );
+
+    expect(capturedOpts?.now).toEqual(new Date("2026-01-01T00:00:00Z"));
+    expect(capturedOpts?.seed).toBe(1);
+    expect(capturedOpts?.language).toBe("en");
+    expect(capturedOpts?.timezone).toBe("UTC");
+    expect(capturedOpts?.include_forks).toBe(true);
   });
 });

@@ -1,5 +1,5 @@
 import type { CardEntry, ResolvedConfig } from "./config.js";
-import { type FetchImpl, fetchProfileData, zeroCapabilityProfileData } from "./fetch.js";
+import { type FetchImpl, fetchProfileData } from "./fetch.js";
 import type { ProfileData, RenderOptions, Theme } from "./model.js";
 import { collectCapabilities, get } from "./registry.js";
 import type { WidgetDefinition } from "./registry.js";
@@ -78,6 +78,18 @@ export class InvalidCardOptionsError extends Error {
 const THEME_PAIRS: Record<ResolvedConfig["theme"], { light: Theme; dark: Theme }> = {
   editorial: { light: editorialLight, dark: editorialDark },
 };
+
+/**
+ * Resolve a `widgets.yml` `theme:` value to the `{ light, dark }` pair
+ * `renderAllCards` needs. Exists so callers (`action-entry.ts`/`cli.ts`)
+ * don't need to import `THEME_PAIRS` themselves or know its internal
+ * structure — they pass a plain `config.theme` string in and get a themes
+ * object back. Still only one entry (`editorial`) this phase — THEME-01/03/04's
+ * dracula/nord/tokyonight catalog expansion is a later wave's work.
+ */
+export function resolveTheme(theme: ResolvedConfig["theme"]): { light: Theme; dark: Theme } {
+  return THEME_PAIRS[theme];
+}
 
 interface ZodLikeIssue {
   code?: string;
@@ -199,12 +211,14 @@ export async function fetchSharedData(
 }
 
 /**
- * Render every card in `config`, in the order the consumer wrote them.
+ * Render every already-resolved card against already-fetched `data`.
  *
- * Pure and synchronous: no `fs`, no `path`, no `process`, no network. Both
- * entry points — `src/cli.ts` today and `src/action-entry.ts` in Plan 05 —
- * call this one function, so a card can never render differently locally than
- * it does inside the Action.
+ * Pure and synchronous: no `fs`, no `path`, no `process`, no network — this
+ * is the "render" third of RESEARCH.md Pattern 2 (`resolveCards` ->
+ * `fetchSharedData` -> `renderAllCards`). Both entry points —
+ * `src/cli.ts`/`src/action-entry.ts` — call `resolveCards`/`fetchSharedData`
+ * first and pass their results in here, so a card can never render
+ * differently locally than it does inside the Action.
  *
  * Every card is fully rendered and size-checked before ANY of them is
  * returned. A single over-budget or misconfigured card therefore aborts the
@@ -212,46 +226,31 @@ export async function fetchSharedData(
  * SVGs on the `output` branch.
  */
 export function renderAllCards(
-  config: ResolvedConfig,
-  globalOpts: { now: Date; seed: number },
+  cards: ResolvedCard[],
+  data: ProfileData,
+  globalOpts: { now: Date; seed: number; language: "en" | "zh-TW" },
+  themes: { light: Theme; dark: Theme },
 ): RenderedCard[] {
-  // Almanac declares zero data capabilities (DATA-03), so the render path
-  // holds no remote state at all. This is the synchronous placeholder, not an
-  // awaited fetch — which is what lets this whole function stay synchronous.
-  const data = zeroCapabilityProfileData();
-  const themes = THEME_PAIRS[config.theme];
-
-  return config.cards.map((entry: CardEntry): RenderedCard => {
-    const widget = get(entry.type);
-    if (!widget) {
-      throw new UnknownWidgetError(entry.type);
-    }
-
-    const id = entry.id ?? entry.type;
-
-    // The widget owns its own option vocabulary. This is where a typo inside
-    // a card's `options:` block is caught — config.ts only checked that the
-    // block is a mapping.
-    try {
-      widget.optionsSchema.parse(entry.options ?? {});
-    } catch (error) {
-      throw new InvalidCardOptionsError(id, entry.type, describeOptionsFailure(error));
-    }
-
-    // D-09 allows `timezone` to be overridden per card. `language` has no
-    // such override by design (D-08): it is read from the top level only,
-    // and is never inferred from profile data or from the card entry.
-    const opts: RenderOptions = {
+  return cards.map((card): RenderedCard => {
+    // D-09 allows `timezone` to be overridden per card (already resolved
+    // onto `card.timezone` by `resolveCards`). `language` has no such
+    // override by design (D-08): it always comes from `globalOpts`, never
+    // from a card's own `parsedOptions`. Everything else in `parsedOptions`
+    // (e.g. Editorial Stat Card's `include_forks`) is a genuinely real
+    // option value and is passed through untouched — only these four named
+    // fields are overwritten.
+    const opts = {
+      ...card.parsedOptions,
       now: globalOpts.now,
       seed: globalOpts.seed,
-      language: config.language,
-      timezone: (entry.options?.timezone as string | undefined) ?? config.timezone,
-    };
+      language: globalOpts.language,
+      timezone: card.timezone,
+    } as RenderOptions;
 
-    const { light, dark } = renderPair(widget, data, opts, themes);
+    const { light, dark } = renderPair(card.widget, data, opts, themes);
 
-    const lightLabel = `${id}-light.svg`;
-    const darkLabel = `${id}-dark.svg`;
+    const lightLabel = `${card.id}-light.svg`;
+    const darkLabel = `${card.id}-dark.svg`;
 
     // Soft budget first (RENDER-07) — this is the one that trips in normal
     // operation. The 1MB canary is a second layer that only fires if the soft
@@ -261,8 +260,8 @@ export function renderAllCards(
     sizeGuard(light, lightLabel, HARD_SIZE_CANARY_BYTES);
     sizeGuard(dark, darkLabel, HARD_SIZE_CANARY_BYTES);
 
-    const { title, desc } = widget.describe(data, opts);
+    const { title, desc } = card.widget.describe(data, opts);
 
-    return { id, light, dark, title, desc };
+    return { id: card.id, light, dark, title, desc };
   });
 }
