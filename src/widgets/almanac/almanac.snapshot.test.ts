@@ -67,3 +67,38 @@ describe("Plan 03 Task 4: QA-02 fixed-input snapshot", () => {
     await expect(dark).toMatchFileSnapshot("__snapshots__/almanac-dark.svg");
   });
 });
+
+/**
+ * Extracts the fill attribute of the LAST `<path .../>` element in a rendered
+ * markup string. renderBody's own source order (index.ts renderBody) makes
+ * the 忌 (avoid) line's `contentText(...)` call the final markup append
+ * before `return markup` — every other path-producing call (title, masthead
+ * eyebrow, giant numeral, meta label/value rows, the 宜 line) happens earlier
+ * in the string, and the two `<line>`/`<polygon>`/`<rect>` elements used
+ * elsewhere never match `<path`. This is a direct, independent-of-snapshot
+ * assertion (Plan 02-05's own acceptance criteria: "a snapshot diff must not
+ * be the only thing that would catch a regression").
+ */
+function lastPathFill(markup: string): string | undefined {
+  const matches = [...markup.matchAll(/<path[^>]*\sfill="([^"]+)"\/>/g)];
+  return matches.at(-1)?.[1];
+}
+
+describe("Plan 02-05: 忌 line uses theme.accent, not theme.muted (THEME-03 WCAG fix)", () => {
+  it("renders the 忌 line's fill as editorialLight.accent / editorialDark.accent, never .muted", () => {
+    const opts: RenderOptions = {
+      ...FIXED_OPTS_BASE,
+      now: new Date("2026-08-02T00:00:00Z"),
+    };
+
+    const { light, dark } = renderPair(almanacWidget, stubProfileData, opts, {
+      light: editorialLight,
+      dark: editorialDark,
+    });
+
+    expect(lastPathFill(light)).toBe(editorialLight.accent);
+    expect(lastPathFill(dark)).toBe(editorialDark.accent);
+    expect(lastPathFill(light)).not.toBe(editorialLight.muted);
+    expect(lastPathFill(dark)).not.toBe(editorialDark.muted);
+  });
+});

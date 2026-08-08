@@ -376,8 +376,14 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
 
     markup += `<line x1="${PADDING}" y1="178" x2="${CARD_WIDTH - PADDING}" y2="178" stroke="${theme.rule}" stroke-width="1"/>`;
 
-    // 宜/忌 lines. 宜 uses accent, 忌 uses muted (UI-SPEC Color — no second
-    // semantic/destructive hue is introduced for this card, by design).
+    // 宜/忌 lines. Both use accent (02-UI-SPEC.md "Theme Registry" WCAG audit,
+    // THEME-03 fix): muted's contrast against paper falls to ~2.8-3.0:1 under
+    // the dracula/tokyonight ecosystem themes, well under the AA 4.5:1 floor,
+    // and this is load-bearing card content (not a caption), not a place
+    // muted's lower contrast is acceptable. No second semantic/destructive
+    // hue is introduced — the two lines are still distinguished purely by
+    // their existing language-specific prefix text and fixed vertical
+    // position (y=199 vs y=215), never by color.
     markup += contentText(
       contentFont,
       `${chrome.auspiciousPrefix}${yiji.auspicious}`,
@@ -391,7 +397,7 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
       `${chrome.avoidPrefix}${yiji.avoid}`,
       PADDING,
       215,
-      theme.muted,
+      theme.accent,
       `almanac 忌 line (${language})`,
     );
 
