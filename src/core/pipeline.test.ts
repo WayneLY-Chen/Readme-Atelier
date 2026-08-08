@@ -6,6 +6,7 @@ import type { ResolvedConfig } from "./config.js";
 import { type FetchImpl, zeroCapabilityProfileData } from "./fetch.js";
 import type { ProfileData } from "./model.js";
 import {
+  ConflictingStatsOptionsError,
   fetchSharedData,
   InvalidCardOptionsError,
   renderAllCards,
@@ -220,6 +221,42 @@ describe("fetchSharedData", () => {
     await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
 
     expect(calls[0]?.query).toContain("commitContributionsByRepository");
+  });
+
+  it("throws ConflictingStatsOptionsError instead of silently picking one card's include_forks when two stats cards disagree (CR-01)", async () => {
+    const { fetchImpl } = recordingFetch();
+    const cards = resolveCards(
+      config({
+        cards: [
+          { type: "editorial-stat-card", id: "with-forks", options: { include_forks: true } },
+          { type: "editorial-stat-card", id: "without-forks", options: { include_forks: false } },
+        ],
+      }),
+    );
+
+    await expect(fetchSharedData(cards, "fake-token", "octocat", fetchImpl)).rejects.toThrow(
+      ConflictingStatsOptionsError,
+    );
+    await expect(fetchSharedData(cards, "fake-token", "octocat", fetchImpl)).rejects.toThrow(
+      /"with-forks".*"without-forks"|"without-forks".*"with-forks"/,
+    );
+  });
+
+  it("allows two stats cards that agree on include_forks and fetches exactly once", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const cards = resolveCards(
+      config({
+        cards: [
+          { type: "editorial-stat-card", id: "a", options: { include_forks: true } },
+          { type: "editorial-stat-card", id: "b", options: { include_forks: true } },
+        ],
+      }),
+    );
+
+    await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.query).not.toContain("commitContributionsByRepository");
   });
 });
 

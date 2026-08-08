@@ -3,7 +3,7 @@ import { assertCoverage, measureAdvanceWidth, textToPathData } from "../../core/
 import type { ProfileData, RenderOptions, Theme } from "../../core/model.js";
 import type { WidgetDefinition } from "../../core/registry.js";
 import { chromeEn, chromeZh, labelsEn, labelsZh, type StatLabels } from "./copy.js";
-import { assertColumnBudget, formatStatNumber } from "./format.js";
+import { assertColumnBudget, formatStatNumber, SUFFIX_SIZE_RATIO } from "./format.js";
 
 const CARD_WIDTH = 495;
 const CARD_HEIGHT = 204;
@@ -16,10 +16,6 @@ const T1_LETTER_SPACING = 1.6;
 
 const SM = 8;
 const MD = 16;
-
-/** 02-UI-SPEC.md "Mixed Plex-Mono-digit + Noto-Serif-TC-suffix
- * composition": the 萬/億 suffix renders at 92% of T2's declared size. */
-const SUFFIX_SIZE_RATIO = 0.92;
 
 function pathElement(d: string, fill: string): string {
   if (d === "") {

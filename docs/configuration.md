@@ -75,6 +75,8 @@ cards:
 
 不認識的選項鍵會讓執行失敗並指名是哪個鍵，不會被默默丟掉。
 
+統計數字來自 GitHub GraphQL API 每個類別最多 100 個 repository 的資料（GitHub 本身的上限）——非常活躍、貢獻遍及超過 100 個 repository 的帳號，commits/issues/PRs 數字可能略低於實際活動量。
+
 ## 設定寫錯時
 
 `widgets.yml` 有問題會讓整次執行失敗，**一次列出所有問題**，而不是修好一個才發現下一個：

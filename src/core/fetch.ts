@@ -37,7 +37,7 @@ const STATS_FRAGMENT_EXCLUDE_FORKS = `
           repository { isFork }
         }
       }
-      repositories(first: 100, isFork: false, ownerAffiliations: [OWNER], privacy: PUBLIC) {
+      repositories(first: 100, isFork: false, ownerAffiliations: [OWNER], privacy: PUBLIC, orderBy: { field: STARGAZERS, direction: DESC }) {
         nodes { stargazerCount }
       }`;
 
@@ -54,7 +54,7 @@ const STATS_FRAGMENT_INCLUDE_FORKS = `
         totalPullRequestContributions
         restrictedContributionsCount
       }
-      repositories(first: 100, ownerAffiliations: [OWNER], privacy: PUBLIC) {
+      repositories(first: 100, ownerAffiliations: [OWNER], privacy: PUBLIC, orderBy: { field: STARGAZERS, direction: DESC }) {
         nodes { stargazerCount }
       }`;
 

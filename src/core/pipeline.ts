@@ -70,6 +70,25 @@ export class InvalidCardOptionsError extends Error {
 }
 
 /**
+ * Two `stats`-requiring cards declared conflicting `include_forks` values.
+ *
+ * `fetchSharedData` fetches exactly once per run (DATA-01) and picks a single
+ * `includeForks` boolean for that one fetch — there is no way to honor two
+ * different values in one request. Rather than silently applying one card's
+ * setting to the other (CR-01), this is a hard config error naming both cards
+ * so the adopter fixes their `widgets.yml` instead of shipping wrong numbers.
+ */
+export class ConflictingStatsOptionsError extends Error {
+  constructor(ids: string[]) {
+    super(
+      `✗ 卡片 ${ids.map((id) => `"${id}"`).join("、")} 都需要 stats 資料，但 include_forks 設定不一致——` +
+        `同一次執行只會抓一次資料，無法讓每張卡片各自套用不同的 include_forks。請讓這些卡片使用相同的 include_forks 設定。`,
+    );
+    this.name = "ConflictingStatsOptionsError";
+  }
+}
+
+/**
  * `theme:` value -> the light/dark pair it resolves to.
  *
  * A map rather than an if/else so THEME-01/03/04's catalog is a data change
@@ -130,7 +149,12 @@ interface ZodLikeIssue {
  * key precisely is the most that can be done without that change.
  */
 function describeOptionsFailure(error: unknown): string[] {
-  if (error && typeof error === "object" && "issues" in error) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "issues" in error &&
+    Array.isArray((error as { issues: unknown }).issues)
+  ) {
     const issues = (error as { issues: ZodLikeIssue[] }).issues;
     return issues.map((issue) => {
       if (issue.code === "unrecognized_keys" && issue.keys && issue.keys.length > 0) {
@@ -194,8 +218,16 @@ export function resolveCards(config: ResolvedConfig): ResolvedCard[] {
       throw new InvalidCardOptionsError(id, entry.type, describeOptionsFailure(error));
     }
 
-    // D-09 allows `timezone` to be overridden per card.
-    const timezone = (entry.options?.timezone as string | undefined) ?? config.timezone;
+    // D-09 allows `timezone` to be overridden per card via a reserved
+    // top-level `options.timezone` key — distinct from the widget's own
+    // `optionsSchema` vocabulary (a widget could coincidentally declare its
+    // own unrelated `timezone` option, as almanac's test fixtures do), so
+    // this deliberately reads `entry.options` rather than `parsedOptions`.
+    // `config.ts`'s `CardEntrySchema` leaves `options:` as an unvalidated
+    // `z.record`, so a runtime `typeof` check replaces the previous unchecked
+    // `as string` cast.
+    const rawTimezone = entry.options?.timezone;
+    const timezone = typeof rawTimezone === "string" ? rawTimezone : config.timezone;
 
     return { id, widget, parsedOptions, timezone };
   });
@@ -204,12 +236,13 @@ export function resolveCards(config: ResolvedConfig): ResolvedCard[] {
 /**
  * The ONLY place the pipeline touches the network (RESEARCH.md Pattern 2):
  * unions every resolved card's declared capabilities, derives the single
- * `includeForks` boolean the shared fetch needs from whichever card declared
- * `stats` (v1 has at most one — RESEARCH.md's "Open Question 1" flags a
- * second `stats` card as a future, not-yet-arisen conflict), and calls
- * `fetchProfileData` exactly once (DATA-01). Every extra enabled card beyond
- * the first `stats` consumer is already covered by the same union of
- * capabilities — this function does not loop per card.
+ * `includeForks` boolean the shared fetch needs from the `stats`-requiring
+ * cards, and calls `fetchProfileData` exactly once (DATA-01). Every extra
+ * enabled card beyond the first `stats` consumer is already covered by the
+ * same union of capabilities — this function does not loop per card. Two or
+ * more `stats` cards are allowed only if they all agree on `include_forks`
+ * (see `ConflictingStatsOptionsError`); there is no way to honor divergent
+ * settings from a single fetch.
  */
 export async function fetchSharedData(
   cards: ResolvedCard[],
@@ -218,8 +251,12 @@ export async function fetchSharedData(
   fetchImpl?: FetchImpl,
 ): Promise<{ data: ProfileData; pointCost: number }> {
   const capabilities = collectCapabilities(cards.map((card) => card.widget));
-  const statsCard = cards.find((card) => card.widget.requires.includes("stats"));
-  const includeForks = Boolean(statsCard?.parsedOptions.include_forks);
+  const statsCards = cards.filter((card) => card.widget.requires.includes("stats"));
+  const distinctIncludeForks = new Set(statsCards.map((card) => Boolean(card.parsedOptions.include_forks)));
+  if (distinctIncludeForks.size > 1) {
+    throw new ConflictingStatsOptionsError(statsCards.map((card) => card.id));
+  }
+  const includeForks = Boolean(statsCards[0]?.parsedOptions.include_forks);
 
   return fetchProfileData(capabilities, token, login, includeForks, fetchImpl);
 }

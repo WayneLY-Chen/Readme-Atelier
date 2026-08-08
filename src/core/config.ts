@@ -331,7 +331,7 @@ function collectSemanticErrors(
     const node = doc.getIn(path, true);
     const loc = locationFromRange(yamlLines, lineCounter, rangeOf(node));
     errors.push({
-      message: `重複的 id "${id}"，出現在第 ${indices.join(" 與第 ")} 個 card，請加上 id: 區分`,
+      message: `重複的 id "${id}"，出現在第 ${indices.map((i) => i + 1).join(" 與第 ")} 個 card，請加上 id: 區分`,
       ...loc,
     });
   }

@@ -64,8 +64,7 @@ describe("Plan 04 Task 2: parseConfig — D-12 error reporting", () => {
     const dupError = result.errors.find((e) => e.message.includes("重複的 id"));
     expect(dupError).toBeDefined();
     expect(dupError!.message).toContain('"a"');
-    expect(dupError!.message).toContain("0");
-    expect(dupError!.message).toContain("1");
+    expect(dupError!.message).toContain("第 1 與第 2 個");
   });
 
   it("does NOT treat 'card' and 'Card' as duplicate (type-derived default) ids — exact, case-sensitive comparison (D-10)", () => {

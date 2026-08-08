@@ -23,7 +23,7 @@ const T2_SIZE = 32;
 /** 02-UI-SPEC.md "Mixed Plex-Mono-digit + Noto-Serif-TC-suffix
  * composition": the 萬/億 suffix renders in Noto Serif TC at 92% of T2's
  * declared size. */
-const SUFFIX_SIZE_RATIO = 0.92;
+export const SUFFIX_SIZE_RATIO = 0.92;
 
 /**
  * Thrown by assertColumnBudget when a formatted stat value's measured

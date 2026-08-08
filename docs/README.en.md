@@ -111,6 +111,8 @@ Each card decides which options it accepts. Currently:
 
 Unknown option keys fail the run and name which key, rather than being silently dropped.
 
+Stats are computed from at most the 100 most-active repositories per category (GitHub's own GraphQL API cap) — very active accounts contributing to more than 100 repositories may see slightly lower totals than their real activity.
+
 ### When the config is wrong
 
 A mistake fails the run and reports **every** problem at once, with line numbers, the offending
