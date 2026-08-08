@@ -94,6 +94,35 @@ writeFileSync(
 );
 const STUB_FETCH_NODE_OPTIONS = `--import=${pathToFileURL(STUB_FETCH_PRELOAD).href}`;
 
+/**
+ * A `NODE_OPTIONS=--import=...` preload that stubs `globalThis.fetch` with
+ * GitHub's REAL rate-limit shape (RESEARCH.md Pitfall 1: HTTP 200,
+ * `x-ratelimit-remaining: 0`, `data: null` + `errors[]`) rather than a 403 —
+ * used to prove DATA-07's "reject -> no render, no write" guarantee through
+ * the real `cli.ts` subprocess, not just at the `fetchProfileData` unit
+ * level (already covered in `fetch.test.ts`).
+ */
+const STUB_FETCH_RATE_LIMIT_PRELOAD = join(
+  tmpdir(),
+  "readme-atelier-cli-test-stub-fetch-rate-limit.mjs",
+);
+writeFileSync(
+  STUB_FETCH_RATE_LIMIT_PRELOAD,
+  [
+    "globalThis.fetch = async () =>",
+    "  new Response(",
+    '    JSON.stringify({ data: null, errors: [{ message: "API rate limit exceeded for installation." }] }),',
+    "    {",
+    "      status: 200,",
+    '      headers: { "content-type": "application/json", "x-ratelimit-remaining": "0" },',
+    "    },",
+    "  );",
+    "",
+  ].join("\n"),
+  "utf8",
+);
+const STUB_FETCH_RATE_LIMIT_NODE_OPTIONS = `--import=${pathToFileURL(STUB_FETCH_RATE_LIMIT_PRELOAD).href}`;
+
 interface CliResult {
   status: number | null;
   stdout: string;
@@ -242,6 +271,34 @@ describe("Plan 04 Task 3: cli.ts — real widgets.yml wiring (UX-04)", () => {
 
 describe("Plan 02-03 Task 3: cli.ts real end-to-end wiring (resolveCards -> fetchSharedData -> renderAllCards)", () => {
   it(
+    "a widgets.yml with an invalid card options block: resolveCards throws before fetchSharedData is ever reached — proven by an empty fetch-call log, not just structural inference",
+    () => {
+      const dir = makeTmpDir();
+      writeFileSync(
+        join(dir, "widgets.yml"),
+        "cards:\n  - type: editorial-stat-card\n    options:\n      inclue_forks: true\n",
+        "utf8",
+      );
+      const logPath = join(dir, "fetch-calls.log");
+
+      const result = runCliWithEnv(["widgets.yml"], dir, STUB_FETCH_NODE_OPTIONS, {
+        GITHUB_TOKEN: "fake-pat-value",
+        GITHUB_LOGIN: "octocat",
+        READU_STUB_FETCH_LOG: logPath,
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("options");
+      // The stub-fetch preload is loaded (unlike NO_NETWORK_PRELOAD it would
+      // NOT throw if called) — an empty log file is real, positive proof
+      // fetchSharedData was never reached, not merely an absence-of-crash.
+      expect(existsSync(logPath)).toBe(false);
+      expect(existsSync(join(dir, ".preview"))).toBe(false);
+    },
+    30_000,
+  );
+
+  it(
     "a widgets.yml enabling almanac + editorial-stat-card, with GITHUB_TOKEN/GITHUB_LOGIN set: fetches exactly once, sends user(login) with the real login, and writes all four .preview/* files",
     () => {
       const dir = makeTmpDir();
@@ -322,6 +379,34 @@ describe("Plan 02-03 Task 3: cli.ts real end-to-end wiring (resolveCards -> fetc
       expect(result.status).toBe(0);
       expect(existsSync(join(dir, ".preview/almanac-light.svg"))).toBe(true);
       expect(existsSync(join(dir, ".preview/almanac-dark.svg"))).toBe(true);
+    },
+    30_000,
+  );
+
+  it(
+    "a real GitHub rate-limit response (HTTP 200 + errors[]) fails the whole run: non-zero exit, formatFetchFailureMessage()'s copy on stderr, and NO .preview/* files written (DATA-07 all-or-nothing, proven through the real subprocess)",
+    () => {
+      const dir = makeTmpDir();
+      writeFileSync(
+        join(dir, "widgets.yml"),
+        "cards:\n  - type: almanac\n  - type: editorial-stat-card\n",
+        "utf8",
+      );
+
+      const result = runCliWithEnv(
+        ["widgets.yml"],
+        dir,
+        STUB_FETCH_RATE_LIMIT_NODE_OPTIONS,
+        { GITHUB_TOKEN: "fake-pat-value", GITHUB_LOGIN: "octocat" },
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("Failed to fetch live profile data from GitHub's GraphQL API");
+      expect(result.stderr).toContain("rate limit");
+      // Neither renderAllCards nor any file write happened for EITHER card —
+      // not even Almanac, which would otherwise have rendered successfully
+      // on its own (all-or-nothing, not partial).
+      expect(existsSync(join(dir, ".preview"))).toBe(false);
     },
     30_000,
   );
