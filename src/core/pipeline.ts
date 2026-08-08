@@ -1,7 +1,8 @@
 import type { CardEntry, ResolvedConfig } from "./config.js";
-import { zeroCapabilityProfileData } from "./fetch.js";
-import type { RenderOptions, Theme } from "./model.js";
-import { get } from "./registry.js";
+import { type FetchImpl, fetchProfileData, zeroCapabilityProfileData } from "./fetch.js";
+import type { ProfileData, RenderOptions, Theme } from "./model.js";
+import { collectCapabilities, get } from "./registry.js";
+import type { WidgetDefinition } from "./registry.js";
 import {
   HARD_SIZE_CANARY_BYTES,
   renderPair,
@@ -115,6 +116,86 @@ function describeOptionsFailure(error: unknown): string[] {
     });
   }
   return [error instanceof Error ? error.message : String(error)];
+}
+
+/**
+ * A card entry from `widgets.yml` after its `type:` has been resolved to a
+ * real registered widget and its `options:` block has been validated by that
+ * widget's own `optionsSchema` (RESEARCH.md Pattern 2: "resolve → fetch →
+ * render"). `parsedOptions` carries the FULL return value of
+ * `widget.optionsSchema.parse()` — unlike the old `renderAllCards` loop,
+ * which called `.parse()` only to validate and then discarded the result,
+ * this is the one place a genuinely real option value (e.g. Editorial Stat
+ * Card's `include_forks`) survives past validation so `fetchSharedData` can
+ * read it before the single shared fetch happens.
+ */
+export interface ResolvedCard {
+  id: string;
+  widget: WidgetDefinition<any>;
+  parsedOptions: Record<string, unknown>;
+  timezone: string;
+}
+
+/**
+ * Validate every card in `config` against its registered widget, in the
+ * order the consumer wrote them — the synchronous "resolve" half of
+ * RESEARCH.md Pattern 2. No `fs`, no `path`, no `process`, no network: this
+ * function throws before any network call could ever happen, which is what
+ * makes `fetchSharedData`'s "resolve fully, then fetch once" ordering a
+ * structural guarantee rather than a convention.
+ *
+ * This is the same lookup/validation logic `renderAllCards` used to run
+ * inline (`UnknownWidgetError`/`InvalidCardOptionsError`/id/timezone
+ * resolution) — moved here unchanged except that `parsedOptions` is now kept
+ * rather than discarded.
+ */
+export function resolveCards(config: ResolvedConfig): ResolvedCard[] {
+  return config.cards.map((entry: CardEntry): ResolvedCard => {
+    const widget = get(entry.type);
+    if (!widget) {
+      throw new UnknownWidgetError(entry.type);
+    }
+
+    const id = entry.id ?? entry.type;
+
+    // The widget owns its own option vocabulary. This is where a typo inside
+    // a card's `options:` block is caught — config.ts only checked that the
+    // block is a mapping.
+    let parsedOptions: Record<string, unknown>;
+    try {
+      parsedOptions = widget.optionsSchema.parse(entry.options ?? {}) as Record<string, unknown>;
+    } catch (error) {
+      throw new InvalidCardOptionsError(id, entry.type, describeOptionsFailure(error));
+    }
+
+    // D-09 allows `timezone` to be overridden per card.
+    const timezone = (entry.options?.timezone as string | undefined) ?? config.timezone;
+
+    return { id, widget, parsedOptions, timezone };
+  });
+}
+
+/**
+ * The ONLY place the pipeline touches the network (RESEARCH.md Pattern 2):
+ * unions every resolved card's declared capabilities, derives the single
+ * `includeForks` boolean the shared fetch needs from whichever card declared
+ * `stats` (v1 has at most one — RESEARCH.md's "Open Question 1" flags a
+ * second `stats` card as a future, not-yet-arisen conflict), and calls
+ * `fetchProfileData` exactly once (DATA-01). Every extra enabled card beyond
+ * the first `stats` consumer is already covered by the same union of
+ * capabilities — this function does not loop per card.
+ */
+export async function fetchSharedData(
+  cards: ResolvedCard[],
+  token: string,
+  login: string,
+  fetchImpl?: FetchImpl,
+): Promise<{ data: ProfileData; pointCost: number }> {
+  const capabilities = collectCapabilities(cards.map((card) => card.widget));
+  const statsCard = cards.find((card) => card.widget.requires.includes("stats"));
+  const includeForks = Boolean(statsCard?.parsedOptions.include_forks);
+
+  return fetchProfileData(capabilities, token, login, includeForks, fetchImpl);
 }
 
 /**
