@@ -12,7 +12,7 @@ export interface CardEntry {
 
 /** The fully-validated, defaults-applied shape of `widgets.yml` (D-08/09/10/11). */
 export interface ResolvedConfig {
-  theme: "editorial";
+  theme: "editorial" | "dracula" | "nord" | "tokyonight";
   language: "en" | "zh-TW";
   timezone: string;
   cards: CardEntry[];
@@ -76,14 +76,15 @@ const CardEntrySchema = z
   .strict();
 
 /**
- * `theme` currently has exactly one legal value. THEME-03/04's multi-theme
- * catalog (dracula, nord, tokyonight, ...) is Phase 2 scope — this schema
- * honestly reflects what exists today rather than pre-declaring THEME-02's
- * eventual catalog.
+ * D-06's locked four-theme catalog — `editorial`, `dracula`, `nord`,
+ * `tokyonight`, exactly. THEME-04's "deliberately capped, not an open
+ * registry" requirement is enforced by this enum literal being the ONLY
+ * place a `theme:` value is accepted: a value outside this list is rejected
+ * here, before it ever reaches `core/pipeline.ts`'s `THEME_PAIRS` lookup.
  */
 const RootConfigSchema = z
   .object({
-    theme: z.enum(["editorial"]).default("editorial"),
+    theme: z.enum(["editorial", "dracula", "nord", "tokyonight"]).default("editorial"),
     language: z.enum(["en", "zh-TW"]).default("en"),
     timezone: z.string().default("UTC"),
     cards: z.array(CardEntrySchema).default([{ type: "almanac" }]),

@@ -185,6 +185,31 @@ describe("Plan 04 Task 2: parseConfig — D-12 error reporting", () => {
   });
 });
 
+describe("Plan 04 Task 2: theme enum — D-06/D-07/THEME-04 (four-theme catalog)", () => {
+  it.each(["dracula", "nord", "tokyonight"] as const)(
+    "accepts theme: %s",
+    (themeName) => {
+      const result = parseConfig(`theme: ${themeName}\n`);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.config.theme).toBe(themeName);
+    },
+  );
+
+  it("rejects a typo'd theme value ('draluca') with a did-you-mean suggestion of 'dracula' and exactly 4 accepted values (THEME-04: capped, not open)", () => {
+    const result = parseConfig("theme: draluca\n");
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const error = result.errors.find((e) => e.acceptedValues !== undefined);
+    expect(error).toBeDefined();
+    expect(error!.acceptedValues).toEqual(
+      expect.arrayContaining(["editorial", "dracula", "nord", "tokyonight"]),
+    );
+    expect(error!.acceptedValues).toHaveLength(4);
+    expect(error!.didYouMean).toBe("dracula");
+  });
+});
+
 describe("Plan 04 Task 2: loadConfigOrDefault — D-11", () => {
   it("returns the built-in default config and a complete, copy-pasteable equivalent YAML when the file is absent (yamlText === undefined)", () => {
     const { config, usedDefault, equivalentYaml } = loadConfigOrDefault(undefined);

@@ -226,6 +226,30 @@ describe("fetchSharedData", () => {
 const GLOBAL_RENDER_OPTS = { now: NOW, seed: 0, language: "en" as const };
 const EDITORIAL_THEMES = resolveTheme("editorial");
 
+describe("Plan 04 Task 2: resolveTheme — D-06/D-07/THEME-04 (four-theme catalog)", () => {
+  it.each(["dracula", "nord", "tokyonight"] as const)(
+    "%s: resolves to a light/dark pair whose light and dark are the SAME object reference (D-07)",
+    (themeName) => {
+      const themes = resolveTheme(themeName);
+      expect(themes.light).toBe(themes.dark);
+    },
+  );
+
+  it("editorial: light and dark remain two DIFFERENT object references (existing behavior unchanged)", () => {
+    const themes = resolveTheme("editorial");
+    expect(themes.light).not.toBe(themes.dark);
+  });
+
+  it("resolves all four D-06 catalog names without throwing", () => {
+    for (const themeName of ["editorial", "dracula", "nord", "tokyonight"] as const) {
+      expect(() => resolveTheme(themeName)).not.toThrow();
+      const themes = resolveTheme(themeName);
+      expect(themes.light).toBeDefined();
+      expect(themes.dark).toBeDefined();
+    }
+  });
+});
+
 describe("renderAllCards", () => {
   it("renders one light/dark pair per resolved card, in given order (UnknownWidgetError/InvalidCardOptionsError/D-08 rejection now belong to resolveCards — see its own describe block above)", () => {
     const cards = resolveCards(

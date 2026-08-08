@@ -9,7 +9,7 @@ import {
   SOFT_SIZE_BUDGET_BYTES,
   sizeGuard,
 } from "./svg.js";
-import { editorialDark, editorialLight } from "./theme.js";
+import { draculaTheme, editorialDark, editorialLight, nordTheme, tokyonightTheme } from "./theme.js";
 
 /** One card's finished light/dark pair, keyed by its D-10 `id`. */
 export interface RenderedCard {
@@ -72,11 +72,26 @@ export class InvalidCardOptionsError extends Error {
 /**
  * `theme:` value -> the light/dark pair it resolves to.
  *
- * A map rather than an if/else so THEME-03/04's eventual catalog is a data
- * change here, not a control-flow change.
+ * A map rather than an if/else so THEME-01/03/04's catalog is a data change
+ * here, not a control-flow change. D-06 locks the catalog at exactly these
+ * four entries; `ResolvedConfig["theme"]`'s own union type (`config.ts`'s
+ * `z.enum`) is what makes "exactly four, not five" a structural guarantee —
+ * this `Record` cannot even compile with a key `config.ts`'s enum doesn't
+ * also accept.
+ *
+ * D-07: `dracula`/`nord`/`tokyonight` are single-mode ecosystem themes with
+ * no light counterpart the ecosystem recognizes as "real" — each one's
+ * `light` and `dark` fields deliberately point at the SAME `Theme` object
+ * reference (not two separately-constructed objects that merely happen to
+ * hold equal values). `renderPair` calls `renderBody` once per field; two
+ * calls against the same object reference are byte-for-byte identical by
+ * construction, with no extra comparison step required.
  */
 const THEME_PAIRS: Record<ResolvedConfig["theme"], { light: Theme; dark: Theme }> = {
   editorial: { light: editorialLight, dark: editorialDark },
+  dracula: { light: draculaTheme, dark: draculaTheme },
+  nord: { light: nordTheme, dark: nordTheme },
+  tokyonight: { light: tokyonightTheme, dark: tokyonightTheme },
 };
 
 /**
@@ -84,8 +99,7 @@ const THEME_PAIRS: Record<ResolvedConfig["theme"], { light: Theme; dark: Theme }
  * `renderAllCards` needs. Exists so callers (`action-entry.ts`/`cli.ts`)
  * don't need to import `THEME_PAIRS` themselves or know its internal
  * structure — they pass a plain `config.theme` string in and get a themes
- * object back. Still only one entry (`editorial`) this phase — THEME-01/03/04's
- * dracula/nord/tokyonight catalog expansion is a later wave's work.
+ * object back. Covers all four of D-06's catalog entries.
  */
 export function resolveTheme(theme: ResolvedConfig["theme"]): { light: Theme; dark: Theme } {
   return THEME_PAIRS[theme];
