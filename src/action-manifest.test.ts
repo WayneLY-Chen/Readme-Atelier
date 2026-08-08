@@ -71,3 +71,29 @@ describe("action.yml", () => {
     expect(manifest.inputs["config-path"]?.default).toBe("widgets.yml");
   });
 });
+
+/**
+ * Plan 02-03 Task 3: source-level proof that `action-entry.ts` really wires
+ * the new three-stage pipeline (resolveCards -> fetchSharedData ->
+ * renderAllCards), the new Editorial Stat Card widget, the dual-surface
+ * point-cost logger, and the token-safe fetch-failure formatter — not just
+ * `cli.ts`. Same "read the source, grep for the identifier" style this file
+ * already uses above for `action.yml`'s own drift guards.
+ */
+describe("action-entry.ts — Plan 02-03 pipeline wiring (DATA-01/02/07)", () => {
+  const entrySource = readFileSync(path.join(repoRoot, "src", "action-entry.ts"), "utf8");
+
+  it("registers the Editorial Stat Card widget", () => {
+    expect(entrySource).toContain("register(editorialStatCardWidget)");
+  });
+
+  it("calls resolveCards(), fetchSharedData(), and logPointCost() — not the old single-call renderAllCards(config, ...) shape", () => {
+    expect(entrySource).toContain("resolveCards(");
+    expect(entrySource).toContain("fetchSharedData(");
+    expect(entrySource).toContain("logPointCost(");
+  });
+
+  it("formats fetch failures via formatFetchFailureMessage() rather than serializing the raw error", () => {
+    expect(entrySource).toContain("formatFetchFailureMessage(");
+  });
+});

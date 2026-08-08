@@ -37,6 +37,63 @@ writeFileSync(
 );
 const NO_NETWORK_NODE_OPTIONS = `--import=${pathToFileURL(NO_NETWORK_PRELOAD).href}`;
 
+/**
+ * A `NODE_OPTIONS=--import=...` preload that stubs `globalThis.fetch` with a
+ * literal, GitHub-shaped success response instead of throwing (Plan 02-03
+ * Task 3) — the opposite of `NO_NETWORK_PRELOAD` above. Every call is
+ * recorded (count + the sent GraphQL `query`/`variables`) to the file named
+ * by `READU_STUB_FETCH_LOG` (set per-test, not at preload-write time, so
+ * each test gets its own isolated log without needing a separate preload
+ * file per test). The response echoes `variables.login` back as `user.login`
+ * so a test can assert the real `GITHUB_LOGIN` env var value flowed all the
+ * way through `cli.ts` -> `fetchSharedData` -> `fetchProfileData` -> the
+ * actual GraphQL variables sent over the wire.
+ */
+const STUB_FETCH_PRELOAD = join(tmpdir(), "readme-atelier-cli-test-stub-fetch.mjs");
+writeFileSync(
+  STUB_FETCH_PRELOAD,
+  [
+    'import { appendFileSync } from "node:fs";',
+    "globalThis.fetch = async (_url, init) => {",
+    "  const logPath = process.env.READU_STUB_FETCH_LOG;",
+    "  const bodyText = (init && init.body) || \"{}\";",
+    "  if (logPath) {",
+    "    appendFileSync(logPath, bodyText + \"\\n\");",
+    "  }",
+    "  let parsed = {};",
+    "  try { parsed = JSON.parse(String(bodyText)); } catch {}",
+    "  const login = (parsed && parsed.variables && parsed.variables.login) || \"\";",
+    "  const responseBody = {",
+    "    data: {",
+    "      user: {",
+    "        login,",
+    "        name: null,",
+    "        avatarUrl: \"\",",
+    "        followers: { totalCount: 9 },",
+    "        contributionsCollection: {",
+    "          restrictedContributionsCount: 0,",
+    "          commitContributionsByRepository: [",
+    "            { contributions: { totalCount: 3 }, repository: { isFork: false } },",
+    "          ],",
+    "          issueContributionsByRepository: [],",
+    "          pullRequestContributionsByRepository: [],",
+    "        },",
+    "        repositories: { nodes: [{ stargazerCount: 7 }] },",
+    "      },",
+    "      rateLimit: { cost: 5, limit: 5000, remaining: 4995 },",
+    "    },",
+    "  };",
+    "  return new Response(JSON.stringify(responseBody), {",
+    "    status: 200,",
+    "    headers: { \"content-type\": \"application/json\" },",
+    "  });",
+    "};",
+    "",
+  ].join("\n"),
+  "utf8",
+);
+const STUB_FETCH_NODE_OPTIONS = `--import=${pathToFileURL(STUB_FETCH_PRELOAD).href}`;
+
 interface CliResult {
   status: number | null;
   stdout: string;
@@ -65,6 +122,34 @@ function runCli(args: string[], cwd: string): CliResult {
     cwd,
     encoding: "utf8",
     env: { ...process.env, NODE_OPTIONS: NO_NETWORK_NODE_OPTIONS },
+  });
+  return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+/**
+ * Same real-subprocess mechanism as `runCli`, generalized for Plan 02-03
+ * Task 3's tests: a caller-chosen `NODE_OPTIONS` preload (the stub-fetch one
+ * above, or the pre-existing `NO_NETWORK_PRELOAD`) and explicit env
+ * overrides — `unset` names are deleted from the inherited `process.env`
+ * entirely (not set to `undefined`, which `spawnSync`'s `env` option cannot
+ * represent) so a test can assert the "credentials genuinely absent" case
+ * even if the outer test-runner's own environment happens to define them.
+ */
+function runCliWithEnv(
+  args: string[],
+  cwd: string,
+  nodeOptions: string,
+  env: Record<string, string> = {},
+  unset: string[] = [],
+): CliResult {
+  const childEnv: NodeJS.ProcessEnv = { ...process.env, ...env, NODE_OPTIONS: nodeOptions };
+  for (const key of unset) {
+    delete childEnv[key];
+  }
+  const result = spawnSync(process.execPath, ["--import", TSX_ESM_LOADER, CLI_PATH, ...args], {
+    cwd,
+    encoding: "utf8",
+    env: childEnv,
   });
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
@@ -150,6 +235,93 @@ describe("Plan 04 Task 3: cli.ts — real widgets.yml wiring (UX-04)", () => {
       expect(result.stderr).toContain("zero cards");
       // No card output exists (nothing to render).
       expect(existsSync(join(dir, ".preview/almanac-light.svg"))).toBe(false);
+    },
+    30_000,
+  );
+});
+
+describe("Plan 02-03 Task 3: cli.ts real end-to-end wiring (resolveCards -> fetchSharedData -> renderAllCards)", () => {
+  it(
+    "a widgets.yml enabling almanac + editorial-stat-card, with GITHUB_TOKEN/GITHUB_LOGIN set: fetches exactly once, sends user(login) with the real login, and writes all four .preview/* files",
+    () => {
+      const dir = makeTmpDir();
+      writeFileSync(
+        join(dir, "widgets.yml"),
+        "cards:\n  - type: almanac\n  - type: editorial-stat-card\n",
+        "utf8",
+      );
+      const logPath = join(dir, "fetch-calls.log");
+
+      const result = runCliWithEnv(["widgets.yml"], dir, STUB_FETCH_NODE_OPTIONS, {
+        GITHUB_TOKEN: "fake-pat-value",
+        GITHUB_LOGIN: "octocat",
+        READU_STUB_FETCH_LOG: logPath,
+      });
+
+      expect(result.status).toBe(0);
+
+      expect(existsSync(join(dir, ".preview/almanac-light.svg"))).toBe(true);
+      expect(existsSync(join(dir, ".preview/almanac-dark.svg"))).toBe(true);
+      expect(existsSync(join(dir, ".preview/editorial-stat-card-light.svg"))).toBe(true);
+      expect(existsSync(join(dir, ".preview/editorial-stat-card-dark.svg"))).toBe(true);
+      expect(readFileSync(join(dir, ".preview/editorial-stat-card-light.svg"), "utf8")).toContain(
+        "<path",
+      );
+
+      const logLines = readFileSync(logPath, "utf8").trim().split("\n").filter(Boolean);
+      // DATA-01's core guarantee, proven through a real subprocess and a real
+      // network-layer interception — not just by reading the pipeline's own
+      // source structure.
+      expect(logLines).toHaveLength(1);
+
+      const sentBody = JSON.parse(logLines[0] as string) as { query: string; variables: { login: string } };
+      expect(sentBody.query).toContain("user(login");
+      expect(sentBody.query).not.toContain("viewer");
+      expect(sentBody.variables.login).toBe("octocat");
+    },
+    30_000,
+  );
+
+  it(
+    "the same widgets.yml WITHOUT GITHUB_TOKEN/GITHUB_LOGIN: exits non-zero, names the missing env vars, and writes no .preview/* files",
+    () => {
+      const dir = makeTmpDir();
+      writeFileSync(
+        join(dir, "widgets.yml"),
+        "cards:\n  - type: almanac\n  - type: editorial-stat-card\n",
+        "utf8",
+      );
+
+      // NO_NETWORK_PRELOAD, not the stub: if the missing-credentials check
+      // were ever accidentally skipped, this would fail loudly (a thrown
+      // fetch) instead of silently succeeding against the stub.
+      const result = runCliWithEnv(["widgets.yml"], dir, NO_NETWORK_NODE_OPTIONS, {}, [
+        "GITHUB_TOKEN",
+        "GITHUB_LOGIN",
+      ]);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("GITHUB_TOKEN");
+      expect(result.stderr).toContain("GITHUB_LOGIN");
+      expect(existsSync(join(dir, ".preview"))).toBe(false);
+    },
+    30_000,
+  );
+
+  it(
+    "an almanac-only (zero-capability) widgets.yml still needs no GITHUB_TOKEN/GITHUB_LOGIN and never touches the network (DATA-03 regression, unaffected by the new pipeline shape)",
+    () => {
+      const dir = makeTmpDir();
+      writeFileSync(join(dir, "widgets.yml"), "cards:\n  - type: almanac\n", "utf8");
+
+      const result = runCliWithEnv(["widgets.yml"], dir, NO_NETWORK_NODE_OPTIONS, {}, [
+        "GITHUB_TOKEN",
+        "GITHUB_LOGIN",
+      ]);
+
+      expect(result.status).toBe(0);
+      expect(existsSync(join(dir, ".preview/almanac-light.svg"))).toBe(true);
+      expect(existsSync(join(dir, ".preview/almanac-dark.svg"))).toBe(true);
     },
     30_000,
   );
