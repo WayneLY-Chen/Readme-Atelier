@@ -401,6 +401,33 @@ export const almanacWidget: WidgetDefinition<RenderOptions> = {
       `almanac 忌 line (${language})`,
     );
 
+    // Page-number footer (MAST-03, UI-SPEC "Page Numbering Display
+    // Contract"): only rendered when a masthead-type widget is present in
+    // the enabled set (opts.pageNumber/opts.totalPages both populated by
+    // core/pipeline.ts). Shares the 忌 line's own baseline (y=215) — never a
+    // new row, never additional card height. When either field is
+    // undefined, this entire block is skipped — no string is appended, not
+    // even an empty one — so a masthead-less render stays byte-for-byte
+    // identical to the pre-MAST-03 output.
+    if (opts.pageNumber !== undefined && opts.totalPages !== undefined) {
+      const pageText =
+        language === "zh-TW"
+          ? `頁 ${opts.pageNumber} / ${opts.totalPages}`
+          : `PAGE ${opts.pageNumber}/${opts.totalPages}`;
+      if (language === "zh-TW") {
+        const pageWidth = measureAdvanceWidth("noto-tc", pageText, T1_SIZE);
+        markup += zhLabel(pageText, CARD_WIDTH - PADDING - pageWidth, 215, theme.muted);
+      } else {
+        const pageWidth = letterSpacedWidth(
+          "mono-semibold",
+          pageText.toUpperCase(),
+          T1_SIZE,
+          T1_LETTER_SPACING,
+        );
+        markup += eyebrowLabel(pageText, CARD_WIDTH - PADDING - pageWidth, 215, theme.muted);
+      }
+    }
+
     return markup;
   },
 };

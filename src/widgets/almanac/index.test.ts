@@ -48,3 +48,64 @@ describe("Plan 02 Task 3: Almanac bilingual renderBody (UI-SPEC 'Header row', 'T
     expect(desc.length).toBeGreaterThan(0);
   });
 });
+
+describe("Plan 03-03 Task 1: page-number footer retrofit (MAST-03, UI-SPEC 'Page Numbering Display Contract')", () => {
+  it("opts.pageNumber/totalPages undefined: output is byte-identical to the pre-retrofit baseline (explicit undefined)", () => {
+    const baseline = almanacWidget.renderBody(stubProfileData, editorialLight, optsFor("en"));
+    const explicit = almanacWidget.renderBody(stubProfileData, editorialLight, {
+      ...optsFor("en"),
+      pageNumber: undefined,
+      totalPages: undefined,
+    });
+    expect(explicit).toBe(baseline);
+
+    const baselineZh = almanacWidget.renderBody(stubProfileData, editorialLight, optsFor("zh-TW"));
+    const explicitZh = almanacWidget.renderBody(stubProfileData, editorialLight, {
+      ...optsFor("zh-TW"),
+      pageNumber: undefined,
+      totalPages: undefined,
+    });
+    expect(explicitZh).toBe(baselineZh);
+  });
+
+  it("pageNumber/totalPages both set (en): renders an additional right-aligned muted path, one more <path> than the undefined case", () => {
+    const withoutPage = almanacWidget.renderBody(stubProfileData, editorialLight, optsFor("en"));
+    const withPage = almanacWidget.renderBody(stubProfileData, editorialLight, {
+      ...optsFor("en"),
+      pageNumber: 1,
+      totalPages: 3,
+    });
+    const countPaths = (svg: string): number => (svg.match(/<path /g) ?? []).length;
+    expect(withPage.length).toBeGreaterThan(withoutPage.length);
+    expect(countPaths(withPage)).toBeGreaterThan(countPaths(withoutPage));
+    expect(withPage).toContain(`fill="${editorialLight.muted}"`);
+  });
+
+  it("pageNumber/totalPages both set (zh-TW): renders an additional path and does not throw GlyphCoverageError", () => {
+    const withoutPage = almanacWidget.renderBody(stubProfileData, editorialLight, optsFor("zh-TW"));
+    let withPage = "";
+    expect(() => {
+      withPage = almanacWidget.renderBody(stubProfileData, editorialLight, {
+        ...optsFor("zh-TW"),
+        pageNumber: 1,
+        totalPages: 3,
+      });
+    }).not.toThrow();
+    const countPaths = (svg: string): number => (svg.match(/<path /g) ?? []).length;
+    expect(withPage.length).toBeGreaterThan(withoutPage.length);
+    expect(countPaths(withPage)).toBeGreaterThan(countPaths(withoutPage));
+  });
+
+  it("pageNumber set but totalPages undefined (inconsistent opts, bypassing the pipeline invariant): footer renders nothing, no throw", () => {
+    const withoutPage = almanacWidget.renderBody(stubProfileData, editorialLight, optsFor("en"));
+    let withInconsistentOpts = "";
+    expect(() => {
+      withInconsistentOpts = almanacWidget.renderBody(stubProfileData, editorialLight, {
+        ...optsFor("en"),
+        pageNumber: 1,
+        totalPages: undefined,
+      });
+    }).not.toThrow();
+    expect(withInconsistentOpts).toBe(withoutPage);
+  });
+});
