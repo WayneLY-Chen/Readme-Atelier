@@ -233,6 +233,75 @@ describe("editorialStatCardWidget.citableFacts (MAST-02/D-07)", () => {
   });
 });
 
+describe("Plan 03-03 Task 2: page-number footer retrofit (MAST-03, UI-SPEC 'Page Numbering Display Contract')", () => {
+  it("opts.pageNumber/totalPages undefined: output is byte-identical to the pre-retrofit baseline (explicit undefined)", () => {
+    const baseline = editorialStatCardWidget.renderBody(nonZeroProfileData(), editorialLight, optsFor("en"));
+    const explicit = editorialStatCardWidget.renderBody(nonZeroProfileData(), editorialLight, {
+      ...optsFor("en"),
+      pageNumber: undefined,
+      totalPages: undefined,
+    });
+    expect(explicit).toBe(baseline);
+
+    const baselineZh = editorialStatCardWidget.renderBody(
+      nonZeroProfileData(),
+      editorialLight,
+      optsFor("zh-TW"),
+    );
+    const explicitZh = editorialStatCardWidget.renderBody(nonZeroProfileData(), editorialLight, {
+      ...optsFor("zh-TW"),
+      pageNumber: undefined,
+      totalPages: undefined,
+    });
+    expect(explicitZh).toBe(baselineZh);
+  });
+
+  it("pageNumber/totalPages both set (en): renders an additional right-aligned muted path, one more <path> than the undefined case", () => {
+    const withoutPage = editorialStatCardWidget.renderBody(nonZeroProfileData(), editorialLight, optsFor("en"));
+    const withPage = editorialStatCardWidget.renderBody(nonZeroProfileData(), editorialLight, {
+      ...optsFor("en"),
+      pageNumber: 1,
+      totalPages: 3,
+    });
+    const countPaths = (svg: string): number => (svg.match(/<path /g) ?? []).length;
+    expect(withPage.length).toBeGreaterThan(withoutPage.length);
+    expect(countPaths(withPage)).toBeGreaterThan(countPaths(withoutPage));
+    expect(withPage).toContain(`fill="${editorialLight.muted}"`);
+  });
+
+  it("pageNumber/totalPages both set (zh-TW): renders an additional path and does not throw GlyphCoverageError", () => {
+    const withoutPage = editorialStatCardWidget.renderBody(
+      nonZeroProfileData(),
+      editorialLight,
+      optsFor("zh-TW"),
+    );
+    let withPage = "";
+    expect(() => {
+      withPage = editorialStatCardWidget.renderBody(nonZeroProfileData(), editorialLight, {
+        ...optsFor("zh-TW"),
+        pageNumber: 1,
+        totalPages: 3,
+      });
+    }).not.toThrow();
+    const countPaths = (svg: string): number => (svg.match(/<path /g) ?? []).length;
+    expect(withPage.length).toBeGreaterThan(withoutPage.length);
+    expect(countPaths(withPage)).toBeGreaterThan(countPaths(withoutPage));
+  });
+
+  it("pageNumber set but totalPages undefined (inconsistent opts, bypassing the pipeline invariant): footer renders nothing, no throw", () => {
+    const withoutPage = editorialStatCardWidget.renderBody(nonZeroProfileData(), editorialLight, optsFor("en"));
+    let withInconsistentOpts = "";
+    expect(() => {
+      withInconsistentOpts = editorialStatCardWidget.renderBody(nonZeroProfileData(), editorialLight, {
+        ...optsFor("en"),
+        pageNumber: 1,
+        totalPages: undefined,
+      });
+    }).not.toThrow();
+    expect(withInconsistentOpts).toBe(withoutPage);
+  });
+});
+
 describe("Static label width budget — 10 fixed strings, 138px column budget", () => {
   it("every en column label fits within COLUMN_BUDGET_PX", () => {
     for (const [key, label] of Object.entries(labelsEn)) {

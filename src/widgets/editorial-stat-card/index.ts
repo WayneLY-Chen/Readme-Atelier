@@ -374,6 +374,39 @@ export const editorialStatCardWidget: WidgetDefinition<RenderOptions> = {
     markup += `<line x1="${DIVIDER_2_X}" y1="${ROW1_TOP}" x2="${DIVIDER_2_X}" y2="${ROW1_BOTTOM}" stroke="${theme.accent}" stroke-width="1"/>`;
     markup += `<line x1="${DIVIDER_3_X}" y1="${ROW2_TOP}" x2="${DIVIDER_3_X}" y2="${ROW2_BOTTOM}" stroke="${theme.accent}" stroke-width="1"/>`;
 
+    // Page-number footer (MAST-03, UI-SPEC "Page Numbering Display
+    // Contract"): only rendered when a masthead-type widget is present in
+    // the enabled set (opts.pageNumber/opts.totalPages both populated by
+    // core/pipeline.ts). Shares the existing ROW2_LABEL_BASELINE_Y baseline
+    // (reused verbatim, never a second hardcoded y value) — never a new row,
+    // never additional card height. When either field is undefined, this
+    // entire block is skipped — no string is appended, not even an empty
+    // one — so a masthead-less render stays byte-for-byte identical to the
+    // pre-MAST-03 output.
+    if (opts.pageNumber !== undefined && opts.totalPages !== undefined) {
+      const pageText =
+        language === "zh-TW"
+          ? `頁 ${opts.pageNumber} / ${opts.totalPages}`
+          : `PAGE ${opts.pageNumber}/${opts.totalPages}`;
+      if (language === "zh-TW") {
+        const pageWidth = zhLabelWidth(pageText);
+        markup += zhLabel(
+          pageText,
+          CARD_WIDTH - PADDING - pageWidth,
+          ROW2_LABEL_BASELINE_Y,
+          theme.muted,
+        );
+      } else {
+        const pageWidth = eyebrowLabelWidth(pageText);
+        markup += eyebrowLabel(
+          pageText,
+          CARD_WIDTH - PADDING - pageWidth,
+          ROW2_LABEL_BASELINE_Y,
+          theme.muted,
+        );
+      }
+    }
+
     return markup;
   },
 
