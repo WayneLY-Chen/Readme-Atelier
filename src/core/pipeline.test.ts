@@ -9,6 +9,7 @@ import {
   ConflictingStatsOptionsError,
   fetchSharedData,
   InvalidCardOptionsError,
+  PageNumberInvariantError,
   renderAllCards,
   resolveCards,
   resolveTheme,
@@ -402,5 +403,174 @@ describe("renderAllCards", () => {
     expect(capturedOpts?.language).toBe("en");
     expect(capturedOpts?.timezone).toBe("UTC");
     expect(capturedOpts?.include_forks).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3 Plan 01 Task 1: MAST-01/02/03 — cross-card citation + page
+// numbering, and the "identity" capability's fetch-path change.
+// ---------------------------------------------------------------------------
+
+function registerOnce(widget: WidgetDefinition<any>): void {
+  if (!get(widget.name)) {
+    register(widget);
+  }
+}
+
+// The pipeline's `hasMasthead` check is a literal `widget.name === "masthead"`
+// (matching the real production widget) — the registry only allows one
+// object under that name per module instance, so these fixtures are
+// singletons with mutable capture/fact state that each test resets, rather
+// than a fresh per-test registration (which would throw DuplicateWidgetError
+// on the second test).
+let mastheadCapture: (opts: Record<string, unknown>) => void = () => {};
+let contentACapture: (opts: Record<string, unknown>) => void = () => {};
+let contentBCapture: (opts: Record<string, unknown>) => void = () => {};
+let contentAFacts: Record<string, { label: string; value: string }> = {};
+
+function ensureMastheadFixtures(): void {
+  registerOnce({
+    name: "masthead",
+    requires: ["identity"],
+    size: { width: 10, height: 10 },
+    optionsSchema: { parse: () => ({ now: new Date(0), seed: 0, language: "en", timezone: "UTC" }) },
+    describe: () => ({ title: "masthead", desc: "masthead desc" }),
+    renderBody: (_data, _theme, opts) => {
+      mastheadCapture(opts as unknown as Record<string, unknown>);
+      return "";
+    },
+  });
+  registerOnce({
+    name: "t3-content-a",
+    requires: [],
+    size: { width: 10, height: 10 },
+    optionsSchema: { parse: () => ({ now: new Date(0), seed: 0, language: "en", timezone: "UTC" }) },
+    describe: () => ({ title: "Content A", desc: "d" }),
+    renderBody: (_data, _theme, opts) => {
+      contentACapture(opts as unknown as Record<string, unknown>);
+      return "";
+    },
+    citableFacts: () => contentAFacts,
+  });
+  registerOnce({
+    name: "t3-content-b",
+    requires: [],
+    size: { width: 10, height: 10 },
+    optionsSchema: { parse: () => ({ now: new Date(0), seed: 0, language: "en", timezone: "UTC" }) },
+    describe: () => ({ title: "Content B", desc: "d" }),
+    renderBody: (_data, _theme, opts) => {
+      contentBCapture(opts as unknown as Record<string, unknown>);
+      return "";
+    },
+  });
+}
+
+describe("renderAllCards — masthead citation & page numbering (MAST-01/02/03)", () => {
+  it("masthead present, one content card exposes totalCommits: contents/pageNumber/totalPages/citedFacts all correct, masthead excluded from its own contents/numbering", () => {
+    ensureMastheadFixtures();
+    let mastheadOpts: Record<string, unknown> = {};
+    let aOpts: Record<string, unknown> = {};
+    let bOpts: Record<string, unknown> = {};
+    mastheadCapture = (o) => (mastheadOpts = o);
+    contentACapture = (o) => (aOpts = o);
+    contentBCapture = (o) => (bOpts = o);
+    contentAFacts = { totalCommits: { label: "X", value: "9" } };
+
+    const cards = resolveCards(
+      config({ cards: [{ type: "t3-content-a" }, { type: "masthead" }, { type: "t3-content-b" }] }),
+    );
+
+    renderAllCards(cards, zeroCapabilityProfileData(), GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
+
+    expect((mastheadOpts.contents as unknown[]).length).toBe(2);
+    expect(mastheadOpts.contents).toEqual([
+      { id: "t3-content-a", title: "Content A", pageNumber: 1 },
+      { id: "t3-content-b", title: "Content B", pageNumber: 2 },
+    ]);
+    expect(mastheadOpts.citedFacts).toEqual({ totalCommits: { label: "X", value: "9" } });
+    // Masthead itself never receives a page number/totalPages — it's front
+    // matter, not a numbered page (Q2, locked by UI-SPEC's Page Numbering
+    // Display Contract: "the masthead itself never receives a page number").
+    expect(mastheadOpts.pageNumber).toBeUndefined();
+    expect(mastheadOpts.totalPages).toBeUndefined();
+
+    expect(aOpts.pageNumber).toBe(1);
+    expect(aOpts.totalPages).toBe(2);
+    expect(bOpts.pageNumber).toBe(2);
+    expect(bOpts.totalPages).toBe(2);
+  });
+
+  it("masthead present but no content card exposes citableFacts: citedFacts.totalCommits is undefined, not 0/empty", () => {
+    ensureMastheadFixtures();
+    let mastheadOpts: Record<string, unknown> = {};
+    mastheadCapture = (o) => (mastheadOpts = o);
+    contentACapture = () => {};
+    contentBCapture = () => {};
+    contentAFacts = {};
+
+    const cards = resolveCards(
+      config({ cards: [{ type: "t3-content-a" }, { type: "masthead" }, { type: "t3-content-b" }] }),
+    );
+
+    renderAllCards(cards, zeroCapabilityProfileData(), GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
+
+    expect((mastheadOpts.citedFacts as { totalCommits?: unknown }).totalCommits).toBeUndefined();
+  });
+
+  it("no masthead in the enabled set: every card's pageNumber/totalPages stay undefined (regression, existing almanac x2 set)", () => {
+    ensureMastheadFixtures();
+    let capturedA: Record<string, unknown> | undefined;
+    contentACapture = (o) => (capturedA = o);
+    contentBCapture = () => {};
+    contentAFacts = {};
+
+    // A card set with NO masthead present at all, mixing the fake fixture
+    // with a real almanac card.
+    const mixedCards = resolveCards(config({ cards: [{ type: "almanac" }, { type: "t3-content-a" }] }));
+    renderAllCards(mixedCards, zeroCapabilityProfileData(), GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
+    expect(capturedA?.pageNumber).toBeUndefined();
+    expect(capturedA?.totalPages).toBeUndefined();
+
+    // Existing byte-output regression: the almanac-only path still renders
+    // unchanged (no pipeline behavior change when no masthead is enabled).
+    const cards = resolveCards(
+      config({ cards: [{ type: "almanac" }, { type: "almanac", id: "almanac-utc" }] }),
+    );
+    const rendered = renderAllCards(cards, zeroCapabilityProfileData(), GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
+    expect(rendered).toHaveLength(2);
+  });
+
+  it("PageNumberInvariantError is exported and constructs a message naming the card id and both field values", () => {
+    const error = new PageNumberInvariantError("some-card", 1, undefined);
+    expect(error.name).toBe("PageNumberInvariantError");
+    expect(error.message).toContain("some-card");
+    expect(error.message).toContain("1");
+    expect(error.message).toContain("undefined");
+  });
+});
+
+describe("resolveCards + fetchSharedData — the 'identity' DataCapability (MAST-01)", () => {
+  it("a masthead-only card set has a non-empty collectCapabilities() and calls fetchImpl exactly once (not the zero-capability fast path)", async () => {
+    ensureMastheadFixtures();
+    mastheadCapture = () => {};
+    const { fetchImpl, calls } = recordingFetch();
+    const cards = resolveCards(config({ cards: [{ type: "masthead" }] }));
+
+    const capabilities = new Set(cards.flatMap((c) => c.widget.requires));
+    expect(capabilities.size).toBeGreaterThan(0);
+
+    await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("an almanac-only card set is unaffected (DATA-03's zero-capability guarantee still holds)", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const cards = resolveCards(config());
+
+    const capabilities = new Set(cards.flatMap((c) => c.widget.requires));
+    expect(capabilities.size).toBe(0);
+
+    await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    expect(calls).toHaveLength(0);
   });
 });

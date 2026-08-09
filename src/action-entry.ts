@@ -13,6 +13,7 @@ import { logPointCost } from "./node/point-cost.js";
 import { writeStepSummary } from "./node/step-summary.js";
 import { almanacWidget } from "./widgets/almanac/index.js";
 import { editorialStatCardWidget } from "./widgets/editorial-stat-card/index.js";
+import { mastheadWidget } from "./widgets/masthead/index.js";
 
 /**
  * The GitHub Action's real entry point (`action.yml`'s `main: dist/index.js`,
@@ -44,6 +45,7 @@ async function run(): Promise<void> {
   loadAllFonts(actionRepoRoot);
   register(almanacWidget);
   register(editorialStatCardWidget);
+  register(mastheadWidget);
 
   // GitHub Actions guarantees GITHUB_REPOSITORY correctly names the repo the
   // current workflow run belongs to (RESEARCH.md's Security Domain

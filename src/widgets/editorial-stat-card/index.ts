@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { assertCoverage, measureAdvanceWidth, textToPathData } from "../../core/font.js";
 import type { ProfileData, RenderOptions, Theme } from "../../core/model.js";
-import type { WidgetDefinition } from "../../core/registry.js";
+import type { CitableFact, WidgetDefinition } from "../../core/registry.js";
 import { chromeEn, chromeZh, labelsEn, labelsZh, type StatLabels } from "./copy.js";
 import { assertColumnBudget, formatStatNumber, SUFFIX_SIZE_RATIO } from "./format.js";
 
@@ -375,5 +375,21 @@ export const editorialStatCardWidget: WidgetDefinition<RenderOptions> = {
     markup += `<line x1="${DIVIDER_3_X}" y1="${ROW2_TOP}" x2="${DIVIDER_3_X}" y2="${ROW2_BOTTOM}" stroke="${theme.accent}" stroke-width="1"/>`;
 
     return markup;
+  },
+
+  /**
+   * MAST-02/D-07: v1's one cross-card citation. Reuses `formatStatNumber`
+   * verbatim (same function `renderNumeral` above calls for this card's own
+   * numeral) so the masthead can never disagree with what this card's own
+   * face displays for the same figure — RESEARCH.md Pitfall 1.
+   */
+  citableFacts(data: ProfileData, opts: RenderOptions): Record<string, CitableFact> {
+    const language = opts.language;
+    return {
+      totalCommits: {
+        label: language === "zh-TW" ? "提交" : "COMMITS",
+        value: formatStatNumber(data.stats.totalCommits, language),
+      },
+    };
   },
 };

@@ -131,7 +131,18 @@ interface StatsQueryResult {
     name: string | null;
     avatarUrl: string;
     followers: { totalCount: number };
-    contributionsCollection: {
+    /**
+     * Optional (Phase 3, "identity" capability fix — Rule 1/3 deviation
+     * recorded in SUMMARY.md): `buildQuery` only ever emits this selection
+     * when `capabilities.has("stats")`. Before this phase, every real widget
+     * that pushed `capabilities.size` above 0 also required "stats", so this
+     * field was in practice always present whenever the zero-capability
+     * fast path was skipped. The masthead's `requires: ["identity"]` is the
+     * first widget to break that coincidence — a masthead-only render still
+     * has `capabilities.size > 0` (skipping the zero-fetch path) but never
+     * requests this fragment, so it is genuinely absent in the real response.
+     */
+    contributionsCollection?: {
       /** Only present in the includeForks: true (cheap-path) query shape. */
       totalCommitContributions?: number;
       totalIssueContributions?: number;
@@ -143,7 +154,8 @@ interface StatsQueryResult {
       issueContributionsByRepository?: StatsRepoContribution[];
       pullRequestContributionsByRepository?: StatsRepoContribution[];
     };
-    repositories: { nodes: { stargazerCount: number }[] };
+    /** Same "stats"-gated optionality as contributionsCollection above. */
+    repositories?: { nodes: { stargazerCount: number }[] };
   };
   rateLimit: { cost: number; limit: number; remaining: number };
 }
@@ -187,21 +199,32 @@ export async function fetchProfileData(
   });
 
   const { user, rateLimit } = result;
-  const { contributionsCollection: cc } = user;
+  const cc = user.contributionsCollection;
 
-  const totalCommits = includeForks
-    ? (cc.totalCommitContributions ?? 0)
-    : sumExcludingForks(cc.commitContributionsByRepository);
-  const totalIssues = includeForks
-    ? (cc.totalIssueContributions ?? 0)
-    : sumExcludingForks(cc.issueContributionsByRepository);
-  const totalPRs = includeForks
-    ? (cc.totalPullRequestContributions ?? 0)
-    : sumExcludingForks(cc.pullRequestContributionsByRepository);
+  // cc/user.repositories are only present when "stats" was actually a
+  // requested capability (see StatsQueryResult's doc comment) — a
+  // "identity"-only request (e.g. masthead alone) legitimately gets neither
+  // field back from the real API, so this must default to 0 rather than
+  // crash on `cc.totalCommitContributions` against `undefined`.
+  const totalCommits = cc
+    ? includeForks
+      ? (cc.totalCommitContributions ?? 0)
+      : sumExcludingForks(cc.commitContributionsByRepository)
+    : 0;
+  const totalIssues = cc
+    ? includeForks
+      ? (cc.totalIssueContributions ?? 0)
+      : sumExcludingForks(cc.issueContributionsByRepository)
+    : 0;
+  const totalPRs = cc
+    ? includeForks
+      ? (cc.totalPullRequestContributions ?? 0)
+      : sumExcludingForks(cc.pullRequestContributionsByRepository)
+    : 0;
   // `repositories.nodes` is already server-side filtered by buildQuery's
   // `isFork: false` argument in the includeForks: false shape — no
   // client-side re-filtering needed here in either branch.
-  const totalStars = user.repositories.nodes.reduce((sum, node) => sum + node.stargazerCount, 0);
+  const totalStars = (user.repositories?.nodes ?? []).reduce((sum, node) => sum + node.stargazerCount, 0);
 
   const data: ProfileData = {
     login: user.login,

@@ -2,7 +2,7 @@ import type { CardEntry, ResolvedConfig } from "./config.js";
 import { type FetchImpl, fetchProfileData } from "./fetch.js";
 import type { ProfileData, RenderOptions, Theme } from "./model.js";
 import { collectCapabilities, get } from "./registry.js";
-import type { WidgetDefinition } from "./registry.js";
+import type { CitableFact, WidgetDefinition } from "./registry.js";
 import {
   HARD_SIZE_CANARY_BYTES,
   renderPair,
@@ -86,6 +86,50 @@ export class ConflictingStatsOptionsError extends Error {
     );
     this.name = "ConflictingStatsOptionsError";
   }
+}
+
+/**
+ * Defensive runtime guard for MAST-01/02/03's page-numbering invariant
+ * (UI-SPEC "page-number-footer" partial-state row): `pageNumber` and
+ * `totalPages` must always be set together or both left `undefined` — never
+ * one without the other. Under normal execution this branch is unreachable
+ * (both fields are always assigned from the same object-spread in
+ * `renderAllCards`'s Pass 4), but UI-SPEC explicitly requires this to be a
+ * runtime assertion, not just documentation, since a partial state here
+ * would otherwise silently render e.g. `"PAGE 3/undefined"`.
+ */
+export class PageNumberInvariantError extends Error {
+  constructor(cardId: string, pageNumber: number | undefined, totalPages: number | undefined) {
+    super(
+      `PageNumberInvariantError: card "${cardId}" has pageNumber=${String(pageNumber)} and ` +
+        `totalPages=${String(totalPages)} — these two fields must always be set together, or ` +
+        "both left undefined.",
+    );
+    this.name = "PageNumberInvariantError";
+  }
+}
+
+/**
+ * Scans the FULL enabled-array (`cards`, in `widgets.yml` order — D-08/D-09),
+ * not just non-masthead entries, returning the first card's exposed fact
+ * under `key`, or `undefined` if no enabled card exposes it. Scanning the
+ * complete array (rather than filtering out the masthead first) keeps this
+ * function's contract simple and uniform — in practice the masthead itself
+ * is not expected to ever implement `citableFacts`, but nothing here assumes
+ * that.
+ */
+function firstCitedFact(
+  cards: ResolvedCard[],
+  factRegistry: Record<string, Record<string, CitableFact>>,
+  key: string,
+): CitableFact | undefined {
+  for (const card of cards) {
+    const fact = factRegistry[card.id]?.[key];
+    if (fact !== undefined) {
+      return fact;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -282,21 +326,82 @@ export function renderAllCards(
   globalOpts: { now: Date; seed: number; language: "en" | "zh-TW" },
   themes: { light: Theme; dark: Theme },
 ): RenderedCard[] {
-  return cards.map((card): RenderedCard => {
-    // D-09 allows `timezone` to be overridden per card (already resolved
-    // onto `card.timezone` by `resolveCards`). `language` has no such
-    // override by design (D-08): it always comes from `globalOpts`, never
-    // from a card's own `parsedOptions`. Everything else in `parsedOptions`
-    // (e.g. Editorial Stat Card's `include_forks`) is a genuinely real
-    // option value and is passed through untouched — only these four named
-    // fields are overwritten.
-    const opts = {
+  // Pass 1: build { card, opts } for every card — identical overlay logic to
+  // the pre-Phase-3 inline .map() (D-09 timezone override, D-08 language
+  // always top-level), just extracted so Passes 2-4 below can each iterate
+  // it without recomputing.
+  const entries: { card: ResolvedCard; opts: RenderOptions }[] = cards.map((card) => ({
+    card,
+    opts: {
       ...card.parsedOptions,
       now: globalOpts.now,
       seed: globalOpts.seed,
       language: globalOpts.language,
       timezone: card.timezone,
-    } as RenderOptions;
+    } as RenderOptions,
+  }));
+
+  // Pass 2 (NEW, MAST-02): collect every enabled card's exposed citable
+  // facts, keyed by card id. A widget that doesn't implement `citableFacts`
+  // (the overwhelming majority) simply contributes nothing here.
+  const factRegistry: Record<string, Record<string, CitableFact>> = {};
+  for (const entry of entries) {
+    const facts = entry.card.widget.citableFacts?.(data, entry.opts);
+    if (facts !== undefined) {
+      factRegistry[entry.card.id] = facts;
+    }
+  }
+
+  // Pass 3 (NEW, MAST-01/02): masthead-context construction. Resolves
+  // RESEARCH.md Open Question Q2 (locked by 03-UI-SPEC.md's Page Numbering
+  // Display Contract): the masthead itself is excluded from both its own
+  // contents list and from page numbering — `totalPages` counts only
+  // non-masthead cards.
+  const hasMasthead = cards.some((card) => card.widget.name === "masthead");
+  let contents: { id: string; title: string; pageNumber: number }[] | undefined;
+  let totalPages: number | undefined;
+  let citedFacts: { totalCommits?: CitableFact } | undefined;
+  let pageNumberById: Record<string, number> | undefined;
+
+  if (hasMasthead) {
+    const nonMastheadEntries = entries.filter((entry) => entry.card.widget.name !== "masthead");
+    totalPages = nonMastheadEntries.length;
+    contents = nonMastheadEntries.map((entry, i) => ({
+      id: entry.card.id,
+      title: entry.card.widget.describe(data, entry.opts).title,
+      pageNumber: i + 1,
+    }));
+    pageNumberById = {};
+    for (const item of contents) {
+      pageNumberById[item.id] = item.pageNumber;
+    }
+    // D-07: v1's only known citation key. Scans the full `cards` array in
+    // enabled order (see firstCitedFact's own doc comment).
+    citedFacts = { totalCommits: firstCitedFact(cards, factRegistry, "totalCommits") };
+  }
+
+  // Pass 4 (replaces the old final .map()): inject pageNumber/totalPages
+  // into every non-masthead card's opts (only when a masthead is present),
+  // and contents/citedFacts into the masthead's own opts — then render
+  // exactly as before.
+  return entries.map((entry): RenderedCard => {
+    const { card } = entry;
+    let opts = entry.opts;
+
+    if (card.widget.name === "masthead") {
+      // contents/citedFacts are deliberately NOT named on the RenderOptions
+      // interface (mirrors EditorialStatCardOptions' include_forks
+      // precedent) — the masthead's own MastheadOptions extension type reads
+      // them back off `opts` via a trusted cast, same convention every
+      // widget already uses for pipeline-injected fields.
+      opts = { ...opts, contents, citedFacts } as RenderOptions;
+    } else if (pageNumberById !== undefined) {
+      opts = { ...opts, pageNumber: pageNumberById[card.id], totalPages } as RenderOptions;
+    }
+
+    if ((opts.pageNumber === undefined) !== (opts.totalPages === undefined)) {
+      throw new PageNumberInvariantError(card.id, opts.pageNumber, opts.totalPages);
+    }
 
     const { light, dark } = renderPair(card.widget, data, opts, themes);
 

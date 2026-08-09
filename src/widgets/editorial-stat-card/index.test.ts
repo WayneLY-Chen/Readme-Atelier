@@ -5,7 +5,7 @@ import type { ProfileData, RenderOptions } from "../../core/model.js";
 import { editorialLight } from "../../core/theme.js";
 import { loadAllFonts } from "../../node/fonts.js";
 import { labelsEn, labelsZh } from "./copy.js";
-import { COLUMN_BUDGET_PX } from "./format.js";
+import { COLUMN_BUDGET_PX, formatStatNumber } from "./format.js";
 import { editorialStatCardWidget } from "./index.js";
 
 const T1_SIZE = 8;
@@ -212,6 +212,24 @@ describe("Alignment rule — T2 numerals are horizontally centered, not edge-ali
     expect(shortX).not.toBeCloseTo(longX, 1);
 
     spy.mockRestore();
+  });
+});
+
+describe("editorialStatCardWidget.citableFacts (MAST-02/D-07)", () => {
+  it("en: returns totalCommits with an uppercase English label and formatStatNumber's verbatim output", () => {
+    const data = nonZeroProfileData();
+    const facts = editorialStatCardWidget.citableFacts?.(data, optsFor("en"));
+    expect(facts).toEqual({
+      totalCommits: { label: "COMMITS", value: formatStatNumber(data.stats.totalCommits, "en") },
+    });
+  });
+
+  it("zh-TW: returns totalCommits with the Chinese label and formatStatNumber's verbatim 萬/億 output", () => {
+    const data = { ...nonZeroProfileData(), stats: { ...nonZeroProfileData().stats, totalCommits: 12345 } };
+    const facts = editorialStatCardWidget.citableFacts?.(data, optsFor("zh-TW"));
+    expect(facts).toEqual({
+      totalCommits: { label: "提交", value: formatStatNumber(data.stats.totalCommits, "zh-TW") },
+    });
   });
 });
 

@@ -15,6 +15,21 @@ export interface OptionsSchema<Opts> {
   parse(value: unknown): Opts;
 }
 
+/**
+ * A single fact a widget exposes for another widget to cite (MAST-02, D-06/
+ * D-07). `value` is PRE-FORMATTED for the render's `opts.language` — the
+ * citing widget (v1: only the masthead) must reuse it verbatim and never
+ * reformat/re-derive it from raw `ProfileData`, or it risks silently
+ * disagreeing with what the exposing widget's own face displays for the same
+ * figure (RESEARCH.md Pitfall 1 — e.g. zh-TW's 萬/億 compaction rule).
+ */
+export interface CitableFact {
+  /** Short label the citing widget may print alongside the value, e.g. "COMMITS". */
+  label: string;
+  /** Pre-formatted for opts.language — the citing widget must NOT reformat it. */
+  value: string;
+}
+
 export interface WidgetDefinition<Opts = unknown> {
   /** Registry key; must match the `type:` value a consumer writes in widgets.yml. */
   readonly name: string;
@@ -33,6 +48,17 @@ export interface WidgetDefinition<Opts = unknown> {
 
   /** Returns ONLY the inner markup — not a full <svg> root (see core/svg.ts). */
   renderBody(data: ProfileData, theme: Theme, opts: Opts): string;
+
+  /**
+   * NEW, optional (MAST-02). A widget that wants a figure it computes to be
+   * citable elsewhere (currently only by the masthead, per D-06's one-way
+   * direction) implements this. A widget that never wants to be cited (the
+   * overwhelming majority) simply omits it — RENDER-02's "no change to core
+   * files required to add a card" holds for every non-participating widget,
+   * and `core/pipeline.ts` calls this via optional chaining so an
+   * unimplemented hook is never a crash, just "nothing exposed."
+   */
+  citableFacts?(data: ProfileData, opts: Opts): Record<string, CitableFact>;
 }
 
 export class DuplicateWidgetError extends Error {

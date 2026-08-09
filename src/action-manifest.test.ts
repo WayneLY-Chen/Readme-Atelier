@@ -87,6 +87,10 @@ describe("action-entry.ts — Plan 02-03 pipeline wiring (DATA-01/02/07)", () =>
     expect(entrySource).toContain("register(editorialStatCardWidget)");
   });
 
+  it("registers the masthead widget (Phase 3, MAST-01/02)", () => {
+    expect(entrySource).toContain("register(mastheadWidget)");
+  });
+
   it("calls resolveCards(), fetchSharedData(), and logPointCost() — not the old single-call renderAllCards(config, ...) shape", () => {
     expect(entrySource).toContain("resolveCards(");
     expect(entrySource).toContain("fetchSharedData(");

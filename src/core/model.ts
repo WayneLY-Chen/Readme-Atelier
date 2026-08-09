@@ -2,7 +2,16 @@
  * The slice of ProfileData a widget declares it needs. The core unions this
  * across every enabled widget before doing a single shared GitHub fetch.
  */
-export type DataCapability = "stats" | "calendar" | "commitTimestamps" | "languages";
+/**
+ * "identity" (MAST-01, added this phase): declares no new GraphQL fragment
+ * of its own — `core/fetch.ts`'s `buildQuery` already sends `user { login
+ * name avatarUrl followers {...} }` unconditionally whenever
+ * `capabilities.size > 0`. Declaring this capability exists ONLY to move a
+ * masthead-only (or masthead + other zero-capability cards) render OUT of
+ * `collectCapabilities(...).size === 0`'s zero-fetch fast path, since the
+ * masthead needs a real `data.login` to print the subtitle.
+ */
+export type DataCapability = "stats" | "calendar" | "commitTimestamps" | "languages" | "identity";
 
 export interface ProfileData {
   login: string;
@@ -47,4 +56,13 @@ export interface RenderOptions {
   seed: number;
   timezone: string;
   language: "en" | "zh-TW";
+  /**
+   * NEW, optional (MAST-01/02/03). Only set when a `name === "masthead"`
+   * widget is present in the enabled set (`core/pipeline.ts`'s
+   * `renderAllCards`) — every widget must treat `undefined` as "masthead is
+   * off, render nothing extra," never as `0`. Always set together with
+   * `totalPages` or not at all (see `PageNumberInvariantError`).
+   */
+  pageNumber?: number;
+  totalPages?: number;
 }
