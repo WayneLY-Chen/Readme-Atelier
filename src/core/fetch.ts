@@ -60,9 +60,9 @@ const STATS_FRAGMENT_INCLUDE_FORKS = `
 
 /**
  * The Graveyard's repo-list fragment (CARD-03). Aliased to `graveyardRepos`
- * so it can coexist in one composed query alongside `stats`'s own
- * `statsRepos: repositories(...)` call above — the same underlying
- * `user.repositories` field with genuinely incompatible connection
+ * so it can coexist in one composed query alongside `stats`'s own aliased
+ * `repositories(...)` call above (see `STATS_FRAGMENT_*`) — the same
+ * underlying `user.repositories` field with genuinely incompatible connection
  * arguments (no `isFork` filter here; `PUSHED_AT` ascending order to
  * surface the most historically-stale repos first even past the 100-row
  * cap). No `isFork` filter is a deliberate choice, not an oversight — D-03
