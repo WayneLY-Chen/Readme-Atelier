@@ -130,6 +130,42 @@ describe("Plan 02 Task 2: assertCoverage + glyphPlaceholderPath", () => {
   });
 });
 
+describe("Regression (2026-08-09 production incident): multi-character PathCorruptionError", () => {
+  // Almanac's 危 忌 line ("忌：直接改 production 資料", core/font.ts's
+  // CORRUPTION_RETRY_OFFSETS comment) shipped a corrupted SVG path in
+  // production: roundCoord only sanitizes the *starting* anchor of a
+  // getPath() call, but opentype.js accumulates every subsequent glyph's
+  // cursor position internally in unrounded floating point, and that
+  // internal accumulation landed on the same poisoned-float64-bit-pattern
+  // class the anchor rounding was originally built to dodge — 10 characters
+  // into the string, at the "d" in "production", with the exact fixed
+  // x=24/y=215/fontSize=17 the real card uses. This pins that exact
+  // real-world input against the real committed font asset.
+  const COVERAGE_FONT = "test-corruption-noto-tc";
+
+  beforeAll(() => {
+    const buffer = readFileSync(path.join("assets", "fonts", "noto-serif-tc.subset.ttf"));
+    registerFont(COVERAGE_FONT, toArrayBuffer(buffer));
+  });
+
+  it("does not throw for the exact string/coordinates that corrupted in production", () => {
+    const text = "忌：直接改 production 資料";
+    let result = "";
+    expect(() => {
+      result = textToPathData(COVERAGE_FONT, text, 24, 215, 17);
+    }).not.toThrow();
+    expect(result).toMatch(/^[MLCQZ0-9.,\-\s]+$/);
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it("is still a pure function after the retry ladder: identical inputs produce byte-identical output", () => {
+    const text = "忌：直接改 production 資料";
+    const a = textToPathData(COVERAGE_FONT, text, 24, 215, 17);
+    const b = textToPathData(COVERAGE_FONT, text, 24, 215, 17);
+    expect(a).toBe(b);
+  });
+});
+
 describe("core/font", () => {
   it("throws UnknownFontError for an unregistered font name", () => {
     expect(() => measureAdvanceWidth("does-not-exist", "A", 44)).toThrow(UnknownFontError);

@@ -44947,6 +44947,27 @@ function roundCoord(value) {
 /** Matches SVG path-data output: digits, M/L/C/Q/Z commands, decimal point,
  * spaces, and minus sign — see textToPathData's PathCorruptionError guard. */
 const PATH_DATA_CHARSET = /^[MLCQZ0-9.,\-\s]*$/;
+/**
+ * Deterministic retry ladder for the opentype.js bug described above
+ * roundCoord. roundCoord only sanitizes the *starting* anchor passed into
+ * font.getPath() — for a multi-character call (every real card string; only
+ * letterSpacedPath-style manual per-character callers get roundCoord applied
+ * on every glyph) opentype.js accumulates each subsequent glyph's cursor
+ * position internally, in unrounded floating point, and that internal
+ * accumulation can independently land on the same class of poisoned float64
+ * bit pattern for a glyph anywhere in the string — confirmed in production
+ * (2026-08-09): Almanac's 危 忌 line, "忌：直接改 production 資料" at the
+ * card's fixed x=24, corrupts starting at the "d" in "production" (10th
+ * character) even though x=24 itself is already an integer. Since the bug is
+ * exact-value-specific, shifting the whole run's starting x by a tiny,
+ * sub-visual offset changes every downstream glyph's accumulated position
+ * and reliably escapes the poisoned value — empirically, the real-world case
+ * above was still corrupt at x=24±0.001 and x=24±0.002 but clean by
+ * x=24±0.003, so this ladder carries margin past that. Order tries the
+ * unmodified anchor first so the overwhelming majority of calls (which never
+ * hit this bug) pay zero extra cost.
+ */
+const CORRUPTION_RETRY_OFFSETS = [0, 0.001, -0.001, 0.002, -0.002, 0.003, -0.003, 0.005, -0.005, 0.01, -0.01, 0.02, -0.02];
 class UnknownFontError extends Error {
     constructor(name) {
         super(`UnknownFontError: no font has been registered under the name "${name}".`);
@@ -45016,13 +45037,18 @@ function textToPathData(name, text, x, y, fontSize) {
         return "";
     }
     const font = getRegisteredFont(name);
-    const pathData = font
-        .getPath(text, roundCoord(x), roundCoord(y), fontSize)
-        .toPathData(PATH_DECIMAL_PLACES);
-    if (!PATH_DATA_CHARSET.test(pathData)) {
-        throw new PathCorruptionError(name, text, pathData);
+    const roundedX = roundCoord(x);
+    const roundedY = roundCoord(y);
+    let pathData = "";
+    for (const offset of CORRUPTION_RETRY_OFFSETS) {
+        pathData = font
+            .getPath(text, roundCoord(roundedX + offset), roundedY, fontSize)
+            .toPathData(PATH_DECIMAL_PLACES);
+        if (PATH_DATA_CHARSET.test(pathData)) {
+            return pathData;
+        }
     }
-    return pathData;
+    throw new PathCorruptionError(name, text, pathData);
 }
 /**
  * RENDER-05 gate for engine-authored text: throws GlyphCoverageError on the
