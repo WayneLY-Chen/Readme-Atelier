@@ -44274,12 +44274,18 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_3__ = __nccwpck_require__(3360);
 /* harmony import */ var _core_config_js__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(4489);
 /* harmony import */ var _core_embed_snippet_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(7402);
-/* harmony import */ var _core_pipeline_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(6701);
+/* harmony import */ var _core_fetch_js__WEBPACK_IMPORTED_MODULE_14__ = __nccwpck_require__(6657);
+/* harmony import */ var _core_pipeline_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(916);
 /* harmony import */ var _core_publish_js__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(1677);
 /* harmony import */ var _core_registry_js__WEBPACK_IMPORTED_MODULE_8__ = __nccwpck_require__(4692);
 /* harmony import */ var _node_fonts_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(514);
-/* harmony import */ var _node_step_summary_js__WEBPACK_IMPORTED_MODULE_10__ = __nccwpck_require__(9917);
-/* harmony import */ var _widgets_almanac_index_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(2443);
+/* harmony import */ var _node_point_cost_js__WEBPACK_IMPORTED_MODULE_10__ = __nccwpck_require__(9162);
+/* harmony import */ var _node_step_summary_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(9917);
+/* harmony import */ var _widgets_almanac_index_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(2443);
+/* harmony import */ var _widgets_editorial_stat_card_index_js__WEBPACK_IMPORTED_MODULE_13__ = __nccwpck_require__(9722);
+
+
+
 
 
 
@@ -44318,7 +44324,21 @@ async function run() {
     // a real run, not this repo.
     const actionRepoRoot = node_path__WEBPACK_IMPORTED_MODULE_1___default().join(node_path__WEBPACK_IMPORTED_MODULE_1___default().dirname((0,node_url__WEBPACK_IMPORTED_MODULE_2__.fileURLToPath)(import.meta.url)), "..");
     (0,_node_fonts_js__WEBPACK_IMPORTED_MODULE_9__/* .loadAllFonts */ .c)(actionRepoRoot);
-    (0,_core_registry_js__WEBPACK_IMPORTED_MODULE_8__/* .register */ .kz)(_widgets_almanac_index_js__WEBPACK_IMPORTED_MODULE_11__/* .almanacWidget */ .M);
+    (0,_core_registry_js__WEBPACK_IMPORTED_MODULE_8__/* .register */ .kz)(_widgets_almanac_index_js__WEBPACK_IMPORTED_MODULE_12__/* .almanacWidget */ .M);
+    (0,_core_registry_js__WEBPACK_IMPORTED_MODULE_8__/* .register */ .kz)(_widgets_editorial_stat_card_index_js__WEBPACK_IMPORTED_MODULE_13__/* .editorialStatCardWidget */ .G);
+    // GitHub Actions guarantees GITHUB_REPOSITORY correctly names the repo the
+    // current workflow run belongs to (RESEARCH.md's Security Domain
+    // analysis) — T-01-11's mitigation for "force-push targets the wrong
+    // repo" rests on reading it directly, never accepting an override input.
+    // Read here (moved up from just-before-publish in Phase 1): the shared
+    // fetch below needs `owner` (the repo-owner segment) as its `login`
+    // argument, and that fetch now happens well before publish.
+    const repo = process.env.GITHUB_REPOSITORY;
+    if (!repo) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .setFailed */ .C1("GITHUB_REPOSITORY is not set — refusing to publish without a known target.");
+        return;
+    }
+    const owner = repo.split("/")[0];
     const yamlText = (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.existsSync)(configPath) ? (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.readFileSync)(configPath, "utf8") : undefined;
     let config;
     let usedDefault;
@@ -44347,13 +44367,37 @@ async function run() {
     }
     let cards;
     try {
-        cards = (0,_core_pipeline_js__WEBPACK_IMPORTED_MODULE_6__/* .renderAllCards */ .Rf)(config, { now: new Date(), seed: 0 });
+        cards = (0,_core_pipeline_js__WEBPACK_IMPORTED_MODULE_6__/* .resolveCards */ .ES)(config);
     }
     catch (error) {
         _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .setFailed */ .C1(error instanceof Error ? error.message : String(error));
         return;
     }
-    if (cards.length === 0) {
+    // The single shared GraphQL fetch (DATA-01/02). A failure here — including
+    // a hit rate-limit (DATA-07) — must fail the WHOLE run before any card
+    // renders or publishes: no `renderAllCards`/`publishOutputBranch` call
+    // exists on this path, so a half-rendered/half-published state is not
+    // structurally reachable.
+    let data;
+    let pointCost;
+    try {
+        ({ data, pointCost } = await (0,_core_pipeline_js__WEBPACK_IMPORTED_MODULE_6__/* .fetchSharedData */ .Oj)(cards, token, owner));
+    }
+    catch (error) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .setFailed */ .C1((0,_core_fetch_js__WEBPACK_IMPORTED_MODULE_14__/* .formatFetchFailureMessage */ .BX)(error));
+        return;
+    }
+    // D-04: dual-surface point-cost log, immediately after a successful fetch.
+    (0,_node_point_cost_js__WEBPACK_IMPORTED_MODULE_10__/* .logPointCost */ .u)(pointCost);
+    let renderedCards;
+    try {
+        renderedCards = (0,_core_pipeline_js__WEBPACK_IMPORTED_MODULE_6__/* .renderAllCards */ .Rf)(cards, data, { now: new Date(), seed: 0, language: config.language }, (0,_core_pipeline_js__WEBPACK_IMPORTED_MODULE_6__/* .resolveTheme */ .eW)(config.theme));
+    }
+    catch (error) {
+        _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .setFailed */ .C1(error instanceof Error ? error.message : String(error));
+        return;
+    }
+    if (renderedCards.length === 0) {
         _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .warning */ .$e(`${configPath} enables zero cards — nothing to render or publish.`);
         return;
     }
@@ -44361,18 +44405,9 @@ async function run() {
     // publish. Every card above has already rendered and passed both
     // size-guard layers inside `renderAllCards` — only now do we touch git.
     const files = {};
-    for (const card of cards) {
+    for (const card of renderedCards) {
         files[`${card.id}-light.svg`] = card.light;
         files[`${card.id}-dark.svg`] = card.dark;
-    }
-    // GitHub Actions guarantees GITHUB_REPOSITORY correctly names the repo the
-    // current workflow run belongs to (RESEARCH.md's Security Domain
-    // analysis) — T-01-11's mitigation for "force-push targets the wrong
-    // repo" rests on reading it directly, never accepting an override input.
-    const repo = process.env.GITHUB_REPOSITORY;
-    if (!repo) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .setFailed */ .C1("GITHUB_REPOSITORY is not set — refusing to publish without a known target.");
-        return;
     }
     try {
         await (0,_core_publish_js__WEBPACK_IMPORTED_MODULE_7__/* .publishOutputBranch */ .D)(files, { token, repo });
@@ -44389,8 +44424,8 @@ async function run() {
             "Settings → Actions → General → Workflow permissions → Read and write permissions.");
         return;
     }
-    const [owner, repoName] = repo.split("/");
-    for (const card of cards) {
+    const repoName = repo.split("/")[1];
+    for (const card of renderedCards) {
         const snippet = (0,_core_embed_snippet_js__WEBPACK_IMPORTED_MODULE_5__/* .buildEmbedSnippet */ .R4)({
             id: card.id,
             title: card.title,
@@ -44398,7 +44433,7 @@ async function run() {
             owner,
             repo: repoName,
         });
-        (0,_node_step_summary_js__WEBPACK_IMPORTED_MODULE_10__/* .writeStepSummary */ .o)(`### ${card.id}\n\n${snippet}\n`);
+        (0,_node_step_summary_js__WEBPACK_IMPORTED_MODULE_11__/* .writeStepSummary */ .o)(`### ${card.id}\n\n${snippet}\n`);
     }
 }
 await run();
@@ -44457,13 +44492,14 @@ const CardEntrySchema = zod__WEBPACK_IMPORTED_MODULE_2__/* .object */ .Ik({
 })
     .strict();
 /**
- * `theme` currently has exactly one legal value. THEME-03/04's multi-theme
- * catalog (dracula, nord, tokyonight, ...) is Phase 2 scope — this schema
- * honestly reflects what exists today rather than pre-declaring THEME-02's
- * eventual catalog.
+ * D-06's locked four-theme catalog — `editorial`, `dracula`, `nord`,
+ * `tokyonight`, exactly. THEME-04's "deliberately capped, not an open
+ * registry" requirement is enforced by this enum literal being the ONLY
+ * place a `theme:` value is accepted: a value outside this list is rejected
+ * here, before it ever reaches `core/pipeline.ts`'s `THEME_PAIRS` lookup.
  */
 const RootConfigSchema = zod__WEBPACK_IMPORTED_MODULE_2__/* .object */ .Ik({
-    theme: zod__WEBPACK_IMPORTED_MODULE_2__/* ["enum"] */ .k5(["editorial"]).default("editorial"),
+    theme: zod__WEBPACK_IMPORTED_MODULE_2__/* ["enum"] */ .k5(["editorial", "dracula", "nord", "tokyonight"]).default("editorial"),
     language: zod__WEBPACK_IMPORTED_MODULE_2__/* ["enum"] */ .k5(["en", "zh-TW"]).default("en"),
     timezone: zod__WEBPACK_IMPORTED_MODULE_2__/* .string */ .Yj().default("UTC"),
     cards: zod__WEBPACK_IMPORTED_MODULE_2__/* .array */ .YO(CardEntrySchema).default([{ type: "almanac" }]),
@@ -44662,7 +44698,7 @@ function collectSemanticErrors(doc, lineCounter, yamlLines, rawObj) {
         const node = doc.getIn(path, true);
         const loc = locationFromRange(yamlLines, lineCounter, rangeOf(node));
         errors.push({
-            message: `重複的 id "${id}"，出現在第 ${indices.join(" 與第 ")} 個 card，請加上 id: 區分`,
+            message: `重複的 id "${id}"，出現在第 ${indices.map((i) => i + 1).join(" 與第 ")} 個 card，請加上 id: 區分`,
             ...loc,
         });
     }
@@ -44897,6 +44933,1538 @@ function buildEmbedSnippet(opts) {
 
 /***/ }),
 
+/***/ 6657:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  Yx: () => (/* binding */ fetchProfileData),
+  BX: () => (/* binding */ formatFetchFailureMessage)
+});
+
+// UNUSED EXPORTS: buildQuery, zeroCapabilityProfileData
+
+;// CONCATENATED MODULE: ./node_modules/universal-user-agent/index.js
+function getUserAgent() {
+  if (typeof navigator === "object" && "userAgent" in navigator) {
+    return navigator.userAgent;
+  }
+
+  if (typeof process === "object" && process.version !== undefined) {
+    return `Node.js/${process.version.substr(1)} (${process.platform}; ${
+      process.arch
+    })`;
+  }
+
+  return "<environment undetectable>";
+}
+
+;// CONCATENATED MODULE: ./node_modules/@octokit/endpoint/dist-bundle/index.js
+// pkg/dist-src/defaults.js
+
+
+// pkg/dist-src/version.js
+var VERSION = "0.0.0-development";
+
+// pkg/dist-src/defaults.js
+var userAgent = `octokit-endpoint.js/${VERSION} ${getUserAgent()}`;
+var DEFAULTS = {
+  method: "GET",
+  baseUrl: "https://api.github.com",
+  headers: {
+    accept: "application/vnd.github.v3+json",
+    "user-agent": userAgent
+  },
+  mediaType: {
+    format: ""
+  }
+};
+
+// pkg/dist-src/util/lowercase-keys.js
+function lowercaseKeys(object) {
+  if (!object) {
+    return {};
+  }
+  return Object.keys(object).reduce((newObj, key) => {
+    newObj[key.toLowerCase()] = object[key];
+    return newObj;
+  }, {});
+}
+
+// pkg/dist-src/util/is-plain-object.js
+function isPlainObject(value) {
+  if (typeof value !== "object" || value === null) return false;
+  if (Object.prototype.toString.call(value) !== "[object Object]") return false;
+  const proto = Object.getPrototypeOf(value);
+  if (proto === null) return true;
+  const Ctor = Object.prototype.hasOwnProperty.call(proto, "constructor") && proto.constructor;
+  return typeof Ctor === "function" && Ctor instanceof Ctor && Function.prototype.call(Ctor) === Function.prototype.call(value);
+}
+
+// pkg/dist-src/util/merge-deep.js
+function mergeDeep(defaults, options) {
+  const result = Object.assign({}, defaults);
+  Object.keys(options).forEach((key) => {
+    if (isPlainObject(options[key])) {
+      if (!(key in defaults)) Object.assign(result, { [key]: options[key] });
+      else result[key] = mergeDeep(defaults[key], options[key]);
+    } else {
+      Object.assign(result, { [key]: options[key] });
+    }
+  });
+  return result;
+}
+
+// pkg/dist-src/util/remove-undefined-properties.js
+function removeUndefinedProperties(obj) {
+  for (const key in obj) {
+    if (obj[key] === void 0) {
+      delete obj[key];
+    }
+  }
+  return obj;
+}
+
+// pkg/dist-src/merge.js
+function merge(defaults, route, options) {
+  if (typeof route === "string") {
+    let [method, url] = route.split(" ");
+    options = Object.assign(url ? { method, url } : { url: method }, options);
+  } else {
+    options = Object.assign({}, route);
+  }
+  options.headers = lowercaseKeys(options.headers);
+  removeUndefinedProperties(options);
+  removeUndefinedProperties(options.headers);
+  const mergedOptions = mergeDeep(defaults || {}, options);
+  if (options.url === "/graphql") {
+    if (defaults && defaults.mediaType.previews?.length) {
+      mergedOptions.mediaType.previews = defaults.mediaType.previews.filter(
+        (preview) => !mergedOptions.mediaType.previews.includes(preview)
+      ).concat(mergedOptions.mediaType.previews);
+    }
+    mergedOptions.mediaType.previews = (mergedOptions.mediaType.previews || []).map((preview) => preview.replace(/-preview/, ""));
+  }
+  return mergedOptions;
+}
+
+// pkg/dist-src/util/add-query-parameters.js
+function addQueryParameters(url, parameters) {
+  const separator = /\?/.test(url) ? "&" : "?";
+  const names = Object.keys(parameters);
+  if (names.length === 0) {
+    return url;
+  }
+  return url + separator + names.map((name) => {
+    if (name === "q") {
+      return "q=" + parameters.q.split("+").map(encodeURIComponent).join("+");
+    }
+    return `${name}=${encodeURIComponent(parameters[name])}`;
+  }).join("&");
+}
+
+// pkg/dist-src/util/extract-url-variable-names.js
+var urlVariableRegex = /\{[^{}}]+\}/g;
+function removeNonChars(variableName) {
+  return variableName.replace(/(?:^\W+)|(?:(?<!\W)\W+$)/g, "").split(/,/);
+}
+function extractUrlVariableNames(url) {
+  const matches = url.match(urlVariableRegex);
+  if (!matches) {
+    return [];
+  }
+  return matches.map(removeNonChars).reduce((a, b) => a.concat(b), []);
+}
+
+// pkg/dist-src/util/omit.js
+function omit(object, keysToOmit) {
+  const result = { __proto__: null };
+  for (const key of Object.keys(object)) {
+    if (keysToOmit.indexOf(key) === -1) {
+      result[key] = object[key];
+    }
+  }
+  return result;
+}
+
+// pkg/dist-src/util/url-template.js
+function encodeReserved(str) {
+  return str.split(/(%[0-9A-Fa-f]{2})/g).map(function(part) {
+    if (!/%[0-9A-Fa-f]/.test(part)) {
+      part = encodeURI(part).replace(/%5B/g, "[").replace(/%5D/g, "]");
+    }
+    return part;
+  }).join("");
+}
+function encodeUnreserved(str) {
+  return encodeURIComponent(str).replace(/[!'()*]/g, function(c) {
+    return "%" + c.charCodeAt(0).toString(16).toUpperCase();
+  });
+}
+function encodeValue(operator, value, key) {
+  value = operator === "+" || operator === "#" ? encodeReserved(value) : encodeUnreserved(value);
+  if (key) {
+    return encodeUnreserved(key) + "=" + value;
+  } else {
+    return value;
+  }
+}
+function isDefined(value) {
+  return value !== void 0 && value !== null;
+}
+function isKeyOperator(operator) {
+  return operator === ";" || operator === "&" || operator === "?";
+}
+function getValues(context, operator, key, modifier) {
+  var value = context[key], result = [];
+  if (isDefined(value) && value !== "") {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "bigint" || typeof value === "boolean") {
+      value = value.toString();
+      if (modifier && modifier !== "*") {
+        value = value.substring(0, parseInt(modifier, 10));
+      }
+      result.push(
+        encodeValue(operator, value, isKeyOperator(operator) ? key : "")
+      );
+    } else {
+      if (modifier === "*") {
+        if (Array.isArray(value)) {
+          value.filter(isDefined).forEach(function(value2) {
+            result.push(
+              encodeValue(operator, value2, isKeyOperator(operator) ? key : "")
+            );
+          });
+        } else {
+          Object.keys(value).forEach(function(k) {
+            if (isDefined(value[k])) {
+              result.push(encodeValue(operator, value[k], k));
+            }
+          });
+        }
+      } else {
+        const tmp = [];
+        if (Array.isArray(value)) {
+          value.filter(isDefined).forEach(function(value2) {
+            tmp.push(encodeValue(operator, value2));
+          });
+        } else {
+          Object.keys(value).forEach(function(k) {
+            if (isDefined(value[k])) {
+              tmp.push(encodeUnreserved(k));
+              tmp.push(encodeValue(operator, value[k].toString()));
+            }
+          });
+        }
+        if (isKeyOperator(operator)) {
+          result.push(encodeUnreserved(key) + "=" + tmp.join(","));
+        } else if (tmp.length !== 0) {
+          result.push(tmp.join(","));
+        }
+      }
+    }
+  } else {
+    if (operator === ";") {
+      if (isDefined(value)) {
+        result.push(encodeUnreserved(key));
+      }
+    } else if (value === "" && (operator === "&" || operator === "?")) {
+      result.push(encodeUnreserved(key) + "=");
+    } else if (value === "") {
+      result.push("");
+    }
+  }
+  return result;
+}
+function parseUrl(template) {
+  return {
+    expand: expand.bind(null, template)
+  };
+}
+function expand(template, context) {
+  var operators = ["+", "#", ".", "/", ";", "?", "&"];
+  template = template.replace(
+    /\{([^\{\}]+)\}|([^\{\}]+)/g,
+    function(_, expression, literal) {
+      if (expression) {
+        let operator = "";
+        const values = [];
+        if (operators.indexOf(expression.charAt(0)) !== -1) {
+          operator = expression.charAt(0);
+          expression = expression.substr(1);
+        }
+        expression.split(/,/g).forEach(function(variable) {
+          var tmp = /([^:\*]*)(?::(\d+)|(\*))?/.exec(variable);
+          values.push(getValues(context, operator, tmp[1], tmp[2] || tmp[3]));
+        });
+        if (operator && operator !== "+") {
+          var separator = ",";
+          if (operator === "?") {
+            separator = "&";
+          } else if (operator !== "#") {
+            separator = operator;
+          }
+          return (values.length !== 0 ? operator : "") + values.join(separator);
+        } else {
+          return values.join(",");
+        }
+      } else {
+        return encodeReserved(literal);
+      }
+    }
+  );
+  if (template === "/") {
+    return template;
+  } else {
+    return template.replace(/\/$/, "");
+  }
+}
+
+// pkg/dist-src/parse.js
+function parse(options) {
+  let method = options.method.toUpperCase();
+  let url = (options.url || "/").replace(/:([a-z]\w+)/g, "{$1}");
+  let headers = Object.assign({}, options.headers);
+  let body;
+  let parameters = omit(options, [
+    "method",
+    "baseUrl",
+    "url",
+    "headers",
+    "request",
+    "mediaType"
+  ]);
+  const urlVariableNames = extractUrlVariableNames(url);
+  url = parseUrl(url).expand(parameters);
+  if (!/^http/.test(url)) {
+    url = options.baseUrl + url;
+  }
+  const omittedParameters = Object.keys(options).filter((option) => urlVariableNames.includes(option)).concat("baseUrl");
+  const remainingParameters = omit(parameters, omittedParameters);
+  const isBinaryRequest = /application\/octet-stream/i.test(headers.accept);
+  if (!isBinaryRequest) {
+    if (options.mediaType.format) {
+      headers.accept = headers.accept.split(/,/).map(
+        (format) => format.replace(
+          /application\/vnd(\.\w+)(\.v3)?(\.\w+)?(\+json)?$/,
+          `application/vnd$1$2.${options.mediaType.format}`
+        )
+      ).join(",");
+    }
+    if (url.endsWith("/graphql")) {
+      if (options.mediaType.previews?.length) {
+        const previewsFromAcceptHeader = headers.accept.match(/(?<![\w-])[\w-]+(?=-preview)/g) || [];
+        headers.accept = previewsFromAcceptHeader.concat(options.mediaType.previews).map((preview) => {
+          const format = options.mediaType.format ? `.${options.mediaType.format}` : "+json";
+          return `application/vnd.github.${preview}-preview${format}`;
+        }).join(",");
+      }
+    }
+  }
+  if (["GET", "HEAD"].includes(method)) {
+    url = addQueryParameters(url, remainingParameters);
+  } else {
+    if ("data" in remainingParameters) {
+      body = remainingParameters.data;
+    } else {
+      if (Object.keys(remainingParameters).length) {
+        body = remainingParameters;
+      }
+    }
+  }
+  if (!headers["content-type"] && typeof body !== "undefined") {
+    headers["content-type"] = "application/json; charset=utf-8";
+  }
+  if (["PATCH", "PUT"].includes(method) && typeof body === "undefined") {
+    body = "";
+  }
+  return Object.assign(
+    { method, url, headers },
+    typeof body !== "undefined" ? { body } : null,
+    options.request ? { request: options.request } : null
+  );
+}
+
+// pkg/dist-src/endpoint-with-defaults.js
+function endpointWithDefaults(defaults, route, options) {
+  return parse(merge(defaults, route, options));
+}
+
+// pkg/dist-src/with-defaults.js
+function withDefaults(oldDefaults, newDefaults) {
+  const DEFAULTS2 = merge(oldDefaults, newDefaults);
+  const endpoint2 = endpointWithDefaults.bind(null, DEFAULTS2);
+  return Object.assign(endpoint2, {
+    DEFAULTS: DEFAULTS2,
+    defaults: withDefaults.bind(null, DEFAULTS2),
+    merge: merge.bind(null, DEFAULTS2),
+    parse
+  });
+}
+
+// pkg/dist-src/index.js
+var endpoint = withDefaults(null, DEFAULTS);
+
+
+// EXTERNAL MODULE: ./node_modules/content-type/dist/index.js
+var dist = __nccwpck_require__(4649);
+;// CONCATENATED MODULE: ./node_modules/json-with-bigint/json-with-bigint.js
+const intRegex = /^-?\d+$/;
+const noiseValue = /^-?\d+n+$/; // Noise - strings that match the custom format before being converted to it
+const originalStringify = JSON.stringify;
+const originalParse = JSON.parse;
+const customFormat = /^-?\d+n$/;
+
+const bigIntsStringify = /([\[:])?"(-?\d+)n"($|\s*[,\}\]])/g;
+const noiseStringify = /([\[:])?("-?\d+n+)n("$|"\s*[,\}\]])/g;
+
+/**
+ * @typedef {(this: any, key: string | number | undefined, value: any) => any} Replacer
+ * @typedef {(key: string | number | undefined, value: any, context?: { source: string }) => any} Reviver
+ */
+
+/**
+ * Checks if a value is unstringifiable according to native JSON.stringify rules.
+ *
+ * @param {any} val The value to check.
+ * @returns {boolean} True if the value is undefined, a function, or a symbol.
+ */
+const isUnstringifiable = (val) =>
+  val === undefined || typeof val === "function" || typeof val === "symbol";
+
+/**
+ * Checks if a value is a native JSON.rawJSON object (Node.js 22+).
+ *
+ * @param {any} val The value to check.
+ * @returns {boolean} True if the value is a RawJSON instance.
+ */
+const isRawJSON = (val) =>
+  val !== null &&
+  typeof val === "object" &&
+  val.constructor &&
+  val.constructor.name === "RawJSON";
+
+/**
+ * Iteratively converts a JS value to a JSON string.
+ * Used as a fallback when the native JSON.stringify hits the Maximum Call Stack size.
+ * Fully compliant with JSON formatting (space), replacers, and toJSON behaviors.
+ *
+ * @param {any} rootValue The value to stringify.
+ * @param {Replacer | Array<string | number> | null} [replacer] User's custom replacer function.
+ * @param {string | number} [spaceParam] Indentation for pretty-printing.
+ * @returns {string | undefined} The generated JSON string.
+ */
+const stringifyIteratively = (rootValue, replacer, spaceParam) => {
+  let space = "";
+
+  if (typeof spaceParam === "number") {
+    space = " ".repeat(Math.min(10, Math.max(0, Math.floor(spaceParam))));
+  } else if (typeof spaceParam === "string") {
+    space = spaceParam.slice(0, 10);
+  }
+
+  const isFunctionReplacer = typeof replacer === "function";
+  const propertyList = Array.isArray(replacer)
+    ? new Set(replacer.map(String))
+    : null;
+
+  /**
+   * Prepares a value for stringification by resolving toJSON, handling BigInts,
+   * applying custom replacers, and unwrapping primitive objects.
+   *
+   * @param {object|Array} parent The parent object or array holding the value.
+   * @param {string} key The key associated with the value.
+   * @param {any} val The raw value to process.
+   * @returns {any} The processed value ready for stringification.
+   */
+  const prepareVal = (parent, key, val) => {
+    const isObject = val !== null && typeof val === "object";
+    const hasToJSON = isObject && typeof val.toJSON === "function";
+
+    if (hasToJSON) {
+      val = val.toJSON(key);
+    }
+
+    const isNoise = typeof val === "string" && noiseValue.test(val);
+
+    if (isNoise) return val + "n";
+
+    const isBigInt = typeof val === "bigint";
+
+    if (isBigInt) {
+      const supportsRawJSON = "rawJSON" in JSON;
+
+      if (supportsRawJSON) return JSON.rawJSON(val.toString());
+
+      return val.toString() + "n";
+    }
+
+    if (isFunctionReplacer) {
+      val = replacer.call(parent, key, val);
+    }
+
+    const isPostReplacerObject = val !== null && typeof val === "object";
+
+    if (isPostReplacerObject) {
+      const isPrimitiveWrapper =
+        val instanceof Number ||
+        val instanceof String ||
+        val instanceof Boolean;
+
+      if (isPrimitiveWrapper) {
+        val = val.valueOf();
+      }
+    }
+
+    return val;
+  };
+
+  const rootProcessed = prepareVal({ "": rootValue }, "", rootValue);
+
+  if (isUnstringifiable(rootProcessed)) {
+    return undefined;
+  }
+
+  const isRootPrimitive =
+    rootProcessed === null || typeof rootProcessed !== "object";
+  const isRootNativeRawJSON = isRawJSON(rootProcessed);
+
+  if (isRootPrimitive || isRootNativeRawJSON) {
+    return originalStringify(rootProcessed);
+  }
+
+  const chunks = [];
+  let level = 0;
+
+  const stack = [
+    {
+      parent: { "": rootProcessed },
+      key: "",
+      val: rootProcessed,
+      isArray: Array.isArray(rootProcessed),
+      keys: Array.isArray(rootProcessed) ? null : Object.keys(rootProcessed),
+      index: 0,
+      first: true,
+    },
+  ];
+
+  const visited = new WeakSet([rootProcessed]);
+
+  while (stack.length > 0) {
+    const node = stack[stack.length - 1];
+
+    if (node.index === 0) {
+      chunks.push(node.isArray ? "[" : "{");
+      level++;
+    }
+
+    let isDone = false;
+
+    if (node.isArray) {
+      if (node.index < node.val.length) {
+        if (!node.first) chunks.push(",");
+
+        if (space) chunks.push("\n" + space.repeat(level));
+
+        const childRaw = node.val[node.index];
+        const childVal = prepareVal(node.val, String(node.index), childRaw);
+
+        if (isUnstringifiable(childVal)) {
+          chunks.push("null");
+          node.first = false;
+          node.index++;
+        } else {
+          const isComplexObject =
+            childVal !== null && typeof childVal === "object";
+          const isNativeRaw = isRawJSON(childVal);
+
+          if (isComplexObject && !isNativeRaw) {
+            if (visited.has(childVal)) {
+              throw new TypeError("Converting circular structure to JSON");
+            }
+
+            visited.add(childVal);
+
+            stack.push({
+              parent: node.val,
+              key: String(node.index),
+              val: childVal,
+              isArray: Array.isArray(childVal),
+              keys: Array.isArray(childVal) ? null : Object.keys(childVal),
+              index: 0,
+              first: true,
+            });
+
+            node.first = false;
+            node.index++;
+          } else {
+            chunks.push(originalStringify(childVal));
+            node.first = false;
+            node.index++;
+          }
+        }
+      } else {
+        isDone = true;
+      }
+    } else {
+      while (node.index < node.keys.length) {
+        const k = node.keys[node.index++];
+
+        const isFilteredOutByArray = propertyList && !propertyList.has(k);
+
+        if (isFilteredOutByArray) continue;
+
+        const childRaw = node.val[k];
+        const childVal = prepareVal(node.val, k, childRaw);
+
+        if (isUnstringifiable(childVal)) continue;
+
+        if (!node.first) chunks.push(",");
+
+        if (space) {
+          chunks.push("\n" + space.repeat(level) + originalStringify(k) + ": ");
+        } else {
+          chunks.push(originalStringify(k) + ":");
+        }
+
+        const isComplexObject =
+          childVal !== null && typeof childVal === "object";
+        const isNativeRaw = isRawJSON(childVal);
+
+        if (isComplexObject && !isNativeRaw) {
+          if (visited.has(childVal)) {
+            throw new TypeError("Converting circular structure to JSON");
+          }
+
+          visited.add(childVal);
+
+          stack.push({
+            parent: node.val,
+            key: k,
+            val: childVal,
+            isArray: Array.isArray(childVal),
+            keys: Array.isArray(childVal) ? null : Object.keys(childVal),
+            index: 0,
+            first: true,
+          });
+
+          node.first = false;
+
+          break; // Stop current loop level to process the newly pushed stack node
+        } else {
+          chunks.push(originalStringify(childVal));
+          node.first = false;
+        }
+      }
+
+      const isNodeFullyProcessed =
+        node.index >= node.keys.length && stack[stack.length - 1] === node;
+
+      if (isNodeFullyProcessed) {
+        isDone = true;
+      }
+    }
+
+    if (isDone) {
+      level--;
+
+      if (!node.first && space) chunks.push("\n" + space.repeat(level));
+
+      chunks.push(node.isArray ? "]" : "}");
+      visited.delete(node.val);
+      stack.pop();
+    }
+  }
+
+  return chunks.join("");
+};
+
+/**
+ * Converts a JavaScript value to a JSON string.
+ *
+ * Supports serialization of BigInt values using two strategies:
+ * 1. Custom format "123n" → "123" (universal fallback)
+ * 2. Native JSON.rawJSON() (Node.js 22+, fastest) when available
+ *
+ * All other values are serialized exactly like native JSON.stringify().
+ *
+ * @param {*} value The value to convert to a JSON string.
+ * @param {Replacer | Array<string | number> | null} [replacer]
+ * A function that alters the behavior of the stringification process,
+ * or an array of strings/numbers to indicate properties to exclude.
+ * @param {string | number} [space]
+ * A string or number to specify indentation or pretty-printing.
+ * @returns {string} The JSON string representation.
+ */
+const JSONStringify = (value, replacer, space) => {
+  try {
+    const supportsRawJSON = "rawJSON" in JSON;
+
+    if (supportsRawJSON) {
+      return originalStringify(
+        value,
+        (key, val) => {
+          if (typeof val === "bigint") return JSON.rawJSON(val.toString());
+
+          const hasFunctionReplacer = typeof replacer === "function";
+
+          if (hasFunctionReplacer) return replacer(key, val);
+
+          const isKeyInArrayReplacer =
+            Array.isArray(replacer) && replacer.includes(key);
+
+          if (isKeyInArrayReplacer) return val;
+
+          return val;
+        },
+        space,
+      );
+    }
+
+    if (!value) return originalStringify(value, replacer, space);
+
+    const convertedToCustomJSON = originalStringify(
+      value,
+      (key, val) => {
+        const isNoise = typeof val === "string" && noiseValue.test(val);
+
+        if (isNoise) return val.toString() + "n"; // Mark noise values with additional "n" to offset the deletion of one "n" during the processing
+
+        if (typeof val === "bigint") return val.toString() + "n";
+
+        const hasFunctionReplacer = typeof replacer === "function";
+
+        if (hasFunctionReplacer) return replacer(key, val);
+
+        const isKeyInArrayReplacer =
+          Array.isArray(replacer) && replacer.includes(key);
+
+        if (isKeyInArrayReplacer) return val;
+
+        return val;
+      },
+      space,
+    );
+
+    const processedJSON = convertedToCustomJSON.replace(
+      bigIntsStringify,
+      "$1$2$3",
+    ); // Delete one "n" off the end of every BigInt value
+
+    const denoisedJSON = processedJSON.replace(noiseStringify, "$1$2$3"); // Remove one "n" off the end of every noisy string
+
+    return denoisedJSON;
+  } catch (error) {
+    if (error instanceof RangeError) {
+      const convertedJSON = stringifyIteratively(value, replacer, space);
+
+      if (convertedJSON === undefined) return undefined;
+
+      const supportsRawJSON = "rawJSON" in JSON;
+
+      if (supportsRawJSON) return convertedJSON;
+
+      const processedJSON = convertedJSON.replace(bigIntsStringify, "$1$2$3");
+
+      return processedJSON.replace(noiseStringify, "$1$2$3");
+    }
+
+    throw error;
+  }
+};
+
+const featureCache = new Map();
+
+/**
+ * Detects if the current JSON.parse implementation supports the context.source feature.
+ *
+ * Uses toString() fingerprinting to cache results and automatically detect runtime
+ * replacements of JSON.parse (polyfills, mocks, etc.).
+ *
+ * @returns {boolean} true if context.source is supported, false otherwise.
+ */
+const isContextSourceSupported = () => {
+  const parseFingerprint = JSON.parse.toString();
+
+  if (featureCache.has(parseFingerprint)) {
+    return featureCache.get(parseFingerprint);
+  }
+
+  try {
+    const result = JSON.parse(
+      "1",
+      (_, __, context) => !!context?.source && context.source === "1",
+    );
+    featureCache.set(parseFingerprint, result);
+
+    return result;
+  } catch {
+    featureCache.set(parseFingerprint, false);
+
+    return false;
+  }
+};
+
+/**
+ * Reviver function that converts custom-format BigInt strings back to BigInt values.
+ * Also handles "noise" strings that accidentally match the BigInt format.
+ *
+ * @param {string | number | undefined} key The object key.
+ * @param {*} value The value being parsed.
+ * @param {object} [context] Parse context (if supported by JSON.parse).
+ * @param {Reviver} [userReviver] User's custom reviver function.
+ * @returns {any} The transformed value.
+ */
+const convertMarkedBigIntsReviver = (key, value, context, userReviver) => {
+  const isCustomFormatBigInt =
+    typeof value === "string" && customFormat.test(value);
+
+  if (isCustomFormatBigInt) return BigInt(value.slice(0, -1));
+
+  const isNoiseValue = typeof value === "string" && noiseValue.test(value);
+  if (isNoiseValue) return value.slice(0, -1);
+
+  const hasUserReviver = typeof userReviver === "function";
+
+  if (!hasUserReviver) return value;
+
+  return userReviver(key, value, context);
+};
+
+/**
+ * Fast JSON.parse implementation (~2x faster than classic fallback).
+ * Uses JSON.parse's context.source feature to detect integers and convert
+ * large numbers directly to BigInt without string manipulation.
+ *
+ * Does not support legacy custom format from v1 of this library.
+ *
+ * @param {string} text JSON string to parse.
+ * @param {Reviver} [reviver] Transform function to apply to each value.
+ * @returns {any} Parsed JavaScript value.
+ */
+const JSONParseV2 = (text, reviver) => {
+  return JSON.parse(text, (key, value, context) => {
+    const isNumber = typeof value === "number";
+    const isOutOfBounds =
+      value > Number.MAX_SAFE_INTEGER || value < Number.MIN_SAFE_INTEGER;
+    const isBigNumber = isNumber && isOutOfBounds;
+    const isInt = context && intRegex.test(context.source);
+    const isBigInt = isBigNumber && isInt;
+
+    if (isBigInt) return BigInt(context.source);
+
+    const hasCustomReviver = typeof reviver === "function";
+
+    if (!hasCustomReviver) return value;
+
+    return reviver(key, value, context);
+  });
+};
+
+const MAX_INT = Number.MAX_SAFE_INTEGER.toString();
+const MAX_DIGITS = MAX_INT.length;
+const stringsOrLargeNumbers =
+  /"(?:\\.|[^"])*"|-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/g;
+const noiseValueWithQuotes = /^"-?\d+n+"$/; // Noise - strings that match the custom format before being converted to it
+
+/**
+ * Iteratively traverses the parsed object bottom-up (post-order),
+ * emulating the native JSON.parse reviver behavior.
+ * This avoids Call Stack overflows (RangeError) on deeply nested structures.
+ *
+ * @param {any} parsed The natively parsed JSON object.
+ * @param {Reviver} [userReviver] User's custom reviver function.
+ * @returns {any} The fully processed object.
+ */
+const applyReviverIteratively = (parsed, userReviver) => {
+  const rootHolder = { "": parsed };
+  const stack = [{ parent: rootHolder, key: "", visited: false }];
+
+  while (stack.length > 0) {
+    const node = stack[stack.length - 1];
+
+    if (!node.visited) {
+      node.visited = true;
+
+      const value = node.parent[node.key];
+      const isComplexObject = value !== null && typeof value === "object";
+
+      if (isComplexObject) {
+        const keys = Object.keys(value);
+
+        for (let i = keys.length - 1; i >= 0; i--) {
+          stack.push({ parent: value, key: keys[i], visited: false });
+        }
+      }
+    } else {
+      const { parent, key } = node;
+      let value = parent[key];
+
+      if (typeof value === "string") {
+        const isCustomFormatBigInt = customFormat.test(value);
+
+        if (isCustomFormatBigInt) {
+          value = BigInt(value.slice(0, -1));
+        } else {
+          const isNoise = noiseValue.test(value);
+
+          if (isNoise) value = value.slice(0, -1);
+        }
+      }
+
+      const hasUserReviver = typeof userReviver === "function";
+
+      if (hasUserReviver) {
+        value = userReviver.call(parent, key, value);
+      }
+
+      const isDeleted = value === undefined;
+
+      if (isDeleted) {
+        delete parent[key];
+      } else {
+        parent[key] = value;
+      }
+
+      stack.pop();
+    }
+  }
+
+  return rootHolder[""];
+};
+
+/**
+ * Pre-processes the JSON string to mark large numbers with an 'n' suffix.
+ *
+ * @param {string} text The raw JSON string.
+ * @returns {string} The serialized string with marked BigInts.
+ */
+const serializeBigInts = (text) => {
+  return text.replace(
+    stringsOrLargeNumbers,
+    (match, digits, fractional, exponential) => {
+      const isString = match[0] === '"';
+      const isNoise = isString && noiseValueWithQuotes.test(match);
+
+      if (isNoise) return match.substring(0, match.length - 1) + 'n"'; // Mark noise values with additional "n" to offset the deletion of one "n" during the processing
+
+      const hasFractionalOrExponential = fractional || exponential;
+
+      // With a fixed number of digits, we can correctly use lexicographical comparison to do a numeric comparison
+      const isLessThanMaxSafeInt =
+        digits &&
+        (digits.length < MAX_DIGITS ||
+          (digits.length === MAX_DIGITS && digits <= MAX_INT));
+
+      const isStandardValue =
+        isString || hasFractionalOrExponential || isLessThanMaxSafeInt;
+
+      if (isStandardValue) return match;
+
+      return '"' + match + 'n"';
+    },
+  );
+};
+
+/**
+ * Converts a JSON string into a JavaScript value.
+ *
+ * Supports parsing of large integers using two strategies:
+ * 1. Classic fallback: Marks large numbers with "123n" format, then converts to BigInt
+ * 2. Fast path (JSONParseV2): Uses context.source feature (~2x faster) when available
+ *
+ * All other JSON values are parsed exactly like native JSON.parse().
+ *
+ * @param {string} text A valid JSON string.
+ * @param {Reviver} [reviver]
+ * A function that transforms the results. This function is called for each member
+ * of the object. If a member contains nested objects, the nested objects are
+ * transformed before the parent object is.
+ * @returns {any} The parsed JavaScript value.
+ * @throws {SyntaxError} If text is not valid JSON.
+ */
+const JSONParse = (text, reviver) => {
+  if (!text) return originalParse(text, reviver);
+
+  try {
+    if (isContextSourceSupported()) return JSONParseV2(text, reviver); // Shortcut to a faster (2x) and simpler version
+
+    // Find and mark big numbers with "n"
+    const serializedData = serializeBigInts(text);
+
+    return originalParse(serializedData, (key, value, context) =>
+      convertMarkedBigIntsReviver(key, value, context, reviver),
+    );
+  } catch (error) {
+    if (error instanceof RangeError) {
+      const serializedData = serializeBigInts(text);
+      const parsed = originalParse(serializedData);
+
+      return applyReviverIteratively(parsed, reviver);
+    }
+
+    throw error;
+  }
+};
+
+
+
+;// CONCATENATED MODULE: ./node_modules/@octokit/request-error/dist-src/index.js
+class RequestError extends Error {
+  name;
+  /**
+   * http status code
+   */
+  status;
+  /**
+   * Request options that lead to the error.
+   */
+  request;
+  /**
+   * Response object if a response was received
+   */
+  response;
+  constructor(message, statusCode, options) {
+    super(message, { cause: options.cause });
+    this.name = "HttpError";
+    this.status = Number.parseInt(statusCode);
+    if (Number.isNaN(this.status)) {
+      this.status = 0;
+    }
+    /* v8 ignore else -- @preserve -- Bug with vitest coverage where it sees an else branch that doesn't exist */
+    if ("response" in options) {
+      this.response = options.response;
+    }
+    const requestCopy = Object.assign({}, options.request);
+    if (options.request.headers.authorization) {
+      requestCopy.headers = Object.assign({}, options.request.headers, {
+        authorization: options.request.headers.authorization.replace(
+          /(?<! ) .*$/,
+          " [REDACTED]"
+        )
+      });
+    }
+    requestCopy.url = requestCopy.url.replace(/\bclient_secret=\w+/g, "client_secret=[REDACTED]").replace(/\baccess_token=\w+/g, "access_token=[REDACTED]");
+    this.request = requestCopy;
+  }
+}
+
+
+;// CONCATENATED MODULE: ./node_modules/@octokit/request/dist-bundle/index.js
+// pkg/dist-src/index.js
+
+
+// pkg/dist-src/defaults.js
+
+
+// pkg/dist-src/version.js
+var dist_bundle_VERSION = "10.0.13";
+
+// pkg/dist-src/defaults.js
+var defaults_default = {
+  headers: {
+    "user-agent": `octokit-request.js/${dist_bundle_VERSION} ${getUserAgent()}`
+  }
+};
+
+// pkg/dist-src/fetch-wrapper.js
+
+
+
+// pkg/dist-src/is-plain-object.js
+function dist_bundle_isPlainObject(value) {
+  if (typeof value !== "object" || value === null) return false;
+  if (Object.prototype.toString.call(value) !== "[object Object]") return false;
+  const proto = Object.getPrototypeOf(value);
+  if (proto === null) return true;
+  const Ctor = Object.prototype.hasOwnProperty.call(proto, "constructor") && proto.constructor;
+  return typeof Ctor === "function" && Ctor instanceof Ctor && Function.prototype.call(Ctor) === Function.prototype.call(value);
+}
+
+// pkg/dist-src/fetch-wrapper.js
+
+var noop = () => "";
+async function fetchWrapper(requestOptions) {
+  const fetch = requestOptions.request?.fetch || globalThis.fetch;
+  if (!fetch) {
+    throw new Error(
+      "fetch is not set. Please pass a fetch implementation as new Octokit({ request: { fetch }}). Learn more at https://github.com/octokit/octokit.js/#fetch-missing"
+    );
+  }
+  const log = requestOptions.request?.log || console;
+  const parseSuccessResponseBody = requestOptions.request?.parseSuccessResponseBody !== false;
+  const body = dist_bundle_isPlainObject(requestOptions.body) || Array.isArray(requestOptions.body) ? JSONStringify(requestOptions.body) : requestOptions.body;
+  const requestHeaders = Object.fromEntries(
+    Object.entries(requestOptions.headers).map(([name, value]) => [
+      name,
+      String(value)
+    ])
+  );
+  let fetchResponse;
+  try {
+    fetchResponse = await fetch(requestOptions.url, {
+      method: requestOptions.method,
+      body,
+      redirect: requestOptions.request?.redirect,
+      headers: requestHeaders,
+      signal: requestOptions.request?.signal,
+      // duplex must be set if request.body is ReadableStream or Async Iterables.
+      // See https://fetch.spec.whatwg.org/#dom-requestinit-duplex.
+      ...requestOptions.body && { duplex: "half" }
+    });
+  } catch (error) {
+    let message = "Unknown Error";
+    if (error instanceof Error) {
+      if (error.name === "AbortError") {
+        error.status = 500;
+        throw error;
+      }
+      message = error.message;
+      if (error.name === "TypeError" && "cause" in error) {
+        if (error.cause instanceof Error) {
+          message = error.cause.message;
+        } else if (typeof error.cause === "string") {
+          message = error.cause;
+        }
+      }
+    }
+    const requestError = new RequestError(message, 500, {
+      request: requestOptions
+    });
+    requestError.cause = error;
+    throw requestError;
+  }
+  const status = fetchResponse.status;
+  const url = fetchResponse.url;
+  const responseHeaders = {};
+  for (const [key, value] of fetchResponse.headers) {
+    responseHeaders[key] = value;
+  }
+  const octokitResponse = {
+    url,
+    status,
+    headers: responseHeaders,
+    data: ""
+  };
+  if ("deprecation" in responseHeaders) {
+    const matches = responseHeaders.link && responseHeaders.link.match(/<([^<>]+)>; rel="deprecation"/);
+    const deprecationLink = matches && matches.pop();
+    log.warn(
+      `[@octokit/request] "${requestOptions.method} ${requestOptions.url}" is deprecated. It is scheduled to be removed on ${responseHeaders.sunset}${deprecationLink ? `. See ${deprecationLink}` : ""}`
+    );
+  }
+  if (status === 204 || status === 205) {
+    return octokitResponse;
+  }
+  if (requestOptions.method === "HEAD") {
+    if (status < 400) {
+      return octokitResponse;
+    }
+    throw new RequestError(fetchResponse.statusText, status, {
+      response: octokitResponse,
+      request: requestOptions
+    });
+  }
+  if (status === 304) {
+    octokitResponse.data = await getResponseData(fetchResponse);
+    throw new RequestError("Not modified", status, {
+      response: octokitResponse,
+      request: requestOptions
+    });
+  }
+  if (status >= 400) {
+    octokitResponse.data = await getResponseData(fetchResponse);
+    throw new RequestError(toErrorMessage(octokitResponse.data), status, {
+      response: octokitResponse,
+      request: requestOptions
+    });
+  }
+  octokitResponse.data = parseSuccessResponseBody ? await getResponseData(fetchResponse) : fetchResponse.body;
+  return octokitResponse;
+}
+async function getResponseData(response) {
+  const contentType = response.headers.get("content-type");
+  if (!contentType) {
+    return response.text().catch(noop);
+  }
+  const mimetype = (0,dist/* parse */.qg)(contentType);
+  if (isJSONResponse(mimetype)) {
+    let text = "";
+    try {
+      text = await response.text();
+      return JSONParse(text);
+    } catch (err) {
+      return text;
+    }
+  } else if (mimetype.type.startsWith("text/") || // `application/octet-stream` is the canonical "arbitrary binary" type
+  // (RFC 2046) and must never be decoded as text, even when the response
+  // carries a (misleading) `charset=utf-8` parameter — see #751.
+  mimetype.parameters.charset?.toLowerCase() === "utf-8" && mimetype.type !== "application/octet-stream") {
+    return response.text().catch(noop);
+  } else {
+    return response.arrayBuffer().catch(
+      /* v8 ignore next -- @preserve */
+      () => new ArrayBuffer(0)
+    );
+  }
+}
+function isJSONResponse(mimetype) {
+  return mimetype.type === "application/json" || mimetype.type === "application/scim+json";
+}
+function toErrorMessage(data) {
+  if (typeof data === "string") {
+    return data;
+  }
+  if (data instanceof ArrayBuffer) {
+    return "Unknown error";
+  }
+  if (typeof data === "object" && data !== null && "message" in data) {
+    const objectData = data;
+    const suffix = "documentation_url" in objectData ? ` - ${objectData.documentation_url}` : "";
+    return Array.isArray(objectData.errors) ? `${objectData.message}: ${objectData.errors.map((v) => JSON.stringify(v)).join(", ")}${suffix}` : `${objectData.message}${suffix}`;
+  }
+  return `Unknown error: ${JSON.stringify(data)}`;
+}
+
+// pkg/dist-src/with-defaults.js
+function dist_bundle_withDefaults(oldEndpoint, newDefaults) {
+  const endpoint2 = oldEndpoint.defaults(newDefaults);
+  const newApi = function(route, parameters) {
+    const endpointOptions = endpoint2.merge(route, parameters);
+    if (!endpointOptions.request || !endpointOptions.request.hook) {
+      return fetchWrapper(endpoint2.parse(endpointOptions));
+    }
+    const request2 = (route2, parameters2) => {
+      return fetchWrapper(
+        endpoint2.parse(endpoint2.merge(route2, parameters2))
+      );
+    };
+    Object.assign(request2, {
+      endpoint: endpoint2,
+      defaults: dist_bundle_withDefaults.bind(null, endpoint2)
+    });
+    return endpointOptions.request.hook(request2, endpointOptions);
+  };
+  return Object.assign(newApi, {
+    endpoint: endpoint2,
+    defaults: dist_bundle_withDefaults.bind(null, endpoint2)
+  });
+}
+
+// pkg/dist-src/index.js
+var request = dist_bundle_withDefaults(endpoint, defaults_default);
+
+/* v8 ignore next -- @preserve */
+/* v8 ignore else -- @preserve */
+
+;// CONCATENATED MODULE: ./node_modules/@octokit/graphql/dist-bundle/index.js
+// pkg/dist-src/index.js
+
+
+
+// pkg/dist-src/version.js
+var graphql_dist_bundle_VERSION = "0.0.0-development";
+
+// pkg/dist-src/with-defaults.js
+
+
+// pkg/dist-src/graphql.js
+
+
+// pkg/dist-src/error.js
+function _buildMessageForResponseErrors(data) {
+  return `Request failed due to following response errors:
+` + data.errors.map((e) => ` - ${e.message}`).join("\n");
+}
+var GraphqlResponseError = class extends Error {
+  constructor(request2, headers, response) {
+    super(_buildMessageForResponseErrors(response));
+    this.request = request2;
+    this.headers = headers;
+    this.response = response;
+    this.errors = response.errors;
+    this.data = response.data;
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
+  }
+  request;
+  headers;
+  response;
+  name = "GraphqlResponseError";
+  errors;
+  data;
+};
+
+// pkg/dist-src/graphql.js
+var NON_VARIABLE_OPTIONS = [
+  "method",
+  "baseUrl",
+  "url",
+  "headers",
+  "request",
+  "query",
+  "mediaType",
+  "operationName"
+];
+var FORBIDDEN_VARIABLE_OPTIONS = ["query", "method", "url"];
+var GHES_V3_SUFFIX_REGEX = /\/api\/v3\/?$/;
+function graphql(request2, query, options) {
+  if (options) {
+    if (typeof query === "string" && "query" in options) {
+      return Promise.reject(
+        new Error(`[@octokit/graphql] "query" cannot be used as variable name`)
+      );
+    }
+    for (const key in options) {
+      if (!FORBIDDEN_VARIABLE_OPTIONS.includes(key)) continue;
+      return Promise.reject(
+        new Error(
+          `[@octokit/graphql] "${key}" cannot be used as variable name`
+        )
+      );
+    }
+  }
+  const parsedOptions = typeof query === "string" ? Object.assign({ query }, options) : query;
+  const requestOptions = Object.keys(
+    parsedOptions
+  ).reduce((result, key) => {
+    if (NON_VARIABLE_OPTIONS.includes(key)) {
+      result[key] = parsedOptions[key];
+      return result;
+    }
+    if (!result.variables) {
+      result.variables = {};
+    }
+    result.variables[key] = parsedOptions[key];
+    return result;
+  }, {});
+  const baseUrl = parsedOptions.baseUrl || request2.endpoint.DEFAULTS.baseUrl;
+  if (GHES_V3_SUFFIX_REGEX.test(baseUrl)) {
+    requestOptions.url = baseUrl.replace(GHES_V3_SUFFIX_REGEX, "/api/graphql");
+  }
+  return request2(requestOptions).then((response) => {
+    if (response.data.errors) {
+      const headers = {};
+      for (const key of Object.keys(response.headers)) {
+        headers[key] = response.headers[key];
+      }
+      throw new GraphqlResponseError(
+        requestOptions,
+        headers,
+        response.data
+      );
+    }
+    return response.data.data;
+  });
+}
+
+// pkg/dist-src/with-defaults.js
+function graphql_dist_bundle_withDefaults(request2, newDefaults) {
+  const newRequest = request2.defaults(newDefaults);
+  const newApi = (query, options) => {
+    return graphql(newRequest, query, options);
+  };
+  return Object.assign(newApi, {
+    defaults: graphql_dist_bundle_withDefaults.bind(null, newRequest),
+    endpoint: newRequest.endpoint
+  });
+}
+
+// pkg/dist-src/index.js
+var graphql2 = graphql_dist_bundle_withDefaults(request, {
+  headers: {
+    "user-agent": `octokit-graphql.js/${graphql_dist_bundle_VERSION} ${getUserAgent()}`
+  },
+  method: "POST",
+  url: "/graphql"
+});
+function withCustomRequest(customRequest) {
+  return graphql_dist_bundle_withDefaults(customRequest, {
+    method: "POST",
+    url: "/graphql"
+  });
+}
+
+/* v8 ignore if -- @preserve */
+
+;// CONCATENATED MODULE: ./src/core/fetch.ts
+
+/**
+ * `includeForks === false` (default) fragment: reads the per-repository
+ * contribution breakdown (capped at 100 repos, no pagination — RESEARCH.md
+ * Common Pitfall 3) so fork-authored contributions can be filtered
+ * client-side in `fetchProfileData`, plus a fork-excluded `repositories()`
+ * fan-out for the stars sum (`contributionsCollection` has no stars field
+ * at all — RESEARCH.md Pitfall 3). `restrictedContributionsCount` is
+ * requested here but is read-and-discarded downstream (DATA-05) — never
+ * written into `ProfileData`.
+ */
+const STATS_FRAGMENT_EXCLUDE_FORKS = `
+      contributionsCollection {
+        restrictedContributionsCount
+        commitContributionsByRepository(maxRepositories: 100) {
+          contributions { totalCount }
+          repository { isFork }
+        }
+        issueContributionsByRepository(maxRepositories: 100) {
+          contributions { totalCount }
+          repository { isFork }
+        }
+        pullRequestContributionsByRepository(maxRepositories: 100) {
+          contributions { totalCount }
+          repository { isFork }
+        }
+      }
+      repositories(first: 100, isFork: false, ownerAffiliations: [OWNER], privacy: PUBLIC, orderBy: { field: STARGAZERS, direction: DESC }) {
+        nodes { stargazerCount }
+      }`;
+/**
+ * `includeForks === true` (opt-in) fragment: the cheap path — plain
+ * `contributionsCollection` scalars, no per-repository fan-out for
+ * commits/issues/PRs, and an unfiltered `repositories()` fan-out (no
+ * `isFork: false` argument) for the stars sum.
+ */
+const STATS_FRAGMENT_INCLUDE_FORKS = `
+      contributionsCollection {
+        totalCommitContributions
+        totalIssueContributions
+        totalPullRequestContributions
+        restrictedContributionsCount
+      }
+      repositories(first: 100, ownerAffiliations: [OWNER], privacy: PUBLIC, orderBy: { field: STARGAZERS, direction: DESC }) {
+        nodes { stargazerCount }
+      }`;
+/**
+ * Compose the GraphQL query text needed to satisfy the union of every
+ * enabled widget's declared capabilities. Returns null for the zero-
+ * capability case (DATA-03: Almanac needs no fetch at all).
+ *
+ * Always queries `user(login: $login)`, never `viewer` — `GITHUB_TOKEN`
+ * authenticates as `github-actions[bot]` inside a real Actions run, not the
+ * repo owner (RESEARCH.md Common Pitfall 2 / threat T-02-03). `login` is
+ * declared ONLY as the GraphQL variable `$login`; this function never
+ * accepts or interpolates an actual login string, so it has no way to
+ * string-inject one even if handed a malicious value (threat T-02-02) — the
+ * real value is supplied by the caller (`fetchProfileData`) via
+ * `@octokit/graphql`'s variables mechanism, never text concatenation.
+ */
+function buildQuery(capabilities, includeForks) {
+    if (capabilities.size === 0) {
+        return null;
+    }
+    const fragments = [];
+    if (capabilities.has("stats")) {
+        fragments.push(includeForks ? STATS_FRAGMENT_INCLUDE_FORKS : STATS_FRAGMENT_EXCLUDE_FORKS);
+    }
+    return `query ProfileStats($login: String!) {
+    user(login: $login) {
+      login
+      name
+      avatarUrl
+      followers { totalCount }
+${fragments.join("\n")}
+    }
+    rateLimit { cost limit remaining }
+  }`;
+}
+/**
+ * The zero-capability placeholder ProfileData, extracted as its own
+ * synchronous function (Plan 04, Rule 3 — blocking) so `core/pipeline.ts`
+ * (which must stay synchronous — `renderAllCards()` returns an array, not a
+ * Promise) can obtain it without awaiting `fetchProfileData`, which is
+ * declared `async` and therefore always returns a Promise regardless of
+ * whether its zero-capability branch actually awaits anything.
+ */
+function zeroCapabilityProfileData() {
+    return {
+        login: "",
+        name: null,
+        avatarUrl: "",
+        followers: 0,
+        fetchedAt: new Date(0).toISOString(),
+        stats: { totalCommits: 0, totalPRs: 0, totalIssues: 0, totalStars: 0 },
+    };
+}
+/** Sums `contributions.totalCount` over non-fork entries only. */
+function sumExcludingForks(entries) {
+    return (entries ?? []).filter((entry) => !entry.repository.isFork).reduce((sum, entry) => sum + entry.contributions.totalCount, 0);
+}
+/**
+ * Fetch profile data sufficient to satisfy `capabilities`. When the set is
+ * empty this returns a placeholder ProfileData immediately, without
+ * constructing or issuing any HTTP request — this is the concrete DATA-03
+ * boundary: the zero-capability path never touches the network. `buildQuery`
+ * is not even called in that branch.
+ *
+ * Any error the underlying `graphql()` call throws (a genuine network
+ * failure, or the 200-status-with-`errors[]` shape GitHub uses for primary
+ * rate-limit exhaustion — RESEARCH.md Common Pitfall 1) is left to propagate
+ * unmodified. This function does not inspect `error.errors[].type` or branch
+ * on any rate-limit-specific condition (RESEARCH.md Assumptions Log A2:
+ * GitHub does not publish a stable `type` string for this) — "the promise
+ * rejected" IS the DATA-07 failure signal, full stop.
+ */
+async function fetchProfileData(capabilities, token, login, includeForks, fetchImpl = fetch) {
+    if (capabilities.size === 0) {
+        return { data: zeroCapabilityProfileData(), pointCost: 0 };
+    }
+    const query = buildQuery(capabilities, includeForks);
+    const result = await graphql2(query, {
+        login,
+        headers: { authorization: `token ${token}` },
+        request: { fetch: fetchImpl },
+    });
+    const { user, rateLimit } = result;
+    const { contributionsCollection: cc } = user;
+    const totalCommits = includeForks
+        ? (cc.totalCommitContributions ?? 0)
+        : sumExcludingForks(cc.commitContributionsByRepository);
+    const totalIssues = includeForks
+        ? (cc.totalIssueContributions ?? 0)
+        : sumExcludingForks(cc.issueContributionsByRepository);
+    const totalPRs = includeForks
+        ? (cc.totalPullRequestContributions ?? 0)
+        : sumExcludingForks(cc.pullRequestContributionsByRepository);
+    // `repositories.nodes` is already server-side filtered by buildQuery's
+    // `isFork: false` argument in the includeForks: false shape — no
+    // client-side re-filtering needed here in either branch.
+    const totalStars = user.repositories.nodes.reduce((sum, node) => sum + node.stargazerCount, 0);
+    const data = {
+        login: user.login,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        followers: user.followers.totalCount,
+        fetchedAt: new Date().toISOString(),
+        stats: { totalCommits, totalIssues, totalPRs, totalStars },
+    };
+    // restrictedContributionsCount (cc.restrictedContributionsCount) is
+    // intentionally read above only as part of the destructured `cc` object
+    // and never assigned into `data` — DATA-05: private-contribution counts
+    // are never fabricated into or leaked through ProfileData.
+    return { data, pointCost: rateLimit.cost };
+}
+/**
+ * Formats a fetch failure into the UI-SPEC "Error state" four-line message.
+ * Reads ONLY `error.message` — never any other property of `error`
+ * (`@octokit/graphql`'s `GraphqlResponseError` carries the full request
+ * object, including the constructed `Authorization` header, on `.request`;
+ * serializing the whole error object would leak the token into Action logs —
+ * threat T-02-01).
+ */
+function formatFetchFailureMessage(error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [
+        "✗ Failed to fetch live profile data from GitHub's GraphQL API",
+        `  ${message}`,
+        "  Point cost for this attempt (if available) was logged above.",
+        "  This may be a temporary rate-limit condition — see GITHUB_STEP_SUMMARY.",
+    ].join("\n");
+}
+
+
+/***/ }),
+
 /***/ 7654:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
@@ -44947,6 +46515,27 @@ function roundCoord(value) {
 /** Matches SVG path-data output: digits, M/L/C/Q/Z commands, decimal point,
  * spaces, and minus sign — see textToPathData's PathCorruptionError guard. */
 const PATH_DATA_CHARSET = /^[MLCQZ0-9.,\-\s]*$/;
+/**
+ * Deterministic retry ladder for the opentype.js bug described above
+ * roundCoord. roundCoord only sanitizes the *starting* anchor passed into
+ * font.getPath() — for a multi-character call (every real card string; only
+ * letterSpacedPath-style manual per-character callers get roundCoord applied
+ * on every glyph) opentype.js accumulates each subsequent glyph's cursor
+ * position internally, in unrounded floating point, and that internal
+ * accumulation can independently land on the same class of poisoned float64
+ * bit pattern for a glyph anywhere in the string — confirmed in production
+ * (2026-08-09): Almanac's 危 忌 line, "忌：直接改 production 資料" at the
+ * card's fixed x=24, corrupts starting at the "d" in "production" (10th
+ * character) even though x=24 itself is already an integer. Since the bug is
+ * exact-value-specific, shifting the whole run's starting x by a tiny,
+ * sub-visual offset changes every downstream glyph's accumulated position
+ * and reliably escapes the poisoned value — empirically, the real-world case
+ * above was still corrupt at x=24±0.001 and x=24±0.002 but clean by
+ * x=24±0.003, so this ladder carries margin past that. Order tries the
+ * unmodified anchor first so the overwhelming majority of calls (which never
+ * hit this bug) pay zero extra cost.
+ */
+const CORRUPTION_RETRY_OFFSETS = [0, 0.001, -0.001, 0.002, -0.002, 0.003, -0.003, 0.005, -0.005, 0.01, -0.01, 0.02, -0.02];
 class UnknownFontError extends Error {
     constructor(name) {
         super(`UnknownFontError: no font has been registered under the name "${name}".`);
@@ -45016,13 +46605,18 @@ function textToPathData(name, text, x, y, fontSize) {
         return "";
     }
     const font = getRegisteredFont(name);
-    const pathData = font
-        .getPath(text, roundCoord(x), roundCoord(y), fontSize)
-        .toPathData(PATH_DECIMAL_PLACES);
-    if (!PATH_DATA_CHARSET.test(pathData)) {
-        throw new PathCorruptionError(name, text, pathData);
+    const roundedX = roundCoord(x);
+    const roundedY = roundCoord(y);
+    let pathData = "";
+    for (const offset of CORRUPTION_RETRY_OFFSETS) {
+        pathData = font
+            .getPath(text, roundCoord(roundedX + offset), roundedY, fontSize)
+            .toPathData(PATH_DECIMAL_PLACES);
+        if (PATH_DATA_CHARSET.test(pathData)) {
+            return pathData;
+        }
     }
-    return pathData;
+    throw new PathCorruptionError(name, text, pathData);
 }
 /**
  * RENDER-05 gate for engine-authored text: throws GlyphCoverageError on the
@@ -45085,62 +46679,22 @@ function glyphPlaceholderPath(_fontName, _char, x, y, fontSize) {
 
 /***/ }),
 
-/***/ 6701:
+/***/ 916:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
 
 // EXPORTS
 __nccwpck_require__.d(__webpack_exports__, {
-  Rf: () => (/* binding */ renderAllCards)
+  Oj: () => (/* binding */ fetchSharedData),
+  Rf: () => (/* binding */ renderAllCards),
+  ES: () => (/* binding */ resolveCards),
+  eW: () => (/* binding */ resolveTheme)
 });
 
-// UNUSED EXPORTS: InvalidCardOptionsError, UnknownWidgetError
+// UNUSED EXPORTS: ConflictingStatsOptionsError, InvalidCardOptionsError, UnknownWidgetError
 
-;// CONCATENATED MODULE: ./src/core/fetch.ts
-/**
- * Compose the GraphQL query text needed to satisfy the union of every
- * enabled widget's declared capabilities. Returns null for the zero-
- * capability case (DATA-03: Almanac needs no fetch at all).
- */
-function buildQuery(capabilities) {
-    if (capabilities.size === 0) {
-        return null;
-    }
-    // Capability-to-fragment composition is Phase 2 scope (DATA-01/DATA-02).
-    throw new Error("not implemented until Phase 2");
-}
-/**
- * The zero-capability placeholder ProfileData, extracted as its own
- * synchronous function (Plan 04, Rule 3 — blocking) so `core/pipeline.ts`
- * (which must stay synchronous — `renderAllCards()` returns an array, not a
- * Promise) can obtain it without awaiting `fetchProfileData`, which is
- * declared `async` and therefore always returns a Promise regardless of
- * whether its zero-capability branch actually awaits anything.
- */
-function zeroCapabilityProfileData() {
-    return {
-        login: "",
-        name: null,
-        avatarUrl: "",
-        followers: 0,
-        fetchedAt: new Date(0).toISOString(),
-        stats: { totalCommits: 0, totalPRs: 0, totalIssues: 0, totalStars: 0 },
-    };
-}
-/**
- * Fetch profile data sufficient to satisfy `capabilities`. When the set is
- * empty this returns a placeholder ProfileData immediately, without
- * constructing or issuing any HTTP request — this is the concrete DATA-03
- * boundary: the zero-capability path never touches the network.
- */
-async function fetchProfileData(capabilities, token) {
-    if (capabilities.size === 0) {
-        return zeroCapabilityProfileData();
-    }
-    // Non-empty-capability fetching is Phase 2 scope (DATA-01/DATA-02).
-    throw new Error("not implemented until Phase 2");
-}
-
+// EXTERNAL MODULE: ./src/core/fetch.ts + 6 modules
+var fetch = __nccwpck_require__(6657);
 // EXTERNAL MODULE: ./src/core/registry.ts
 var registry = __nccwpck_require__(4692);
 ;// CONCATENATED MODULE: ./src/core/svg.ts
@@ -45239,6 +46793,43 @@ const editorialDark = {
     rule: "#4A3F35",
     muted: "#A28E78",
 };
+// 02-UI-SPEC.md "Theme Registry" table's dracula column — hex values copied
+// verbatim from spec.draculatheme.com (the theme's own canonical source), not
+// reinterpreted (THEME-03: adopters recognize the project as built for them).
+// D-07: dracula is effectively dark-only in the ecosystem's own understanding
+// of the name, so `mode` is honestly `'dark'` here — this is purely
+// descriptive metadata, no render logic branches on it.
+const draculaTheme = {
+    name: "dracula",
+    mode: "dark",
+    paper: "#282A36",
+    ink: "#F8F8F2",
+    accent: "#BD93F9",
+    rule: "#44475A",
+    muted: "#6272A4",
+};
+// 02-UI-SPEC.md "Theme Registry" table's nord column — hex values copied
+// verbatim from nordtheme.com/docs/colors-and-palettes.
+const nordTheme = {
+    name: "nord",
+    mode: "dark",
+    paper: "#2E3440",
+    ink: "#ECEFF4",
+    accent: "#88C0D0",
+    rule: "#4C566A",
+    muted: "#D8DEE9",
+};
+// 02-UI-SPEC.md "Theme Registry" table's tokyonight column — hex values
+// copied verbatim from tokyonight.nvim's "night" variant source.
+const tokyonightTheme = {
+    name: "tokyonight",
+    mode: "dark",
+    paper: "#1A1B26",
+    ink: "#C0CAF5",
+    accent: "#7AA2F7",
+    rule: "#3B4261",
+    muted: "#565F89",
+};
 
 ;// CONCATENATED MODULE: ./src/core/pipeline.ts
 
@@ -45284,14 +46875,55 @@ class InvalidCardOptionsError extends Error {
     }
 }
 /**
+ * Two `stats`-requiring cards declared conflicting `include_forks` values.
+ *
+ * `fetchSharedData` fetches exactly once per run (DATA-01) and picks a single
+ * `includeForks` boolean for that one fetch — there is no way to honor two
+ * different values in one request. Rather than silently applying one card's
+ * setting to the other (CR-01), this is a hard config error naming both cards
+ * so the adopter fixes their `widgets.yml` instead of shipping wrong numbers.
+ */
+class ConflictingStatsOptionsError extends Error {
+    constructor(ids) {
+        super(`✗ 卡片 ${ids.map((id) => `"${id}"`).join("、")} 都需要 stats 資料，但 include_forks 設定不一致——` +
+            `同一次執行只會抓一次資料，無法讓每張卡片各自套用不同的 include_forks。請讓這些卡片使用相同的 include_forks 設定。`);
+        this.name = "ConflictingStatsOptionsError";
+    }
+}
+/**
  * `theme:` value -> the light/dark pair it resolves to.
  *
- * A map rather than an if/else so THEME-03/04's eventual catalog is a data
- * change here, not a control-flow change.
+ * A map rather than an if/else so THEME-01/03/04's catalog is a data change
+ * here, not a control-flow change. D-06 locks the catalog at exactly these
+ * four entries; `ResolvedConfig["theme"]`'s own union type (`config.ts`'s
+ * `z.enum`) is what makes "exactly four, not five" a structural guarantee —
+ * this `Record` cannot even compile with a key `config.ts`'s enum doesn't
+ * also accept.
+ *
+ * D-07: `dracula`/`nord`/`tokyonight` are single-mode ecosystem themes with
+ * no light counterpart the ecosystem recognizes as "real" — each one's
+ * `light` and `dark` fields deliberately point at the SAME `Theme` object
+ * reference (not two separately-constructed objects that merely happen to
+ * hold equal values). `renderPair` calls `renderBody` once per field; two
+ * calls against the same object reference are byte-for-byte identical by
+ * construction, with no extra comparison step required.
  */
 const THEME_PAIRS = {
     editorial: { light: editorialLight, dark: editorialDark },
+    dracula: { light: draculaTheme, dark: draculaTheme },
+    nord: { light: nordTheme, dark: nordTheme },
+    tokyonight: { light: tokyonightTheme, dark: tokyonightTheme },
 };
+/**
+ * Resolve a `widgets.yml` `theme:` value to the `{ light, dark }` pair
+ * `renderAllCards` needs. Exists so callers (`action-entry.ts`/`cli.ts`)
+ * don't need to import `THEME_PAIRS` themselves or know its internal
+ * structure — they pass a plain `config.theme` string in and get a themes
+ * object back. Covers all four of D-06's catalog entries.
+ */
+function resolveTheme(theme) {
+    return THEME_PAIRS[theme];
+}
 /**
  * Turn a widget schema's validation failure into problem lines a person can
  * act on, in the same register as `core/config.ts`'s D-12 report.
@@ -45310,7 +46942,10 @@ const THEME_PAIRS = {
  * key precisely is the most that can be done without that change.
  */
 function describeOptionsFailure(error) {
-    if (error && typeof error === "object" && "issues" in error) {
+    if (error &&
+        typeof error === "object" &&
+        "issues" in error &&
+        Array.isArray(error.issues)) {
         const issues = error.issues;
         return issues.map((issue) => {
             if (issue.code === "unrecognized_keys" && issue.keys && issue.keys.length > 0) {
@@ -45324,24 +46959,19 @@ function describeOptionsFailure(error) {
     return [error instanceof Error ? error.message : String(error)];
 }
 /**
- * Render every card in `config`, in the order the consumer wrote them.
+ * Validate every card in `config` against its registered widget, in the
+ * order the consumer wrote them — the synchronous "resolve" half of
+ * RESEARCH.md Pattern 2. No `fs`, no `path`, no `process`, no network: this
+ * function throws before any network call could ever happen, which is what
+ * makes `fetchSharedData`'s "resolve fully, then fetch once" ordering a
+ * structural guarantee rather than a convention.
  *
- * Pure and synchronous: no `fs`, no `path`, no `process`, no network. Both
- * entry points — `src/cli.ts` today and `src/action-entry.ts` in Plan 05 —
- * call this one function, so a card can never render differently locally than
- * it does inside the Action.
- *
- * Every card is fully rendered and size-checked before ANY of them is
- * returned. A single over-budget or misconfigured card therefore aborts the
- * whole run with nothing written, rather than leaving a half-published set of
- * SVGs on the `output` branch.
+ * This is the same lookup/validation logic `renderAllCards` used to run
+ * inline (`UnknownWidgetError`/`InvalidCardOptionsError`/id/timezone
+ * resolution) — moved here unchanged except that `parsedOptions` is now kept
+ * rather than discarded.
  */
-function renderAllCards(config, globalOpts) {
-    // Almanac declares zero data capabilities (DATA-03), so the render path
-    // holds no remote state at all. This is the synchronous placeholder, not an
-    // awaited fetch — which is what lets this whole function stay synchronous.
-    const data = zeroCapabilityProfileData();
-    const themes = THEME_PAIRS[config.theme];
+function resolveCards(config) {
     return config.cards.map((entry) => {
         const widget = (0,registry/* get */.Jt)(entry.type);
         if (!widget) {
@@ -45351,24 +46981,81 @@ function renderAllCards(config, globalOpts) {
         // The widget owns its own option vocabulary. This is where a typo inside
         // a card's `options:` block is caught — config.ts only checked that the
         // block is a mapping.
+        let parsedOptions;
         try {
-            widget.optionsSchema.parse(entry.options ?? {});
+            parsedOptions = widget.optionsSchema.parse(entry.options ?? {});
         }
         catch (error) {
             throw new InvalidCardOptionsError(id, entry.type, describeOptionsFailure(error));
         }
-        // D-09 allows `timezone` to be overridden per card. `language` has no
-        // such override by design (D-08): it is read from the top level only,
-        // and is never inferred from profile data or from the card entry.
+        // D-09 allows `timezone` to be overridden per card via a reserved
+        // top-level `options.timezone` key — distinct from the widget's own
+        // `optionsSchema` vocabulary (a widget could coincidentally declare its
+        // own unrelated `timezone` option, as almanac's test fixtures do), so
+        // this deliberately reads `entry.options` rather than `parsedOptions`.
+        // `config.ts`'s `CardEntrySchema` leaves `options:` as an unvalidated
+        // `z.record`, so a runtime `typeof` check replaces the previous unchecked
+        // `as string` cast.
+        const rawTimezone = entry.options?.timezone;
+        const timezone = typeof rawTimezone === "string" ? rawTimezone : config.timezone;
+        return { id, widget, parsedOptions, timezone };
+    });
+}
+/**
+ * The ONLY place the pipeline touches the network (RESEARCH.md Pattern 2):
+ * unions every resolved card's declared capabilities, derives the single
+ * `includeForks` boolean the shared fetch needs from the `stats`-requiring
+ * cards, and calls `fetchProfileData` exactly once (DATA-01). Every extra
+ * enabled card beyond the first `stats` consumer is already covered by the
+ * same union of capabilities — this function does not loop per card. Two or
+ * more `stats` cards are allowed only if they all agree on `include_forks`
+ * (see `ConflictingStatsOptionsError`); there is no way to honor divergent
+ * settings from a single fetch.
+ */
+async function fetchSharedData(cards, token, login, fetchImpl) {
+    const capabilities = (0,registry/* collectCapabilities */.F$)(cards.map((card) => card.widget));
+    const statsCards = cards.filter((card) => card.widget.requires.includes("stats"));
+    const distinctIncludeForks = new Set(statsCards.map((card) => Boolean(card.parsedOptions.include_forks)));
+    if (distinctIncludeForks.size > 1) {
+        throw new ConflictingStatsOptionsError(statsCards.map((card) => card.id));
+    }
+    const includeForks = Boolean(statsCards[0]?.parsedOptions.include_forks);
+    return (0,fetch/* fetchProfileData */.Yx)(capabilities, token, login, includeForks, fetchImpl);
+}
+/**
+ * Render every already-resolved card against already-fetched `data`.
+ *
+ * Pure and synchronous: no `fs`, no `path`, no `process`, no network — this
+ * is the "render" third of RESEARCH.md Pattern 2 (`resolveCards` ->
+ * `fetchSharedData` -> `renderAllCards`). Both entry points —
+ * `src/cli.ts`/`src/action-entry.ts` — call `resolveCards`/`fetchSharedData`
+ * first and pass their results in here, so a card can never render
+ * differently locally than it does inside the Action.
+ *
+ * Every card is fully rendered and size-checked before ANY of them is
+ * returned. A single over-budget or misconfigured card therefore aborts the
+ * whole run with nothing written, rather than leaving a half-published set of
+ * SVGs on the `output` branch.
+ */
+function renderAllCards(cards, data, globalOpts, themes) {
+    return cards.map((card) => {
+        // D-09 allows `timezone` to be overridden per card (already resolved
+        // onto `card.timezone` by `resolveCards`). `language` has no such
+        // override by design (D-08): it always comes from `globalOpts`, never
+        // from a card's own `parsedOptions`. Everything else in `parsedOptions`
+        // (e.g. Editorial Stat Card's `include_forks`) is a genuinely real
+        // option value and is passed through untouched — only these four named
+        // fields are overwritten.
         const opts = {
+            ...card.parsedOptions,
             now: globalOpts.now,
             seed: globalOpts.seed,
-            language: config.language,
-            timezone: entry.options?.timezone ?? config.timezone,
+            language: globalOpts.language,
+            timezone: card.timezone,
         };
-        const { light, dark } = renderPair(widget, data, opts, themes);
-        const lightLabel = `${id}-light.svg`;
-        const darkLabel = `${id}-dark.svg`;
+        const { light, dark } = renderPair(card.widget, data, opts, themes);
+        const lightLabel = `${card.id}-light.svg`;
+        const darkLabel = `${card.id}-dark.svg`;
         // Soft budget first (RENDER-07) — this is the one that trips in normal
         // operation. The 1MB canary is a second layer that only fires if the soft
         // budget were ever misconfigured away.
@@ -45376,8 +47063,8 @@ function renderAllCards(config, globalOpts) {
         sizeGuard(dark, darkLabel, SOFT_SIZE_BUDGET_BYTES);
         sizeGuard(light, lightLabel, HARD_SIZE_CANARY_BYTES);
         sizeGuard(dark, darkLabel, HARD_SIZE_CANARY_BYTES);
-        const { title, desc } = widget.describe(data, opts);
-        return { id, light, dark, title, desc };
+        const { title, desc } = card.widget.describe(data, opts);
+        return { id: card.id, light, dark, title, desc };
     });
 }
 
@@ -45486,11 +47173,12 @@ async function publishOutputBranch(files, opts) {
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
 /* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   F$: () => (/* binding */ collectCapabilities),
 /* harmony export */   Jt: () => (/* binding */ get),
 /* harmony export */   Zv: () => (/* binding */ listNames),
 /* harmony export */   kz: () => (/* binding */ register)
 /* harmony export */ });
-/* unused harmony exports DuplicateWidgetError, collectCapabilities */
+/* unused harmony export DuplicateWidgetError */
 class DuplicateWidgetError extends Error {
     constructor(name) {
         super(`DuplicateWidgetError: a widget named "${name}" is already registered.`);
@@ -45583,6 +47271,41 @@ function loadAllFonts(baseDir = process.cwd()) {
     (0,_core_font_js__WEBPACK_IMPORTED_MODULE_2__/* .registerFont */ .fZ)("mono-semibold", readFontBuffer(baseDir, "assets/fonts/ibm-plex-mono-semibold.subset.ttf"));
     (0,_core_font_js__WEBPACK_IMPORTED_MODULE_2__/* .registerFont */ .fZ)("serif", readFontBuffer(baseDir, "assets/fonts/source-serif-4.subset.ttf"));
     (0,_core_font_js__WEBPACK_IMPORTED_MODULE_2__/* .registerFont */ .fZ)("noto-tc", readFontBuffer(baseDir, "assets/fonts/noto-serif-tc.subset.ttf"));
+}
+
+
+/***/ }),
+
+/***/ 9162:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   u: () => (/* binding */ logPointCost)
+/* harmony export */ });
+/* harmony import */ var _actions_core__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(3360);
+/* harmony import */ var _step_summary_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(9917);
+
+
+/**
+ * D-04: log GraphQL point cost to BOTH surfaces — `core.info` (plain Actions
+ * log line, what `console.log`/`npm run preview` users see too) and
+ * `GITHUB_STEP_SUMMARY` (Markdown job summary, what a consumer actually
+ * looks at without digging into raw Actions logs). The two messages are
+ * allowed to differ in format (plain text vs. Markdown) — D-04 only requires
+ * both surfaces receive the number, not that they receive identical text.
+ *
+ * `deps` lets tests substitute fakes for both sinks without needing a real
+ * `GITHUB_STEP_SUMMARY` file or capturing `@actions/core`'s stdout — the same
+ * injectable-dependency shape `publish.ts`'s `execFn` established in Phase 1.
+ * Production callers omit `deps` and get the real `core.info`/
+ * `writeStepSummary` (which is itself a safe no-op outside a real Actions
+ * run — see `node/step-summary.ts`'s own doc comment).
+ */
+function logPointCost(cost, deps) {
+    const info = deps?.info ?? _actions_core__WEBPACK_IMPORTED_MODULE_0__/* .info */ .pq;
+    const summary = deps?.summary ?? _step_summary_js__WEBPACK_IMPORTED_MODULE_1__/* .writeStepSummary */ .o;
+    info(`GraphQL point cost for this run: ${cost}`);
+    summary(`**GraphQL point cost:** ${cost}`);
 }
 
 
@@ -57766,10 +59489,449 @@ const almanacWidget = {
             }
         });
         markup += `<line x1="${PADDING}" y1="178" x2="${CARD_WIDTH - PADDING}" y2="178" stroke="${theme.rule}" stroke-width="1"/>`;
-        // 宜/忌 lines. 宜 uses accent, 忌 uses muted (UI-SPEC Color — no second
-        // semantic/destructive hue is introduced for this card, by design).
+        // 宜/忌 lines. Both use accent (02-UI-SPEC.md "Theme Registry" WCAG audit,
+        // THEME-03 fix): muted's contrast against paper falls to ~2.8-3.0:1 under
+        // the dracula/tokyonight ecosystem themes, well under the AA 4.5:1 floor,
+        // and this is load-bearing card content (not a caption), not a place
+        // muted's lower contrast is acceptable. No second semantic/destructive
+        // hue is introduced — the two lines are still distinguished purely by
+        // their existing language-specific prefix text and fixed vertical
+        // position (y=199 vs y=215), never by color.
         markup += contentText(contentFont, `${chrome.auspiciousPrefix}${yiji.auspicious}`, PADDING, 199, theme.accent, `almanac 宜 line (${language})`);
-        markup += contentText(contentFont, `${chrome.avoidPrefix}${yiji.avoid}`, PADDING, 215, theme.muted, `almanac 忌 line (${language})`);
+        markup += contentText(contentFont, `${chrome.avoidPrefix}${yiji.avoid}`, PADDING, 215, theme.accent, `almanac 忌 line (${language})`);
+        return markup;
+    },
+};
+
+
+/***/ }),
+
+/***/ 9722:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+
+// EXPORTS
+__nccwpck_require__.d(__webpack_exports__, {
+  G: () => (/* binding */ editorialStatCardWidget)
+});
+
+// EXTERNAL MODULE: ./node_modules/zod/v4/classic/schemas.js + 16 modules
+var schemas = __nccwpck_require__(2314);
+// EXTERNAL MODULE: ./src/core/font.ts
+var font = __nccwpck_require__(7654);
+;// CONCATENATED MODULE: ./src/widgets/editorial-stat-card/copy.ts
+/**
+ * Editorial Stat Card copy — 02-UI-SPEC.md "Copywriting Contract". Field
+ * order is fixed: commits/prs/issues/stars/followers, matching D-08's
+ * five-field, no-field-dropped guarantee and the 3-over-2 grid's own
+ * left-to-right, top-to-bottom reading order.
+ */
+const chromeEn = {
+    title: "THE STATS",
+};
+const labelsEn = {
+    commits: "COMMITS",
+    prs: "PRS",
+    issues: "ISSUES",
+    stars: "STARS",
+    followers: "FOLLOWERS",
+};
+/**
+ * zh-TW mode's chrome. mastheadEyebrow is fixed English brand furniture —
+ * same convention as Almanac's chromeZh.mastheadEyebrow — decorative,
+ * never translated, shown only in zh-TW mode (en mode's own title already
+ * reads "THE STATS", so no separate eyebrow is needed there).
+ */
+const chromeZh = {
+    title: "統計卡",
+    mastheadEyebrow: "THE STATS",
+};
+const labelsZh = {
+    commits: "提交",
+    prs: "PR",
+    issues: "議題",
+    stars: "星標",
+    followers: "追蹤者",
+};
+
+;// CONCATENATED MODULE: ./src/widgets/editorial-stat-card/format.ts
+
+/**
+ * 138px column-width budget (02-UI-SPEC.md "Card Layout" §Row 1:
+ * `columnWidth = (447 − 2×16) / 3 ≈ 138`). This is the per-render
+ * threshold `assertColumnBudget` enforces against a real formatted
+ * string's measured advance width — a distinct constant from the layout
+ * math's own `(CARD_WIDTH - 2 * PADDING - 2 * 16) / 3` formula (Task 2's
+ * `renderBody`), which computes the same ~138.33 value for column
+ * *positioning*. Kept as separate named constants deliberately: this one
+ * is an integer safety threshold for the overflow backstop, not a layout
+ * coordinate.
+ */
+const COLUMN_BUDGET_PX = 138;
+/** T2 numeral font size (02-UI-SPEC.md Typography: "T2 — stat display,
+ * 32px"). Hardcoded here rather than imported from index.ts: format.ts is
+ * a pure-function module with zero dependencies on any other widget file,
+ * to avoid a circular import between index.ts (which imports
+ * formatStatNumber/assertColumnBudget from here) and this module. */
+const T2_SIZE = 32;
+/** 02-UI-SPEC.md "Mixed Plex-Mono-digit + Noto-Serif-TC-suffix
+ * composition": the 萬/億 suffix renders in Noto Serif TC at 92% of T2's
+ * declared size. */
+const SUFFIX_SIZE_RATIO = 0.92;
+/**
+ * Thrown by assertColumnBudget when a formatted stat value's measured
+ * render width exceeds COLUMN_BUDGET_PX. Names all four load-bearing
+ * facts — field, formatted string, measured width, budget — never just
+ * "too long" (mirrors src/core/svg.ts's SizeBudgetError convention).
+ */
+class StatOverflowError extends Error {
+    constructor(field, formatted, widthPx, budgetPx) {
+        super(`StatOverflowError: field "${field}" formatted as "${formatted}" measures ` +
+            `${widthPx}px, exceeding the ${budgetPx}px column budget.`);
+        this.name = "StatOverflowError";
+    }
+}
+/**
+ * Number Formatting Contract (02-UI-SPEC.md). D-09: 0 <= value < 10000
+ * renders as a plain, unadorned integer in both languages — no thousands
+ * separator, no special-casing for zero. value >= 10000 switches to a
+ * language-native compact notation: en uses Intl.NumberFormat's built-in
+ * "compact" notation (K/M, Western thousand/million grouping); zh-TW has
+ * no Intl support for 萬/億 grouping, so it's computed by hand per the
+ * UI-SPEC's explicit formula.
+ */
+function formatStatNumber(value, language) {
+    if (value < 10000) {
+        return String(value);
+    }
+    if (language === "en") {
+        return new Intl.NumberFormat("en", {
+            notation: "compact",
+            maximumFractionDigits: 1,
+        }).format(value);
+    }
+    if (value < 100_000_000) {
+        return `${(value / 10_000).toFixed(1)}萬`;
+    }
+    return `${(value / 100_000_000).toFixed(1)}億`;
+}
+/**
+ * Per-render column-width backstop (UI-SPEC "stat-row overflow/long-text"
+ * — the load-bearing new check this phase adds, since the numerals are
+ * live, unbounded GitHub data and cannot be exhaustively checked at build
+ * time the way Almanac's 48-phrase table was). Called BEFORE the
+ * formatted string is turned into path data (Task 2's renderBody), so an
+ * out-of-budget value fails the build loudly instead of silently
+ * overflowing the rendered column.
+ *
+ * zh-TW's 萬/億 suffix is measured as two separate glyph runs — the digit
+ * portion in IBM Plex Mono Semibold at T2_SIZE, the trailing Han
+ * character in Noto Serif TC at T2_SIZE * 0.92 — summed together, per the
+ * UI-SPEC's mixed-composition rule. Measuring the whole string as one
+ * mono-semibold run would silently ignore the fact that 萬/億 has no
+ * glyph in IBM Plex Mono at all and would misrepresent the suffix's true
+ * (larger, serif) rendered width.
+ */
+function assertColumnBudget(formatted, language, field) {
+    let totalWidth;
+    if (language === "zh-TW" && (formatted.endsWith("萬") || formatted.endsWith("億"))) {
+        const chars = Array.from(formatted);
+        const suffixChar = chars[chars.length - 1];
+        const digitsPart = chars.slice(0, -1).join("");
+        totalWidth =
+            (0,font/* measureAdvanceWidth */.zN)("mono-semibold", digitsPart, T2_SIZE) +
+                (0,font/* measureAdvanceWidth */.zN)("noto-tc", suffixChar, T2_SIZE * SUFFIX_SIZE_RATIO);
+    }
+    else {
+        totalWidth = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", formatted, T2_SIZE);
+    }
+    if (totalWidth > COLUMN_BUDGET_PX) {
+        throw new StatOverflowError(field, formatted, totalWidth, COLUMN_BUDGET_PX);
+    }
+}
+
+;// CONCATENATED MODULE: ./src/widgets/editorial-stat-card/index.ts
+
+
+
+
+const CARD_WIDTH = 495;
+const CARD_HEIGHT = 204;
+const PADDING = 24;
+const T1_SIZE = 8;
+const editorial_stat_card_T2_SIZE = 32;
+const T3_SIZE = 17;
+const T1_LETTER_SPACING = 1.6;
+const SM = 8;
+const MD = 16;
+function pathElement(d, fill) {
+    if (d === "") {
+        return "";
+    }
+    return `<path d="${d}" fill="${fill}"/>`;
+}
+/**
+ * Left-aligned run of glyph paths with manual per-character advance plus a
+ * fixed letter-spacing add-on between characters (UI-SPEC T1 eyebrow style:
+ * +1.6 user-unit letter-spacing). Structurally identical to
+ * `src/widgets/almanac/index.ts`'s own `letterSpacedPath` — deliberately
+ * redeclared here rather than imported, per this task's own instruction:
+ * every widget carries its own copy of these small chassis-adjacent
+ * helpers (RENDER-02: adding a card must not require touching another
+ * card's private functions).
+ */
+function letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
+    let cursorX = x;
+    let d = "";
+    const chars = Array.from(text);
+    chars.forEach((ch, i) => {
+        d += (0,font/* textToPathData */.wD)(fontName, ch, cursorX, y, fontSize);
+        cursorX +=
+            (0,font/* measureAdvanceWidth */.zN)(fontName, ch, fontSize) + (i < chars.length - 1 ? letterSpacing : 0);
+    });
+    return d;
+}
+/** Total rendered width of a letter-spaced run — mirrors letterSpacedPath's
+ * own cursor math exactly so the two never drift apart. Used both for the
+ * zh-TW-only masthead eyebrow's right-alignment and for centering each
+ * en-mode T1 column label under its numeral. */
+function letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
+    const chars = Array.from(text);
+    let width = 0;
+    chars.forEach((ch, i) => {
+        width += (0,font/* measureAdvanceWidth */.zN)(fontName, ch, fontSize) + (i < chars.length - 1 ? letterSpacing : 0);
+    });
+    return width;
+}
+/** T1 eyebrow/label style for English text: IBM Plex Mono Semibold,
+ * uppercase, letter-spaced, 8px. Left-aligned at (x, y) — callers needing
+ * horizontal centering compute x themselves via eyebrowLabelWidth. */
+function eyebrowLabel(text, x, y, fill) {
+    const upper = text.toUpperCase();
+    (0,font/* assertCoverage */.tE)("mono-semibold", upper, `editorial-stat-card T1 eyebrow/label: "${text}"`);
+    const d = letterSpacedPath("mono-semibold", upper, x, y, T1_SIZE, T1_LETTER_SPACING);
+    return pathElement(d, fill);
+}
+function eyebrowLabelWidth(text) {
+    return letterSpacedWidth("mono-semibold", text.toUpperCase(), T1_SIZE, T1_LETTER_SPACING);
+}
+/**
+ * T1 label style for zh-TW Chinese column labels (提交/PR/議題/星標/追蹤者)
+ * and captions. Renders in Noto Serif TC at the same 8px size, with no
+ * uppercase transform and no manual letter-spacing (neither concept exists
+ * for Han script) — mirrors Almanac's own `zhLabel`.
+ */
+function zhLabel(text, x, y, fill) {
+    (0,font/* assertCoverage */.tE)("noto-tc", text, `editorial-stat-card T1 label (zh-TW): "${text}"`);
+    return pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, T1_SIZE), fill);
+}
+function zhLabelWidth(text) {
+    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, T1_SIZE);
+}
+/**
+ * Renders a T1 column label horizontally centered at `centerX` (UI-SPEC
+ * "Alignment rule" — column labels sit centered under their numeral, same
+ * as the numeral itself). Language-dispatched exactly like Almanac's own
+ * eyebrowLabel/zhLabel split: en renders mono-semibold uppercase/letter-
+ * spaced, zh-TW renders Noto Serif TC as-is.
+ */
+function centeredLabel(text, language, centerX, y, fill) {
+    if (language === "en") {
+        const width = eyebrowLabelWidth(text);
+        return eyebrowLabel(text, centerX - width / 2, y, fill);
+    }
+    const width = zhLabelWidth(text);
+    return zhLabel(text, centerX - width / 2, y, fill);
+}
+/**
+ * T3 primary-content style: Source Serif 4 (`serif`) in en mode, Noto Serif
+ * TC (`noto-tc`) in zh-TW mode. Used for the card's title only.
+ */
+function contentText(fontName, text, x, y, fill, context) {
+    (0,font/* assertCoverage */.tE)(fontName, text, context);
+    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, T3_SIZE);
+    return pathElement(d, fill);
+}
+/**
+ * Renders a formatted stat numeral centered at `centerX`, always in
+ * `theme.ink` (UI-SPEC Color: "no numeral is ever colored accent to
+ * highlight it"). zh-TW's 萬/億 suffix is split into a separate Noto Serif
+ * TC glyph run at `T2_SIZE * SUFFIX_SIZE_RATIO`, measured the exact same
+ * way `format.ts`'s `assertColumnBudget` measures it — both pieces of code
+ * must agree on what "the rendered width" means, or the budget check and
+ * the actual centering math could silently disagree about whether a value
+ * fits.
+ */
+function renderNumeral(formatted, language, centerX, y, fill) {
+    if (language === "zh-TW" && (formatted.endsWith("萬") || formatted.endsWith("億"))) {
+        const chars = Array.from(formatted);
+        const suffixChar = chars[chars.length - 1];
+        const digitsPart = chars.slice(0, -1).join("");
+        const digitsWidth = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", digitsPart, editorial_stat_card_T2_SIZE);
+        const suffixWidth = (0,font/* measureAdvanceWidth */.zN)("noto-tc", suffixChar, editorial_stat_card_T2_SIZE * SUFFIX_SIZE_RATIO);
+        const startX = centerX - (digitsWidth + suffixWidth) / 2;
+        const d = (0,font/* textToPathData */.wD)("mono-semibold", digitsPart, startX, y, editorial_stat_card_T2_SIZE) +
+            (0,font/* textToPathData */.wD)("noto-tc", suffixChar, startX + digitsWidth, y, editorial_stat_card_T2_SIZE * SUFFIX_SIZE_RATIO);
+        return pathElement(d, fill);
+    }
+    const width = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", formatted, editorial_stat_card_T2_SIZE);
+    const startX = centerX - width / 2;
+    return pathElement((0,font/* textToPathData */.wD)("mono-semibold", formatted, startX, y, editorial_stat_card_T2_SIZE), fill);
+}
+// ---------------------------------------------------------------------------
+// Layout geometry (UI-SPEC "Card Layout" — 3-over-2 grid).
+// ---------------------------------------------------------------------------
+const COLUMN_WIDTH = (CARD_WIDTH - 2 * PADDING - 2 * MD) / 3;
+const COL1_X = PADDING;
+const COL2_X = COL1_X + COLUMN_WIDTH + MD;
+const COL3_X = COL2_X + COLUMN_WIDTH + MD;
+const ROW2_CONTENT_WIDTH = 2 * COLUMN_WIDTH + MD;
+const ROW2_START_X = PADDING + (CARD_WIDTH - 2 * PADDING - ROW2_CONTENT_WIDTH) / 2;
+const COL4_X = ROW2_START_X;
+const COL5_X = COL4_X + COLUMN_WIDTH + MD;
+const COL1_CENTER_X = COL1_X + COLUMN_WIDTH / 2;
+const COL2_CENTER_X = COL2_X + COLUMN_WIDTH / 2;
+const COL3_CENTER_X = COL3_X + COLUMN_WIDTH / 2;
+const COL4_CENTER_X = COL4_X + COLUMN_WIDTH / 2;
+const COL5_CENTER_X = COL5_X + COLUMN_WIDTH / 2;
+// Column dividers (UI-SPEC "Column dividers"): one 1px accent hairline
+// centered in each inter-column gutter — 2 in row 1 (between col1/col2 and
+// col2/col3), 1 in row 2 (between col4/col5). This is the only element on
+// the whole card that uses theme.accent.
+const DIVIDER_1_X = COL1_X + COLUMN_WIDTH + MD / 2;
+const DIVIDER_2_X = COL2_X + COLUMN_WIDTH + MD / 2;
+const DIVIDER_3_X = COL4_X + COLUMN_WIDTH + MD / 2;
+const HEADER_TITLE_BASELINE_Y = 44;
+const HEADER_RULE_Y = 58;
+const ROW1_TOP = 74;
+const ROW1_NUMERAL_BASELINE_Y = 98;
+const ROW1_LABEL_BASELINE_Y = ROW1_NUMERAL_BASELINE_Y + SM + T1_SIZE;
+const ROW1_BOTTOM = ROW1_LABEL_BASELINE_Y + 4;
+const ROW2_TOP = ROW1_BOTTOM + MD;
+const ROW2_NUMERAL_BASELINE_Y = ROW2_TOP + 24;
+const ROW2_LABEL_BASELINE_Y = ROW2_NUMERAL_BASELINE_Y + SM + T1_SIZE;
+const ROW2_BOTTOM = ROW2_LABEL_BASELINE_Y + 4;
+/** D-08: all five fields, fixed order — commits/prs/issues/stars/followers.
+ * `stars`/`followers` sit in row 2 per the 3-over-2 grid ("what you did"
+ * vs. "what people think"). */
+function buildColumns(data) {
+    return [
+        {
+            key: "commits",
+            value: data.stats.totalCommits,
+            centerX: COL1_CENTER_X,
+            numeralBaselineY: ROW1_NUMERAL_BASELINE_Y,
+            labelBaselineY: ROW1_LABEL_BASELINE_Y,
+        },
+        {
+            key: "prs",
+            value: data.stats.totalPRs,
+            centerX: COL2_CENTER_X,
+            numeralBaselineY: ROW1_NUMERAL_BASELINE_Y,
+            labelBaselineY: ROW1_LABEL_BASELINE_Y,
+        },
+        {
+            key: "issues",
+            value: data.stats.totalIssues,
+            centerX: COL3_CENTER_X,
+            numeralBaselineY: ROW1_NUMERAL_BASELINE_Y,
+            labelBaselineY: ROW1_LABEL_BASELINE_Y,
+        },
+        {
+            key: "stars",
+            value: data.stats.totalStars,
+            centerX: COL4_CENTER_X,
+            numeralBaselineY: ROW2_NUMERAL_BASELINE_Y,
+            labelBaselineY: ROW2_LABEL_BASELINE_Y,
+        },
+        {
+            key: "followers",
+            value: data.followers,
+            centerX: COL5_CENTER_X,
+            numeralBaselineY: ROW2_NUMERAL_BASELINE_Y,
+            labelBaselineY: ROW2_LABEL_BASELINE_Y,
+        },
+    ];
+}
+/**
+ * D-01: `include_forks` per-card option, default `false` (forks excluded).
+ * `.strict()` matches the established `almanacOptionsSchema` convention —
+ * an unknown key (a typo) must be rejected, not silently ignored.
+ */
+const editorialStatCardOptionsSchema = schemas/* object */.Ik({ include_forks: schemas/* boolean */.zM().optional() }).strict();
+/**
+ * Editorial Stat Card's WidgetDefinition (CARD-02). `requires: ["stats"]`
+ * is the second real consumer of `DataCapability` (Almanac declares `[]`).
+ * Opts is typed as the full `RenderOptions` shape, matching Almanac and
+ * required by `core/svg.ts`'s `renderPair(widget: WidgetDefinition<RenderOptions>, ...)`
+ * signature — see `optionsSchema.parse`'s own doc comment for how
+ * `include_forks` still flows through this despite not appearing in the
+ * `RenderOptions` interface itself.
+ */
+const editorialStatCardWidget = {
+    name: "editorial-stat-card",
+    requires: ["stats"],
+    size: { width: CARD_WIDTH, height: CARD_HEIGHT },
+    optionsSchema: {
+        parse(value) {
+            const { include_forks } = editorialStatCardOptionsSchema.parse(value ?? {});
+            const resolved = {
+                now: new Date(),
+                seed: 0,
+                language: "en",
+                timezone: "UTC",
+                include_forks: include_forks ?? false,
+            };
+            return resolved;
+        },
+    },
+    describe(_data, opts) {
+        if (opts.language === "zh-TW") {
+            return {
+                title: "統計卡",
+                desc: "以雜誌排版風格顯示你 GitHub 個人檔案的提交、PR、議題、星標與追蹤者數量。",
+            };
+        }
+        return {
+            title: "Editorial Stat Card",
+            desc: "Shows commits, pull requests, issues, stars, and followers from your GitHub profile, " +
+                "in magazine-style typography.",
+        };
+    },
+    renderBody(data, theme, opts) {
+        const language = opts.language;
+        const contentFont = language === "zh-TW" ? "noto-tc" : "serif";
+        const title = language === "zh-TW" ? chromeZh.title : chromeEn.title;
+        const labels = language === "zh-TW" ? labelsZh : labelsEn;
+        let markup = "";
+        // Header: title (T3), left-aligned — identical role to Almanac's.
+        markup += contentText(contentFont, title, PADDING, HEADER_TITLE_BASELINE_Y, theme.ink, `editorial-stat-card title (${language})`);
+        // Masthead eyebrow (zh-TW mode only) — decorative Latin brand
+        // furniture, never translated, absent in en mode since en mode's own
+        // title already reads "THE STATS" (mirrors Almanac's identical rule).
+        if (language === "zh-TW") {
+            const eyebrowText = chromeZh.mastheadEyebrow;
+            const eyebrowWidth = eyebrowLabelWidth(eyebrowText);
+            const eyebrowX = CARD_WIDTH - PADDING - eyebrowWidth;
+            markup += eyebrowLabel(eyebrowText, eyebrowX, HEADER_TITLE_BASELINE_Y, theme.muted);
+        }
+        markup += `<line x1="${PADDING}" y1="${HEADER_RULE_Y}" x2="${CARD_WIDTH - PADDING}" y2="${HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
+        // D-08: five fields, D-09: zero renders exactly like any other value —
+        // one uniform code path, no branch on magnitude.
+        for (const column of buildColumns(data)) {
+            const formatted = formatStatNumber(column.value, language);
+            // T-02-05 backstop: check BEFORE building path data, so an
+            // out-of-budget value fails the build loudly instead of silently
+            // overflowing the rendered column.
+            assertColumnBudget(formatted, language, column.key);
+            markup += renderNumeral(formatted, language, column.centerX, column.numeralBaselineY, theme.ink);
+            markup += centeredLabel(labels[column.key], language, column.centerX, column.labelBaselineY, theme.muted);
+        }
+        // Column dividers — the card's only use of theme.accent (UI-SPEC
+        // Color: "no numeral is ever colored accent to highlight it").
+        markup += `<line x1="${DIVIDER_1_X}" y1="${ROW1_TOP}" x2="${DIVIDER_1_X}" y2="${ROW1_BOTTOM}" stroke="${theme.accent}" stroke-width="1"/>`;
+        markup += `<line x1="${DIVIDER_2_X}" y1="${ROW1_TOP}" x2="${DIVIDER_2_X}" y2="${ROW1_BOTTOM}" stroke="${theme.accent}" stroke-width="1"/>`;
+        markup += `<line x1="${DIVIDER_3_X}" y1="${ROW2_TOP}" x2="${DIVIDER_3_X}" y2="${ROW2_BOTTOM}" stroke="${theme.accent}" stroke-width="1"/>`;
         return markup;
     },
 };
@@ -58019,6 +60181,183 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("tls");
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
+
+/***/ }),
+
+/***/ 4649:
+/***/ ((__unused_webpack_module, exports) => {
+
+var __webpack_unused_export__;
+
+/*!
+ * content-type
+ * Copyright(c) 2015 Douglas Christopher Wilson
+ * MIT Licensed
+ */
+__webpack_unused_export__ = ({ value: true });
+__webpack_unused_export__ = format;
+exports.qg = parse;
+const TEXT_REGEXP = /^[\u0009\u0020-\u007e\u0080-\u00ff]*$/;
+const TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+/**
+ * RegExp to match chars that must be quoted-pair in RFC 9110 sec 5.6.4
+ */
+const QUOTE_REGEXP = /[\\"]/g;
+/**
+ * RegExp to match type in RFC 9110 sec 8.3.1
+ *
+ * media-type = type "/" subtype
+ * type       = token
+ * subtype    = token
+ */
+const TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+/**
+ * Null object perf optimization. Faster than `Object.create(null)` and `{ __proto__: null }`.
+ */
+const NullObject = /* @__PURE__ */ (() => {
+    const C = function () { };
+    C.prototype = Object.create(null);
+    return C;
+})();
+/**
+ * Format an object into a `Content-Type` header.
+ */
+function format(obj) {
+    const { type, parameters } = obj;
+    if (!type || !TYPE_REGEXP.test(type)) {
+        throw new TypeError(`Invalid type: ${type}`);
+    }
+    let result = type;
+    if (parameters) {
+        for (const param of Object.keys(parameters)) {
+            if (!TOKEN_REGEXP.test(param)) {
+                throw new TypeError(`Invalid parameter name: ${param}`);
+            }
+            result += `; ${param}=${qstring(parameters[param])}`;
+        }
+    }
+    return result;
+}
+/**
+ * Parse a `Content-Type` header.
+ */
+function parse(header, options) {
+    const len = header.length;
+    let index = skipOWS(header, 0, len);
+    const valueStart = index;
+    index = skipValue(header, index, len);
+    const valueEnd = trailingOWS(header, valueStart, index);
+    const type = header.slice(valueStart, valueEnd).toLowerCase();
+    const parameters = options?.parameters === false
+        ? new NullObject()
+        : parseParameters(header, index, len);
+    return { type, parameters };
+}
+const SP = 32; // " "
+const HTAB = 9; // "\t"
+const SEMI = 59; // ";"
+const EQ = 61; // "="
+const DQUOTE = 34; // '"'
+const BSLASH = 92; // "\\"
+/**
+ * Parses the parameters of a `Content-Type` header starting at the given index.
+ */
+function parseParameters(header, index, len) {
+    const parameters = new NullObject();
+    parameter: while (index < len) {
+        index = skipOWS(header, index + 1 /* Skip over ; */, len);
+        const keyStart = index;
+        while (index < len) {
+            const code = header.charCodeAt(index);
+            if (code === SEMI)
+                continue parameter;
+            if (code === EQ) {
+                const keyEnd = trailingOWS(header, keyStart, index);
+                const key = header.slice(keyStart, keyEnd).toLowerCase();
+                index = skipOWS(header, index + 1, len);
+                if (index < len && header.charCodeAt(index) === DQUOTE) {
+                    index++;
+                    let value = "";
+                    while (index < len) {
+                        const code = header.charCodeAt(index++);
+                        if (code === DQUOTE) {
+                            index = skipValue(header, index, len);
+                            if (parameters[key] === undefined)
+                                parameters[key] = value;
+                            break;
+                        }
+                        if (code === BSLASH && index < len) {
+                            value += header[index++];
+                            continue;
+                        }
+                        value += String.fromCharCode(code);
+                    }
+                    continue parameter;
+                }
+                const valueStart = index;
+                index = skipValue(header, index, len);
+                if (parameters[key] === undefined) {
+                    const valueEnd = trailingOWS(header, valueStart, index);
+                    parameters[key] = header.slice(valueStart, valueEnd);
+                }
+                continue parameter;
+            }
+            index++;
+        }
+    }
+    return parameters;
+}
+/**
+ * Skip over characters until a semicolon.
+ */
+function skipValue(str, index, len) {
+    while (index < len) {
+        const char = str.charCodeAt(index);
+        if (char === SEMI)
+            break;
+        index++;
+    }
+    return index;
+}
+/**
+ * Skip optional whitespace (OWS) in an HTTP header value.
+ *
+ * OWS is defined in RFC 9110 sec 5.6.3 as SP (" ") or HTAB ("\t").
+ */
+function skipOWS(header, index, len) {
+    while (index < len) {
+        const char = header.charCodeAt(index);
+        if (char !== SP && char !== HTAB)
+            break;
+        index++;
+    }
+    return index;
+}
+/**
+ * Trim optional whitespace (OWS) from the end of a substring.
+ *
+ * OWS is defined in RFC 9110 sec 5.6.3 as SP (" ") or HTAB ("\t").
+ */
+function trailingOWS(header, start, end) {
+    while (end > start) {
+        const char = header.charCodeAt(end - 1);
+        if (char !== SP && char !== HTAB)
+            break;
+        end--;
+    }
+    return end;
+}
+/**
+ * Serialize a parameter value.
+ */
+function qstring(str) {
+    if (TOKEN_REGEXP.test(str))
+        return str;
+    if (TEXT_REGEXP.test(str))
+        return `"${str.replace(QUOTE_REGEXP, "\\$&")}"`;
+    throw new TypeError(`Invalid parameter value: ${str}`);
+}
+//# sourceMappingURL=index.js.map
 
 /***/ }),
 
@@ -69579,6 +71918,7 @@ function getExecOutput(commandLine, args, options) {
 __nccwpck_require__.d(__webpack_exports__, {
   EB: () => (/* binding */ ZodStringFormat),
   YO: () => (/* binding */ array),
+  zM: () => (/* binding */ schemas_boolean),
   k5: () => (/* binding */ schemas_enum),
   Ik: () => (/* binding */ object),
   g1: () => (/* binding */ record),
@@ -69586,7 +71926,7 @@ __nccwpck_require__.d(__webpack_exports__, {
   L5: () => (/* binding */ unknown)
 });
 
-// UNUSED EXPORTS: ZodAny, ZodArray, ZodBase64, ZodBase64URL, ZodBigInt, ZodBigIntFormat, ZodBoolean, ZodCIDRv4, ZodCIDRv6, ZodCUID, ZodCUID2, ZodCatch, ZodCodec, ZodCustom, ZodCustomStringFormat, ZodDate, ZodDefault, ZodDiscriminatedUnion, ZodE164, ZodEmail, ZodEmoji, ZodEnum, ZodExactOptional, ZodFile, ZodFunction, ZodGUID, ZodIPv4, ZodIPv6, ZodIntersection, ZodJWT, ZodKSUID, ZodLazy, ZodLiteral, ZodMAC, ZodMap, ZodNaN, ZodNanoID, ZodNever, ZodNonOptional, ZodNull, ZodNullable, ZodNumber, ZodNumberFormat, ZodObject, ZodOptional, ZodPipe, ZodPrefault, ZodPreprocess, ZodPromise, ZodReadonly, ZodRecord, ZodSet, ZodString, ZodSuccess, ZodSymbol, ZodTemplateLiteral, ZodTransform, ZodTuple, ZodType, ZodULID, ZodURL, ZodUUID, ZodUndefined, ZodUnion, ZodUnknown, ZodVoid, ZodXID, ZodXor, _ZodString, _default, _function, any, base64, base64url, bigint, boolean, catch, check, cidrv4, cidrv6, codec, cuid, cuid2, custom, date, describe, discriminatedUnion, e164, email, emoji, exactOptional, file, float32, float64, function, guid, hash, hex, hostname, httpUrl, instanceof, int, int32, int64, intersection, invertCodec, ipv4, ipv6, json, jwt, keyof, ksuid, lazy, literal, looseObject, looseRecord, mac, map, meta, nan, nanoid, nativeEnum, never, nonoptional, null, nullable, nullish, number, optional, partialRecord, pipe, prefault, preprocess, promise, readonly, refine, set, strictObject, stringFormat, stringbool, success, superRefine, symbol, templateLiteral, transform, tuple, uint32, uint64, ulid, undefined, union, url, uuid, uuidv4, uuidv6, uuidv7, void, xid, xor
+// UNUSED EXPORTS: ZodAny, ZodArray, ZodBase64, ZodBase64URL, ZodBigInt, ZodBigIntFormat, ZodBoolean, ZodCIDRv4, ZodCIDRv6, ZodCUID, ZodCUID2, ZodCatch, ZodCodec, ZodCustom, ZodCustomStringFormat, ZodDate, ZodDefault, ZodDiscriminatedUnion, ZodE164, ZodEmail, ZodEmoji, ZodEnum, ZodExactOptional, ZodFile, ZodFunction, ZodGUID, ZodIPv4, ZodIPv6, ZodIntersection, ZodJWT, ZodKSUID, ZodLazy, ZodLiteral, ZodMAC, ZodMap, ZodNaN, ZodNanoID, ZodNever, ZodNonOptional, ZodNull, ZodNullable, ZodNumber, ZodNumberFormat, ZodObject, ZodOptional, ZodPipe, ZodPrefault, ZodPreprocess, ZodPromise, ZodReadonly, ZodRecord, ZodSet, ZodString, ZodSuccess, ZodSymbol, ZodTemplateLiteral, ZodTransform, ZodTuple, ZodType, ZodULID, ZodURL, ZodUUID, ZodUndefined, ZodUnion, ZodUnknown, ZodVoid, ZodXID, ZodXor, _ZodString, _default, _function, any, base64, base64url, bigint, catch, check, cidrv4, cidrv6, codec, cuid, cuid2, custom, date, describe, discriminatedUnion, e164, email, emoji, exactOptional, file, float32, float64, function, guid, hash, hex, hostname, httpUrl, instanceof, int, int32, int64, intersection, invertCodec, ipv4, ipv6, json, jwt, keyof, ksuid, lazy, literal, looseObject, looseRecord, mac, map, meta, nan, nanoid, nativeEnum, never, nonoptional, null, nullable, nullish, number, optional, partialRecord, pipe, prefault, preprocess, promise, readonly, refine, set, strictObject, stringFormat, stringbool, success, superRefine, symbol, templateLiteral, transform, tuple, uint32, uint64, ulid, undefined, union, url, uuid, uuidv4, uuidv6, uuidv7, void, xid, xor
 
 ;// CONCATENATED MODULE: ./node_modules/zod/v4/core/core.js
 var _a;
@@ -71909,9 +74249,9 @@ const $ZodNumberFormat = /*@__PURE__*/ (/* unused pure expression or super */ nu
     checks.$ZodCheckNumberFormat.init(inst, def);
     $ZodNumber.init(inst, def); // no format checks
 })));
-const $ZodBoolean = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("$ZodBoolean", (inst, def) => {
+const $ZodBoolean = /*@__PURE__*/ $constructor("$ZodBoolean", (inst, def) => {
     $ZodType.init(inst, def);
-    inst._zod.pattern = regexes.boolean;
+    inst._zod.pattern = regexes_boolean;
     inst._zod.parse = (payload, _ctx) => {
         if (def.coerce)
             try {
@@ -71929,7 +74269,7 @@ const $ZodBoolean = /*@__PURE__*/ (/* unused pure expression or super */ null &&
         });
         return payload;
     };
-})));
+});
 const $ZodBigInt = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("$ZodBigInt", (inst, def) => {
     $ZodType.init(inst, def);
     inst._zod.pattern = regexes.bigint;
@@ -74058,7 +76398,7 @@ function _uint32(Class, params) {
 function _boolean(Class, params) {
     return new Class({
         type: "boolean",
-        ...util.normalizeParams(params),
+        ...normalizeParams(params),
     });
 }
 // @__NO_SIDE_EFFECTS__
@@ -76507,13 +78847,13 @@ function int32(params) {
 function uint32(params) {
     return core._uint32(ZodNumberFormat, params);
 }
-const ZodBoolean = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodBoolean", (inst, def) => {
-    core.$ZodBoolean.init(inst, def);
+const ZodBoolean = /*@__PURE__*/ $constructor("ZodBoolean", (inst, def) => {
+    $ZodBoolean.init(inst, def);
     ZodType.init(inst, def);
-    inst._zod.processJSONSchema = (ctx, json, params) => processors.booleanProcessor(inst, ctx, json, params);
-})));
+    inst._zod.processJSONSchema = (ctx, json, params) => booleanProcessor(inst, ctx, json, params);
+});
 function schemas_boolean(params) {
-    return core._boolean(ZodBoolean, params);
+    return _boolean(ZodBoolean, params);
 }
 const ZodBigInt = /*@__PURE__*/ (/* unused pure expression or super */ null && (core.$constructor("ZodBigInt", (inst, def) => {
     core.$ZodBigInt.init(inst, def);

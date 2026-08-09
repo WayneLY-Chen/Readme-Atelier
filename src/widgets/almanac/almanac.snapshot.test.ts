@@ -3,7 +3,9 @@ import type { ProfileData, RenderOptions } from "../../core/model.js";
 import { renderPair } from "../../core/svg.js";
 import { editorialDark, editorialLight } from "../../core/theme.js";
 import { loadAllFonts } from "../../node/fonts.js";
+import { yijiTableEn, yijiTableZh } from "./copy.js";
 import { almanacWidget } from "./index.js";
+import { getAlmanacContent } from "./lunar.js";
 
 const stubProfileData: ProfileData = {
   login: "octocat",
@@ -83,6 +85,39 @@ function lastPathFill(markup: string): string | undefined {
   const matches = [...markup.matchAll(/<path[^>]*\sfill="([^"]+)"\/>/g)];
   return matches.at(-1)?.[1];
 }
+
+describe("Regression (2026-08-09 production incident): every 建除十二神 content entry renders", () => {
+  // The production cron rendered "危" for the first time since launch and hit
+  // core/font.ts's PathCorruptionError on yijiTableZh's 忌 phrase — no test
+  // had ever exercised that entry (or several others) through the real font
+  // pipeline; the snapshot test above only ever fixes `now` to one date, so
+  // it always exercises the same single zhiXing. This sweeps enough
+  // consecutive days to hit all 12 建除神 values (a fixed one-time repro of
+  // the exact broken string lives in core/font.test.ts) so a future addition
+  // to either yiji table that introduces a new corrupting character
+  // combination fails CI instead of a live cron run.
+  it("sweeps 40 consecutive days and renders every yiji-table entry without throwing", () => {
+    const seenZhiXing = new Set<string>();
+    const startDate = new Date("2026-08-01T00:00:00Z");
+    for (let i = 0; i < 40; i++) {
+      const now = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+      seenZhiXing.add(getAlmanacContent(now, FIXED_OPTS_BASE.timezone).zhiXing);
+      for (const language of ["zh-TW", "en"] as const) {
+        const opts: RenderOptions = { ...FIXED_OPTS_BASE, now, language };
+        expect(() =>
+          renderPair(almanacWidget, stubProfileData, opts, {
+            light: editorialLight,
+            dark: editorialDark,
+          }),
+        ).not.toThrow();
+      }
+    }
+    // Guards the sweep itself: if the date range ever stops covering all 12
+    // keys, this fails loudly instead of silently skipping the untested ones.
+    expect([...seenZhiXing].sort()).toEqual(Object.keys(yijiTableZh).sort());
+    expect(Object.keys(yijiTableZh).sort()).toEqual(Object.keys(yijiTableEn).sort());
+  });
+});
 
 describe("Plan 02-05: 忌 line uses theme.accent, not theme.muted (THEME-03 WCAG fix)", () => {
   it("renders the 忌 line's fill as editorialLight.accent / editorialDark.accent, never .muted", () => {
