@@ -3,15 +3,20 @@
  * across every enabled widget before doing a single shared GitHub fetch.
  */
 /**
- * "identity" (MAST-01, added this phase): declares no new GraphQL fragment
+ * "identity" (MAST-01, added Phase 3): declares no new GraphQL fragment
  * of its own — `core/fetch.ts`'s `buildQuery` already sends `user { login
  * name avatarUrl followers {...} }` unconditionally whenever
  * `capabilities.size > 0`. Declaring this capability exists ONLY to move a
  * masthead-only (or masthead + other zero-capability cards) render OUT of
  * `collectCapabilities(...).size === 0`'s zero-fetch fast path, since the
  * masthead needs a real `data.login` to print the subtitle.
+ *
+ * "repoList" (CARD-03, added Phase 3): The Graveyard's repo-list query —
+ * see `core/fetch.ts`'s `REPO_LIST_FRAGMENT`. Fetches unconditionally at
+ * `privacy: PUBLIC` (DATA-05's private-data boundary, extended to this new
+ * capability — see 03-02-PLAN.md prohibitions).
  */
-export type DataCapability = "stats" | "calendar" | "commitTimestamps" | "languages" | "identity";
+export type DataCapability = "stats" | "calendar" | "commitTimestamps" | "languages" | "identity" | "repoList";
 
 export interface ProfileData {
   login: string;
@@ -29,6 +34,16 @@ export interface ProfileData {
   contributionCalendar?: { date: string; count: number }[];
   commitTimestamps?: string[];
   languages?: { name: string; color: string; bytes: number }[];
+  /**
+   * Only populated when "repoList" is a requested capability (CARD-03). Raw,
+   * unfiltered pass-through of the GraphQL response's `pushedAt` — `null`
+   * when a repository has never received a push. Interpreting `null` (e.g.
+   * falling back to `createdAt` for the 180-day burial threshold) is the
+   * consuming widget's (The Graveyard, Plan 03-04) responsibility, not
+   * `core/fetch.ts`'s — see RESEARCH.md's "core only composes queries,
+   * widgets interpret ProfileData" boundary.
+   */
+  repositories?: { name: string; nameWithOwner: string; url: string; createdAt: string; pushedAt: string | null; isFork: boolean }[];
 }
 
 /**

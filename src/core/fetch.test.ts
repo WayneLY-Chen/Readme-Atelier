@@ -20,7 +20,7 @@ describe("buildQuery — includeForks: false (default, DATA-04 fork exclusion)",
     expect(query).toContain("commitContributionsByRepository");
     expect(query).toContain("issueContributionsByRepository");
     expect(query).toContain("pullRequestContributionsByRepository");
-    expect(query).toContain("repositories(");
+    expect(query).toContain("statsRepos: repositories(");
     expect(query).toContain("isFork");
   });
 
@@ -49,7 +49,7 @@ describe("buildQuery — includeForks: true (opt-in cheap path)", () => {
   });
 
   it("drops the isFork: false argument from repositories() — unfiltered fan-out for stars", () => {
-    expect(query).toContain("repositories(");
+    expect(query).toContain("statsRepos: repositories(");
     expect(query).not.toContain("isFork: false");
   });
 
@@ -122,7 +122,7 @@ function excludeForksResponseBody() {
           ],
         },
         // GraphQL-side isFork: false filter already applied — only repo-a survives.
-        repositories: { nodes: [{ stargazerCount: REPO_A.star }] },
+        statsRepos: { nodes: [{ stargazerCount: REPO_A.star }] },
       },
       rateLimit: { cost: 3, limit: 5000, remaining: 4997 },
     },
@@ -144,7 +144,7 @@ function includeForksResponseBody() {
           restrictedContributionsCount: RESTRICTED_COUNT_MARKER,
         },
         // Unfiltered — both repos come back.
-        repositories: { nodes: [{ stargazerCount: REPO_A.star }, { stargazerCount: REPO_B.star }] },
+        statsRepos: { nodes: [{ stargazerCount: REPO_A.star }, { stargazerCount: REPO_B.star }] },
       },
       rateLimit: { cost: 1, limit: 5000, remaining: 4999 },
     },

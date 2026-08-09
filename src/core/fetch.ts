@@ -37,7 +37,7 @@ const STATS_FRAGMENT_EXCLUDE_FORKS = `
           repository { isFork }
         }
       }
-      repositories(first: 100, isFork: false, ownerAffiliations: [OWNER], privacy: PUBLIC, orderBy: { field: STARGAZERS, direction: DESC }) {
+      statsRepos: repositories(first: 100, isFork: false, ownerAffiliations: [OWNER], privacy: PUBLIC, orderBy: { field: STARGAZERS, direction: DESC }) {
         nodes { stargazerCount }
       }`;
 
@@ -54,8 +54,27 @@ const STATS_FRAGMENT_INCLUDE_FORKS = `
         totalPullRequestContributions
         restrictedContributionsCount
       }
-      repositories(first: 100, ownerAffiliations: [OWNER], privacy: PUBLIC, orderBy: { field: STARGAZERS, direction: DESC }) {
+      statsRepos: repositories(first: 100, ownerAffiliations: [OWNER], privacy: PUBLIC, orderBy: { field: STARGAZERS, direction: DESC }) {
         nodes { stargazerCount }
+      }`;
+
+/**
+ * The Graveyard's repo-list fragment (CARD-03). Aliased to `graveyardRepos`
+ * so it can coexist in one composed query alongside `stats`'s own
+ * `statsRepos: repositories(...)` call above — the same underlying
+ * `user.repositories` field with genuinely incompatible connection
+ * arguments (no `isFork` filter here; `PUSHED_AT` ascending order to
+ * surface the most historically-stale repos first even past the 100-row
+ * cap). No `isFork` filter is a deliberate choice, not an oversight — D-03
+ * includes forks by default, and that's a render-time client-side filter
+ * over this uniformly-fetched list, not a server-side query concern
+ * (RESEARCH.md's Anti-Pattern section). `privacy: PUBLIC` is a static
+ * literal, matching DATA-05's private-data boundary — this capability must
+ * never surface a private repository.
+ */
+const REPO_LIST_FRAGMENT = `
+      graveyardRepos: repositories(first: 100, ownerAffiliations: [OWNER], privacy: PUBLIC, orderBy: { field: PUSHED_AT, direction: ASC }) {
+        nodes { name nameWithOwner url createdAt pushedAt isFork }
       }`;
 
 /**
@@ -80,6 +99,9 @@ export function buildQuery(capabilities: Set<DataCapability>, includeForks: bool
   const fragments: string[] = [];
   if (capabilities.has("stats")) {
     fragments.push(includeForks ? STATS_FRAGMENT_INCLUDE_FORKS : STATS_FRAGMENT_EXCLUDE_FORKS);
+  }
+  if (capabilities.has("repoList")) {
+    fragments.push(REPO_LIST_FRAGMENT);
   }
 
   return `query ProfileStats($login: String!) {
@@ -154,8 +176,17 @@ interface StatsQueryResult {
       issueContributionsByRepository?: StatsRepoContribution[];
       pullRequestContributionsByRepository?: StatsRepoContribution[];
     };
-    /** Same "stats"-gated optionality as contributionsCollection above. */
-    repositories?: { nodes: { stargazerCount: number }[] };
+    /**
+     * Same "stats"-gated optionality as contributionsCollection above.
+     * Renamed from bare `repositories` (Phase 3, CARD-03) so this field can
+     * coexist with `graveyardRepos` below in one composed query — see
+     * `STATS_FRAGMENT_*`'s `statsRepos:` alias.
+     */
+    statsRepos?: { nodes: { stargazerCount: number }[] };
+    /** Only present when "repoList" is a requested capability (CARD-03). */
+    graveyardRepos?: {
+      nodes: { name: string; nameWithOwner: string; url: string; createdAt: string; pushedAt: string | null; isFork: boolean }[];
+    };
   };
   rateLimit: { cost: number; limit: number; remaining: number };
 }
@@ -221,10 +252,10 @@ export async function fetchProfileData(
       ? (cc.totalPullRequestContributions ?? 0)
       : sumExcludingForks(cc.pullRequestContributionsByRepository)
     : 0;
-  // `repositories.nodes` is already server-side filtered by buildQuery's
+  // `statsRepos.nodes` is already server-side filtered by buildQuery's
   // `isFork: false` argument in the includeForks: false shape — no
   // client-side re-filtering needed here in either branch.
-  const totalStars = (user.repositories?.nodes ?? []).reduce((sum, node) => sum + node.stargazerCount, 0);
+  const totalStars = (user.statsRepos?.nodes ?? []).reduce((sum, node) => sum + node.stargazerCount, 0);
 
   const data: ProfileData = {
     login: user.login,
@@ -233,6 +264,12 @@ export async function fetchProfileData(
     followers: user.followers.totalCount,
     fetchedAt: new Date().toISOString(),
     stats: { totalCommits, totalIssues, totalPRs, totalStars },
+    // `pushedAt` passed through exactly as GitHub returns it (string | null)
+    // — no `?? createdAt` fallback here. The Graveyard (Plan 03-04) owns
+    // interpreting a null pushedAt against the 180-day burial threshold;
+    // core/fetch.ts only composes the query and normalizes shape, never
+    // domain-interprets a widget's own display logic (RESEARCH.md boundary).
+    repositories: user.graveyardRepos?.nodes,
   };
 
   // restrictedContributionsCount (cc.restrictedContributionsCount) is
