@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { assertCoverage, measureAdvanceWidth, textToPathData } from "../../core/font.js";
+import {
+  apiSourcedTextPathData,
+  assertCoverage,
+  measureAdvanceWidth,
+  textToPathData,
+  truncateToWidth,
+} from "../../core/font.js";
 import type { ProfileData, RenderOptions, Theme } from "../../core/model.js";
 import type { CitableFact, WidgetDefinition } from "../../core/registry.js";
 import { chromeEn, chromeZh, type MastheadChrome } from "./copy.js";
@@ -17,6 +23,13 @@ const HEADER_TITLE_BASELINE_Y = 44;
 const HEADER_RULE_Y = 58;
 const SUBTITLE_BASELINE_Y = 74;
 const CONTENTS_BASELINE_Y = 90;
+
+/**
+ * UI-SPEC "API-Sourced Text: Truncation Policy": the subtitle row's total
+ * width budget, shared between the login and the right-aligned timestamp
+ * that sits on the same row.
+ */
+const SUBTITLE_BUDGET_PX = 140;
 
 /**
  * Fixed UTC epoch this card's issue number counts up from (RESEARCH.md Open
@@ -273,23 +286,30 @@ export const mastheadWidget: WidgetDefinition<RenderOptions> = {
 
     // (3) Subtitle + timestamp row. Login is ALWAYS rendered in
     // mono-semibold, never uppercased, regardless of card language — GitHub
-    // usernames are ASCII-only and case-preserving. This task's login
-    // rendering is not yet length-truncated (that is Task 2's job, per
-    // 03-01-PLAN.md's own framing: a functionality gap left deliberately
-    // for Task 2, not an architectural one — Task 2 only swaps this
-    // call site's rendering primitive, the layout/font choice stays put).
+    // usernames are ASCII-only and case-preserving. Length-truncated per
+    // UI-SPEC's "API-Sourced Text: Truncation Policy" (Task 2): the literal
+    // suffix's own measured width is reserved first, and whatever remains
+    // of the shared SUBTITLE_BUDGET_PX budget is what the login is allowed
+    // to occupy — routed through apiSourcedTextPathData (not
+    // assertCoverage/textToPathData) since a GitHub login is API-sourced
+    // text that must degrade (truncate + placeholder glyphs), never fail
+    // the build.
     const login = data.login;
-    assertCoverage("mono-semibold", login, `masthead subtitle login (${language})`);
-    const loginPath = letterSpacedPath(
+    const literalSuffixWidth =
+      language === "zh-TW"
+        ? zhLabelWidth(chrome.subtitleSuffix)
+        : monoRunWidth(chrome.subtitleSuffix);
+    const loginBudget = Math.max(0, SUBTITLE_BUDGET_PX - literalSuffixWidth);
+    const truncatedLogin = truncateToWidth("mono-semibold", login, T1_SIZE, loginBudget);
+    const loginPathData = apiSourcedTextPathData(
       "mono-semibold",
-      login,
+      truncatedLogin,
       PADDING,
       SUBTITLE_BASELINE_Y,
       T1_SIZE,
-      T1_LETTER_SPACING,
     );
-    const loginWidth = letterSpacedWidth("mono-semibold", login, T1_SIZE, T1_LETTER_SPACING);
-    markup += pathElement(loginPath, theme.muted);
+    const loginWidth = measureAdvanceWidth("mono-semibold", truncatedLogin, T1_SIZE);
+    markup += pathElement(loginPathData, theme.muted);
 
     const suffixX = PADDING + loginWidth;
     markup +=

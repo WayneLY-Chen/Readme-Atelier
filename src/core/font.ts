@@ -230,3 +230,94 @@ export function glyphPlaceholderPath(
 
   return { path: `${box} ${dot}`, advanceWidth };
 }
+
+/**
+ * Whether the font registered under `name` has a real glyph (not the
+ * `.notdef` sentinel, glyph index 0) for `char`. Extracted as its own
+ * reusable export (Phase 3, MAST-01/CARD-03) from the same check
+ * `assertCoverage`'s internal loop already performs — `assertCoverage`
+ * itself is deliberately left as an independent implementation rather than
+ * rewritten to call this, so the already-shipped, already-tested
+ * fail-loud path for engine-authored text is never touched by this addition.
+ */
+export function hasGlyph(fontName: string, char: string): boolean {
+  const font = getRegisteredFont(fontName);
+  return font.charToGlyphIndex(char) !== 0;
+}
+
+/** Three literal ASCII periods — UI-SPEC "API-Sourced Text: Truncation
+ * Policy": deliberately NOT the single Unicode ellipsis glyph (U+2026), to
+ * avoid certifying a new punctuation mark's glyph coverage just for this. */
+const ELLIPSIS = "...";
+
+/**
+ * UI-SPEC "API-Sourced Text: Truncation Policy" (Phase 3): degrade
+ * GitHub-API-sourced text (a login, a repo name) that overflows its slot's
+ * width budget by trimming from the end and appending a literal `"..."`,
+ * rather than failing the build (RENDER-05's fail-loud policy is reserved
+ * for engine-authored text, which this is not — the offending string is the
+ * end user's own prior naming choice, not a copy bug within engine control).
+ *
+ * Returns `text` unchanged if it already fits. Otherwise trims by Unicode
+ * code point (never splitting a surrogate pair) until
+ * `measured(trimmed + "...") <= budgetPx`, returning the first fit found
+ * starting from the full length and working down. If even the bare
+ * ellipsis alone does not fit an extremely narrow budget, returns the
+ * literal `"..."` rather than throwing or returning an empty string — a
+ * truncation policy that itself can fail the build would defeat UX-06's
+ * whole "degrade gracefully" purpose.
+ */
+export function truncateToWidth(
+  fontName: string,
+  text: string,
+  fontSize: number,
+  budgetPx: number,
+): string {
+  if (measureAdvanceWidth(fontName, text, fontSize) <= budgetPx) {
+    return text;
+  }
+
+  const chars = Array.from(text);
+  for (let end = chars.length; end > 0; end--) {
+    const candidate = chars.slice(0, end).join("") + ELLIPSIS;
+    if (measureAdvanceWidth(fontName, candidate, fontSize) <= budgetPx) {
+      return candidate;
+    }
+  }
+  return ELLIPSIS;
+}
+
+/**
+ * Convert API-sourced `text` (a GitHub login, a repo name) to SVG path data,
+ * substituting `glyphPlaceholderPath`'s designed fallback glyph for any
+ * character outside `fontName`'s coverage instead of throwing.
+ *
+ * Deliberately does NOT call `assertCoverage` — that is RENDER-05's hard
+ * build-failure gate reserved for engine-authored text (chrome strings,
+ * copy tables), a semantically different, mutually exclusive path from this
+ * one. Mixing the two would make API-sourced text also fail the build the
+ * moment a GitHub user's own name/login contains an out-of-coverage
+ * character, which is exactly the failure mode UX-06's "degrade gracefully"
+ * contract exists to prevent.
+ */
+export function apiSourcedTextPathData(
+  fontName: string,
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+): string {
+  let cursorX = x;
+  let d = "";
+  for (const char of Array.from(text)) {
+    if (hasGlyph(fontName, char)) {
+      d += textToPathData(fontName, char, cursorX, y, fontSize);
+      cursorX += measureAdvanceWidth(fontName, char, fontSize);
+    } else {
+      const placeholder = glyphPlaceholderPath(fontName, char, cursorX, y, fontSize);
+      d += placeholder.path;
+      cursorX += placeholder.advanceWidth;
+    }
+  }
+  return d;
+}

@@ -4,12 +4,15 @@ import opentype from "opentype.js";
 import subsetFont from "subset-font";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  apiSourcedTextPathData,
   assertCoverage,
   GlyphCoverageError,
   glyphPlaceholderPath,
+  hasGlyph,
   measureAdvanceWidth,
   registerFont,
   textToPathData,
+  truncateToWidth,
   UnknownFontError,
 } from "./font.js";
 
@@ -163,6 +166,82 @@ describe("Regression (2026-08-09 production incident): multi-character PathCorru
     const a = textToPathData(COVERAGE_FONT, text, 24, 215, 17);
     const b = textToPathData(COVERAGE_FONT, text, 24, 215, 17);
     expect(a).toBe(b);
+  });
+});
+
+describe("Plan 03-01 Task 2: hasGlyph / truncateToWidth / apiSourcedTextPathData (API-Sourced Text)", () => {
+  const MONO_SUBSET = "test-mono-semibold-t2";
+
+  beforeAll(() => {
+    const buffer = readFileSync(path.join("assets", "fonts", "ibm-plex-mono-semibold.subset.ttf"));
+    registerFont(MONO_SUBSET, toArrayBuffer(buffer));
+  });
+
+  describe("hasGlyph", () => {
+    it("is true for a character within the font's subset", () => {
+      expect(hasGlyph(MONO_SUBSET, "a")).toBe(true);
+    });
+
+    it("is false for a character the build-time subset policy excludes (U+00B7 MIDDLE DOT — outside ASCII-printable)", () => {
+      expect(hasGlyph(MONO_SUBSET, "·")).toBe(false);
+    });
+  });
+
+  describe("truncateToWidth", () => {
+    it("returns the original string unchanged when it already fits the budget", () => {
+      expect(truncateToWidth(MONO_SUBSET, "short", 8, 999)).toBe("short");
+    });
+
+    it("trims and appends a literal three-period ellipsis when the string overflows its budget", () => {
+      const long = "a-very-long-github-username-example";
+      const result = truncateToWidth(MONO_SUBSET, long, 8, 40);
+      expect(result.endsWith("...")).toBe(true);
+      expect(result.length).toBeLessThan(long.length);
+      expect(measureAdvanceWidth(MONO_SUBSET, result, 8)).toBeLessThanOrEqual(40);
+    });
+
+    it("returns the literal ellipsis (not an exception or empty string) for a budget too narrow even for the ellipsis alone", () => {
+      const long = "a-very-long-github-username-example";
+      expect(() => truncateToWidth(MONO_SUBSET, long, 8, 1)).not.toThrow();
+      expect(truncateToWidth(MONO_SUBSET, long, 8, 1)).toBe("...");
+    });
+  });
+
+  describe("apiSourcedTextPathData", () => {
+    it("for a fully-covered string, advances the cursor the same total distance as measureAdvanceWidth reports", () => {
+      const text = "octocat";
+      const d = apiSourcedTextPathData(MONO_SUBSET, text, 0, 0, 8);
+      expect(d.length).toBeGreaterThan(0);
+      // Structural equivalence with letterSpacedPath-style (no extra
+      // spacing) advance: re-measuring the same text with the font's own
+      // metrics must match the width apiSourcedTextPathData's internal
+      // cursor accumulates to (verified indirectly: rendering at a shifted
+      // x by that exact width must produce byte-identical path data to
+      // continuing the run from there).
+      const widthSoFar = measureAdvanceWidth(MONO_SUBSET, text, 8);
+      const continued = apiSourcedTextPathData(MONO_SUBSET, "!", widthSoFar, 0, 8);
+      const combined = apiSourcedTextPathData(MONO_SUBSET, text + "!", 0, 0, 8);
+      expect(combined).toBe(d + continued);
+    });
+
+    it("does not throw GlyphCoverageError for a mix of covered and uncovered characters, and substitutes a placeholder for the uncovered one", () => {
+      // U+00B7 is outside this subset's coverage (see hasGlyph test above).
+      const text = "ab·cd";
+      let result = "";
+      expect(() => {
+        result = apiSourcedTextPathData(MONO_SUBSET, text, 0, 0, 8);
+      }).not.toThrow();
+      expect(result.length).toBeGreaterThan(0);
+
+      // The placeholder path (a rounded-rect outline + centered dot) is
+      // present: compare against glyphPlaceholderPath's own output shape by
+      // confirming a bare single-uncovered-character call produces the
+      // exact same path fragment glyphPlaceholderPath returns for it at the
+      // relevant cursor position.
+      const beforeWidth = measureAdvanceWidth(MONO_SUBSET, "ab", 8);
+      const { path: placeholderPath } = glyphPlaceholderPath(MONO_SUBSET, "·", beforeWidth, 0, 8);
+      expect(result).toContain(placeholderPath);
+    });
   });
 });
 
