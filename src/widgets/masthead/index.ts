@@ -184,6 +184,38 @@ function chromeFor(language: "en" | "zh-TW"): MastheadChrome {
 }
 
 /**
+ * UI-SPEC "API-Sourced Text: Truncation Policy" (WR-01/CR-companion): the
+ * contents row's own total width budget — the row runs from `PADDING` to
+ * `RIGHT_EDGE_X`, same as every other full-width row on this card.
+ */
+const CONTENTS_ROW_BUDGET_PX = RIGHT_EDGE_X - PADDING;
+
+/**
+ * Width-budgeted truncation for the contents row's joined title list.
+ * Mirrors `truncateToWidth`'s own algorithm (trim from the end, append an
+ * ellipsis, first fit wins) but measures with `monoRunWidth`/`zhLabelWidth`
+ * rather than `measureAdvanceWidth` alone: unlike the login/timestamp
+ * strings `truncateToWidth` was written for, the contents row's en-mode
+ * string is rendered through `monoRun`'s letter-spaced cursor math, so a
+ * plain per-character advance sum would under-measure it and let the
+ * "truncated" text still overflow its budget.
+ */
+function truncateContentsToWidth(language: "en" | "zh-TW", text: string, budgetPx: number): string {
+  const measure = (t: string): number => (language === "zh-TW" ? zhLabelWidth(t) : monoRunWidth(t));
+  if (measure(text) <= budgetPx) {
+    return text;
+  }
+  const chars = Array.from(text);
+  for (let end = chars.length; end > 0; end--) {
+    const candidate = chars.slice(0, end).join("") + "...";
+    if (measure(candidate) <= budgetPx) {
+      return candidate;
+    }
+  }
+  return "...";
+}
+
+/**
  * Renders the right-aligned citation half of the contents row
  * (`{value} {label}`, value in `theme.accent`, label in `theme.muted` — UI-SPEC
  * "Cross-Card Citation Display Contract"). Returns "" (no markup at all,
@@ -324,10 +356,23 @@ export const mastheadWidget: WidgetDefinition<RenderOptions> = {
     // (4) Contents + citation row. `contents` is genuinely zero-to-many
     // (UI-SPEC "zero-one-many", masthead-contents-row) — the joined-string
     // approach degrades to "" naturally, and the label alone still renders.
+    // WR-01: the catalog is expected to grow indefinitely, so the joined
+    // title list is width-budgeted the same way the subtitle row budgets
+    // the login — the label's own width is reserved first, and whatever
+    // remains of CONTENTS_ROW_BUDGET_PX is what the joined titles may use
+    // before being truncated with an ellipsis.
     const contents = mastheadOpts.contents ?? [];
     const joined = contents.map((c) => c.title).join(chrome.contentsSeparator);
+    const contentsPrefix =
+      language === "zh-TW" ? `${chrome.contentsLabel}：` : `${chrome.contentsLabel} `;
     const contentsText =
-      joined === "" ? chrome.contentsLabel : language === "zh-TW" ? `${chrome.contentsLabel}：${joined}` : `${chrome.contentsLabel} ${joined}`;
+      joined === "" ? chrome.contentsLabel : (() => {
+        const prefixWidth =
+          language === "zh-TW" ? zhLabelWidth(contentsPrefix) : monoRunWidth(contentsPrefix);
+        const joinedBudgetPx = Math.max(0, CONTENTS_ROW_BUDGET_PX - prefixWidth);
+        const truncatedJoined = truncateContentsToWidth(language, joined, joinedBudgetPx);
+        return `${contentsPrefix}${truncatedJoined}`;
+      })();
 
     markup +=
       language === "zh-TW"
