@@ -252,26 +252,29 @@ export function resolveCards(config: ResolvedConfig): ResolvedCard[] {
 
     const id = entry.id ?? entry.type;
 
+    // D-09 allows `timezone` to be overridden per card via a reserved
+    // top-level `options.timezone` key — distinct from the widget's own
+    // `optionsSchema` vocabulary (a widget could coincidentally declare its
+    // own unrelated `timezone` option, as almanac's test fixtures do). The
+    // reserved key is stripped out of the raw options *before* the rest is
+    // handed to the widget's own `.strict()` schema, so a widget that does
+    // not itself declare a `timezone` field (masthead, editorial-stat-card,
+    // the-graveyard) never sees an "unrecognized key" for it.
+    // `config.ts`'s `CardEntrySchema` leaves `options:` as an unvalidated
+    // `z.record`, so a runtime `typeof` check replaces the previous unchecked
+    // `as string` cast.
+    const { timezone: rawTimezone, ...widgetOptions } = entry.options ?? {};
+    const timezone = typeof rawTimezone === "string" ? rawTimezone : config.timezone;
+
     // The widget owns its own option vocabulary. This is where a typo inside
     // a card's `options:` block is caught — config.ts only checked that the
     // block is a mapping.
     let parsedOptions: Record<string, unknown>;
     try {
-      parsedOptions = widget.optionsSchema.parse(entry.options ?? {}) as Record<string, unknown>;
+      parsedOptions = widget.optionsSchema.parse(widgetOptions) as Record<string, unknown>;
     } catch (error) {
       throw new InvalidCardOptionsError(id, entry.type, describeOptionsFailure(error));
     }
-
-    // D-09 allows `timezone` to be overridden per card via a reserved
-    // top-level `options.timezone` key — distinct from the widget's own
-    // `optionsSchema` vocabulary (a widget could coincidentally declare its
-    // own unrelated `timezone` option, as almanac's test fixtures do), so
-    // this deliberately reads `entry.options` rather than `parsedOptions`.
-    // `config.ts`'s `CardEntrySchema` leaves `options:` as an unvalidated
-    // `z.record`, so a runtime `typeof` check replaces the previous unchecked
-    // `as string` cast.
-    const rawTimezone = entry.options?.timezone;
-    const timezone = typeof rawTimezone === "string" ? rawTimezone : config.timezone;
 
     return { id, widget, parsedOptions, timezone };
   });
