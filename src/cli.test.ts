@@ -95,6 +95,82 @@ writeFileSync(
 const STUB_FETCH_NODE_OPTIONS = `--import=${pathToFileURL(STUB_FETCH_PRELOAD).href}`;
 
 /**
+ * Plan 03-05 Task 2: a second, independent stub-fetch preload — same
+ * `appendFileSync` recording / JSON response structure as
+ * `STUB_FETCH_PRELOAD` above, but the response body's `user` object carries
+ * `statsRepos` (renamed from the bare `repositories` above, matching
+ * `core/fetch.ts`'s post-03-02 alias) AND a `graveyardRepos` field, so a
+ * real subprocess run can prove `statsRepos`/`graveyardRepos` coexist in one
+ * composed query when both "stats" and "repoList" capabilities are enabled
+ * at once (Almanac/Editorial Stat Card + The Graveyard). `graveyardRepos`'s
+ * one fixed entry uses a `pushedAt` far enough in the past (2020) that it is
+ * always >= the 180-day burial threshold regardless of the actual test run
+ * date, so The Graveyard renders its populated (non-empty) tombstone state
+ * rather than the empty-state caption. A separate file from
+ * `STUB_FETCH_PRELOAD` (not a modification of it) — Task 2's own acceptance
+ * criteria require the existing preload/tests to stay untouched.
+ */
+const STUB_FETCH_WITH_REPOLIST_PRELOAD = join(
+  tmpdir(),
+  "readme-atelier-cli-test-stub-fetch-repolist.mjs",
+);
+writeFileSync(
+  STUB_FETCH_WITH_REPOLIST_PRELOAD,
+  [
+    'import { appendFileSync } from "node:fs";',
+    "globalThis.fetch = async (_url, init) => {",
+    "  const logPath = process.env.READU_STUB_FETCH_LOG;",
+    "  const bodyText = (init && init.body) || \"{}\";",
+    "  if (logPath) {",
+    "    appendFileSync(logPath, bodyText + \"\\n\");",
+    "  }",
+    "  let parsed = {};",
+    "  try { parsed = JSON.parse(String(bodyText)); } catch {}",
+    "  const login = (parsed && parsed.variables && parsed.variables.login) || \"\";",
+    "  const responseBody = {",
+    "    data: {",
+    "      user: {",
+    "        login,",
+    "        name: null,",
+    "        avatarUrl: \"\",",
+    "        followers: { totalCount: 9 },",
+    "        contributionsCollection: {",
+    "          restrictedContributionsCount: 0,",
+    "          commitContributionsByRepository: [",
+    "            { contributions: { totalCount: 3 }, repository: { isFork: false } },",
+    "          ],",
+    "          issueContributionsByRepository: [],",
+    "          pullRequestContributionsByRepository: [],",
+    "        },",
+    "        statsRepos: { nodes: [{ stargazerCount: 7 }] },",
+    "        graveyardRepos: {",
+    "          nodes: [",
+    "            {",
+    "              name: \"old-project\",",
+    "              nameWithOwner: \"octocat/old-project\",",
+    "              url: \"https://github.com/octocat/old-project\",",
+    "              createdAt: \"2020-01-01T00:00:00Z\",",
+    "              pushedAt: \"2020-06-01T00:00:00Z\",",
+    "              isFork: false,",
+    "            },",
+    "          ],",
+    "        },",
+    "      },",
+    "      rateLimit: { cost: 5, limit: 5000, remaining: 4995 },",
+    "    },",
+    "  };",
+    "  return new Response(JSON.stringify(responseBody), {",
+    "    status: 200,",
+    "    headers: { \"content-type\": \"application/json\" },",
+    "  });",
+    "};",
+    "",
+  ].join("\n"),
+  "utf8",
+);
+const STUB_FETCH_WITH_REPOLIST_NODE_OPTIONS = `--import=${pathToFileURL(STUB_FETCH_WITH_REPOLIST_PRELOAD).href}`;
+
+/**
  * A `NODE_OPTIONS=--import=...` preload that stubs `globalThis.fetch` with
  * GitHub's REAL rate-limit shape (RESEARCH.md Pitfall 1: HTTP 200,
  * `x-ratelimit-remaining: 0`, `data: null` + `errors[]`) rather than a 403 —
@@ -407,6 +483,65 @@ describe("Plan 02-03 Task 3: cli.ts real end-to-end wiring (resolveCards -> fetc
       // not even Almanac, which would otherwise have rendered successfully
       // on its own (all-or-nothing, not partial).
       expect(existsSync(join(dir, ".preview"))).toBe(false);
+    },
+    30_000,
+  );
+});
+
+describe("Plan 03-05 Task 2: cli.ts real subprocess — four cards + repositories() alias coexistence (ROADMAP.md Phase 3 success criterion 1, end-to-end)", () => {
+  it(
+    "a widgets.yml enabling masthead + almanac + editorial-stat-card + the-graveyard, with GITHUB_TOKEN/GITHUB_LOGIN set and a statsRepos+graveyardRepos stub response: exits 0, writes exactly 8 .preview/*.svg files (4 cards x light/dark, all <path-bearing and <text-free), fetches exactly once, and the sent query text contains both statsRepos: and graveyardRepos:",
+    () => {
+      const dir = makeTmpDir();
+      writeFileSync(
+        join(dir, "widgets.yml"),
+        "cards:\n  - type: masthead\n  - type: almanac\n  - type: editorial-stat-card\n  - type: the-graveyard\n",
+        "utf8",
+      );
+      const logPath = join(dir, "fetch-calls.log");
+
+      const result = runCliWithEnv(["widgets.yml"], dir, STUB_FETCH_WITH_REPOLIST_NODE_OPTIONS, {
+        GITHUB_TOKEN: "fake-pat-value",
+        GITHUB_LOGIN: "octocat",
+        READU_STUB_FETCH_LOG: logPath,
+      });
+
+      expect(result.status).toBe(0);
+
+      const expectedFiles = [
+        "masthead-light.svg",
+        "masthead-dark.svg",
+        "almanac-light.svg",
+        "almanac-dark.svg",
+        "editorial-stat-card-light.svg",
+        "editorial-stat-card-dark.svg",
+        "the-graveyard-light.svg",
+        "the-graveyard-dark.svg",
+      ];
+      for (const file of expectedFiles) {
+        const filePath = join(dir, ".preview", file);
+        expect(existsSync(filePath)).toBe(true);
+        const svg = readFileSync(filePath, "utf8");
+        expect(svg).toContain("<path");
+        expect(svg).not.toContain("<text");
+      }
+
+      // Exactly 8 files, not 8-or-more — proves nothing else got written
+      // into .preview/ by this four-card run.
+      const previewFiles = expectedFiles.filter((file) => existsSync(join(dir, ".preview", file)));
+      expect(previewFiles).toHaveLength(8);
+
+      const logLines = readFileSync(logPath, "utf8").trim().split("\n").filter(Boolean);
+      // DATA-01's "one fetch per run" guarantee, extended to two
+      // repositories()-consuming capabilities (stats + repoList) enabled
+      // together — proven through a real subprocess and a real
+      // network-layer interception, not just fetch.test.ts's unit-level
+      // buildQuery assertions.
+      expect(logLines).toHaveLength(1);
+
+      const sentBody = JSON.parse(logLines[0] as string) as { query: string };
+      expect(sentBody.query).toContain("statsRepos:");
+      expect(sentBody.query).toContain("graveyardRepos:");
     },
     30_000,
   );
