@@ -187,26 +187,42 @@ export interface Tombstone {
 }
 
 /**
- * CARD-03's tombstone selection: filter by fork-inclusion (D-03), filter to
- * repositories buried >= BURY_THRESHOLD_DAYS ago (D-01, using
- * `pushedAt ?? createdAt` as the last-push proxy per RESEARCH.md Pitfall 2),
- * sort by most-recently-buried first (UI-SPEC "Selection" — keeps the card
- * fresh across renders) with a stable name-ascending tie-break for
- * byte-identical reproducibility, then cap at TOMBSTONE_CAP (D-02).
+ * Shared filter step behind both `selectTombstones` and `countBuried`:
+ * fork-inclusion (D-03), then repositories buried >= BURY_THRESHOLD_DAYS ago
+ * (D-01, using `pushedAt ?? createdAt` as the last-push proxy per
+ * RESEARCH.md Pitfall 2). Deliberately factored out so the header's "N
+ * BURIED" count and the tombstone-cap selection can never drift apart on
+ * what counts as "buried" — see CR-02.
+ */
+function filterBuried(
+  repositories: GraveyardRepoInput[],
+  now: Date,
+  includeForks: boolean,
+): Array<GraveyardRepoInput & { lastPush: string }> {
+  const withLastPush = repositories
+    .filter((repo) => includeForks || !repo.isFork)
+    .map((repo) => ({ ...repo, lastPush: repo.pushedAt ?? repo.createdAt }));
+
+  return withLastPush.filter((repo) => {
+    const daysSinceLastPush = (now.getTime() - new Date(repo.lastPush).getTime()) / MS_PER_DAY;
+    return daysSinceLastPush >= BURY_THRESHOLD_DAYS;
+  });
+}
+
+/**
+ * CARD-03's tombstone selection: filter to every genuinely-buried
+ * repository (`filterBuried`), sort by most-recently-buried first (UI-SPEC
+ * "Selection" — keeps the card fresh across renders) with a stable
+ * name-ascending tie-break for byte-identical reproducibility, then cap at
+ * TOMBSTONE_CAP (D-02). This is the *display* list — for the true buried
+ * count (uncapped), use `countBuried`.
  */
 export function selectTombstones(
   repositories: GraveyardRepoInput[],
   now: Date,
   includeForks: boolean,
 ): Tombstone[] {
-  const withLastPush = repositories
-    .filter((repo) => includeForks || !repo.isFork)
-    .map((repo) => ({ ...repo, lastPush: repo.pushedAt ?? repo.createdAt }));
-
-  const buried = withLastPush.filter((repo) => {
-    const daysSinceLastPush = (now.getTime() - new Date(repo.lastPush).getTime()) / MS_PER_DAY;
-    return daysSinceLastPush >= BURY_THRESHOLD_DAYS;
-  });
+  const buried = filterBuried(repositories, now, includeForks);
 
   buried.sort((a, b) => {
     const diff = new Date(b.lastPush).getTime() - new Date(a.lastPush).getTime();
@@ -221,6 +237,20 @@ export function selectTombstones(
       (new Date(repo.lastPush).getTime() - new Date(repo.createdAt).getTime()) / MS_PER_DAY,
     ),
   }));
+}
+
+/**
+ * The true count of buried repositories, independent of TOMBSTONE_CAP —
+ * this is what the header's "N BURIED" stat must use (CR-02).
+ * `selectTombstones`'s returned array is capped for display purposes and
+ * must never be used to derive this count.
+ */
+export function countBuried(
+  repositories: GraveyardRepoInput[],
+  now: Date,
+  includeForks: boolean,
+): number {
+  return filterBuried(repositories, now, includeForks).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +311,7 @@ export const theGraveyardWidget: WidgetDefinition<RenderOptions> = {
 
     const tombstones = selectTombstones(data.repositories ?? [], opts.now, includeForks);
     const N = tombstones.length;
+    const totalBuried = countBuried(data.repositories ?? [], opts.now, includeForks);
 
     let markup = "";
 
@@ -297,7 +328,7 @@ export const theGraveyardWidget: WidgetDefinition<RenderOptions> = {
       `the-graveyard title (${language})`,
     );
 
-    const buriedCountText = language === "zh-TW" ? buriedCountZh(N) : buriedCountEn(N);
+    const buriedCountText = language === "zh-TW" ? buriedCountZh(totalBuried) : buriedCountEn(totalBuried);
     if (language === "zh-TW") {
       const width = zhLabelWidth(buriedCountText);
       markup += zhLabel(buriedCountText, RIGHT_EDGE_X - width, HEADER_TITLE_BASELINE_Y, theme.muted);
