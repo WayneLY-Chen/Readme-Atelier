@@ -178,6 +178,27 @@ describe("resolveCards", () => {
     expect(taipei.timezone).toBe("Asia/Taipei");
   });
 
+  /**
+   * WR-02 regression: the test above only ever exercised `almanac`, whose
+   * `optionsSchema` happens to declare its own `timezone` field — which is
+   * exactly what let CR-01 ship (masthead/editorial-stat-card/the-graveyard
+   * all use `.strict()` schemas WITHOUT a `timezone` field and rejected the
+   * override outright). Parametrized over every widget type registrable in
+   * this file's registry (masthead is covered separately in
+   * `widgets/masthead/index.test.ts`, since its real widget's name collides
+   * with this file's own fake "masthead" spy fixture used by the citation/
+   * page-numbering tests below).
+   */
+  it.each(["almanac", "editorial-stat-card", "the-graveyard"] as const)(
+    "%s: honors a per-card options.timezone override (D-09)",
+    (type) => {
+      const [card] = resolveCards(
+        config({ timezone: "UTC", cards: [{ type, options: { timezone: "Asia/Taipei" } }] }),
+      );
+      expect(card.timezone).toBe("Asia/Taipei");
+    },
+  );
+
   it("keeps optionsSchema.parse()'s full return value in parsedOptions, not just a placeholder", () => {
     const [card] = resolveCards(
       config({ cards: [{ type: "editorial-stat-card", options: { include_forks: true } }] }),
