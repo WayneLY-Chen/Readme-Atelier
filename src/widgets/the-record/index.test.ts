@@ -76,7 +76,13 @@ describe("MAX_STROKE_WIDTH (1.10) — merge is deliberate and bounded (CARD-04 a
     const calendar = [{ date: "2026-01-04", count: 1000 }]; // lands in bucket 0 (elapsed)
     const data = baseProfileData(calendar);
     const markup = theRecordWidget.renderBody(data, editorialLight, optsFor("en", NOW));
-    const widths = [...markup.matchAll(/stroke-width="(\d+\.\d+)"/g)].map((m) => Number(m[1]));
+    // Scoped to fill="none" circles (groove rings + the rim highlight) —
+    // Plan 04-02's tonearm casing/shaft <line>s legitimately carry wider
+    // strokes (4.0/2.4/4.8/3.2) that are not part of the MAX_STROKE_WIDTH
+    // contract, which only bounds the groove-ring encoding.
+    const widths = [...markup.matchAll(/<circle[^>]*fill="none"[^>]*stroke-width="(\d+\.\d+)"/g)].map((m) =>
+      Number(m[1]),
+    );
     for (const w of widths) {
       expect(w).toBeLessThanOrEqual(1.1);
     }
