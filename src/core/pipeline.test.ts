@@ -8,6 +8,7 @@ import { theGraveyardWidget } from "../widgets/the-graveyard/index.js";
 import type { ResolvedConfig } from "./config.js";
 import { type FetchImpl, zeroCapabilityProfileData } from "./fetch.js";
 import type { ProfileData, RenderOptions } from "./model.js";
+import { optimizeSvg } from "./optimize.js";
 import {
   ConflictingStatsOptionsError,
   fetchSharedData,
@@ -832,16 +833,18 @@ describe("Plan 03-05: 四卡完整組合（MAST-01/02/03 收尾）", () => {
     expect(citedFacts.totalCommits?.value).toBe(formatStatNumber(newValue, "en"));
   });
 
-  it("Almanac + Editorial Stat Card + The Graveyard（不含 masthead）：renderAllCards 的 light/dark 與各自直接呼叫 renderPair（同一組 opts，pageNumber/totalPages 顯式 undefined）逐位元組相同", () => {
+  it("Almanac + Editorial Stat Card + The Graveyard（不含 masthead）：renderAllCards 的 light/dark 與各自直接呼叫 renderPair 再套用 optimizeSvg（同一組 opts，pageNumber/totalPages 顯式 undefined）逐位元組相同", () => {
     // renderAllCards's own return value (RenderedCard.light/dark) is the
-    // FULL wrapped <svg> document (core/svg.ts's wrapSvg), not the bare
-    // widget.renderBody() markup — so the byte-identical comparison this
-    // test proves is against renderPair (the same function renderAllCards
-    // calls internally per card), constructed directly from each card's own
-    // resolved parsedOptions/timezone with pageNumber/totalPages explicitly
-    // undefined. This is the plan's literal renderBody-vs-renderBody
-    // comparison, generalized to account for the SVG wrapper every card
-    // actually returns through the real pipeline (see 03-05-SUMMARY.md).
+    // FULL wrapped <svg> document (core/svg.ts's wrapSvg) AFTER Plan 04-01
+    // Task 2's optimizeSvg pass (RENDER-08), not the bare renderPair output
+    // — so the byte-identical comparison this test proves is against
+    // renderPair's own output run through optimizeSvg (the same two calls
+    // renderAllCards makes internally per card), constructed directly from
+    // each card's own resolved parsedOptions/timezone with
+    // pageNumber/totalPages explicitly undefined. This is the plan's literal
+    // renderBody-vs-renderBody comparison, generalized to account for both
+    // the SVG wrapper and the optimize pass every card actually goes through
+    // in the real pipeline (see 03-05-SUMMARY.md / 04-01-SUMMARY.md).
     const cards = resolveCards(
       config({
         cards: [{ type: "almanac" }, { type: "editorial-stat-card" }, { type: "the-graveyard" }],
@@ -866,8 +869,8 @@ describe("Plan 03-05: 四卡完整組合（MAST-01/02/03 收尾）", () => {
       } as RenderOptions;
 
       const direct = renderPair(widget, data, directOpts, EDITORIAL_THEMES);
-      expect(rc.light).toBe(direct.light);
-      expect(rc.dark).toBe(direct.dark);
+      expect(rc.light).toBe(optimizeSvg(direct.light));
+      expect(rc.dark).toBe(optimizeSvg(direct.dark));
     });
   });
 

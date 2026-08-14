@@ -1,6 +1,7 @@
 import type { CardEntry, ResolvedConfig } from "./config.js";
 import { calendarWindowFrom, type FetchImpl, fetchProfileData } from "./fetch.js";
 import type { ProfileData, RenderOptions, Theme } from "./model.js";
+import { optimizeSvg } from "./optimize.js";
 import { collectCapabilities, get } from "./registry.js";
 import type { CitableFact, WidgetDefinition } from "./registry.js";
 import {
@@ -438,7 +439,15 @@ export function renderAllCards(
       throw new PageNumberInvariantError(card.id, opts.pageNumber, opts.totalPages);
     }
 
-    const { light, dark } = renderPair(card.widget, data, opts, themes);
+    const { light: rawLight, dark: rawDark } = renderPair(card.widget, data, opts, themes);
+
+    // RENDER-08: optimize before the size guard runs, so the budget measures
+    // the real published bytes — both entry points inherit this for free
+    // since they both funnel through renderAllCards. Any svgo error
+    // propagates unmodified (optimizeSvg's own doc comment): a card that
+    // cannot be optimized must fail the whole run, not ship unoptimized.
+    const light = optimizeSvg(rawLight);
+    const dark = optimizeSvg(rawDark);
 
     const lightLabel = `${card.id}-light.svg`;
     const darkLabel = `${card.id}-dark.svg`;

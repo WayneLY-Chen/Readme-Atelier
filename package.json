@@ -16,6 +16,7 @@
     "@octokit/graphql": "^9.0.4",
     "lunar-typescript": "1.8.6",
     "opentype.js": "2.0.0",
+    "svgo": "4.0.2",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   },
