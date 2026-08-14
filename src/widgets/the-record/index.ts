@@ -422,6 +422,26 @@ export function tonearmTip(r: number): { x: number; y: number } {
 }
 
 /**
+ * The busiest ELAPSED week (D-04's normalization anchor / UI-SPEC "BUSIEST
+ * WEEK" row): the earliest (lowest-index) week among ties, or `null` when
+ * every elapsed week has zero contributions (`maxWeekly === 0` — UI-SPEC
+ * Degenerate States #1/#2/#6). `elapsedWeeks` must already be in ascending
+ * index order (`bucketWeeks`'s own invariant) — `Array.prototype.find`
+ * returning the FIRST match is what makes the tie-break deterministic
+ * (earliest week wins, QA-02). Extracted as its own pure function so the
+ * tie-break rule has a direct unit-test seam, the same convention as
+ * `grooveRadius`/`tonearmTip`/`bucketWeeks` above.
+ */
+export function busiestElapsedWeek(elapsedWeeks: RecordWeek[]): { index: number; count: number } | null {
+  const maxWeekly = Math.max(0, ...elapsedWeeks.map((w) => w.count));
+  if (maxWeekly === 0) {
+    return null;
+  }
+  const week = elapsedWeeks.find((w) => w.count === maxWeekly)!;
+  return { index: week.index, count: week.count };
+}
+
+/**
  * Deterministic 32-bit PRNG (mulberry32, public domain). Integer-only ops +
  * Math.imul => bit-identical sequences on every platform, which is what
  * keeps D-09's texture snapshot-pinnable. Decorative determinism ONLY —
@@ -688,20 +708,19 @@ export const theRecordWidget: WidgetDefinition<RenderOptions> = {
     markup += renderDataRow(row1Label, row1Value, ROW1_Y, language, theme);
 
     // Row 2: BUSIEST WEEK — W{n} - {count}, or NONE/無 when maxWeekly === 0.
-    // Ties resolve to the earliest (lowest-index) week deterministically,
-    // because elapsedWeeks is in strict ascending index order and `find`
-    // returns the first match.
+    // Tie-break-to-earliest-index lives in busiestElapsedWeek, the single
+    // source of truth for this selection (also used by index.test.ts).
     const row2Label = language === "zh-TW" ? busiestWeekLabelZh : busiestWeekLabelEn;
+    const busiest = busiestElapsedWeek(elapsedWeeks);
     let row2Value: string;
-    if (maxWeekly === 0) {
+    if (busiest === null) {
       row2Value = language === "zh-TW" ? noneValueZh : noneValueEn;
     } else {
-      const busiestIndex = elapsedWeeks.find((w) => w.count === maxWeekly)!.index;
-      const formattedCount = formatRecordNumber(maxWeekly, language);
+      const formattedCount = formatRecordNumber(busiest.count, language);
       row2Value =
         language === "zh-TW"
-          ? busiestWeekValueZh(busiestIndex + 1, formattedCount)
-          : busiestWeekValueEn(busiestIndex + 1, formattedCount);
+          ? busiestWeekValueZh(busiest.index + 1, formattedCount)
+          : busiestWeekValueEn(busiest.index + 1, formattedCount);
     }
     markup += renderDataRow(row2Label, row2Value, ROW2_Y, language, theme);
 

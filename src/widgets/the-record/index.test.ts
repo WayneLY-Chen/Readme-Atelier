@@ -1,15 +1,44 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { calendarWindowFrom } from "../../core/fetch.js";
+import { hasGlyph } from "../../core/font.js";
 import type { ProfileData, RenderOptions } from "../../core/model.js";
 import { editorialDark, editorialLight } from "../../core/theme.js";
 import { loadAllFonts } from "../../node/fonts.js";
 import { renderPair } from "../../core/svg.js";
 import {
+  busiestWeekLabelEn,
+  busiestWeekLabelZh,
+  busiestWeekValueEn,
+  busiestWeekValueZh,
+  chromeEn,
+  chromeZh,
+  mastheadEyebrowZh,
+  needleCaptionEn,
+  needleCaptionZh,
+  noneValueEn,
+  noneValueZh,
+  pageFooterEn,
+  pageFooterZh,
+  silentWeeksLabelEn,
+  silentWeeksLabelZh,
+  silentWeeksValue,
+  totalLabelEn,
+  totalLabelZh,
+  weeksPressedLabelEn,
+  weeksPressedLabelZh,
+  weeksPressedValue,
+  zeroCaptionEn,
+  zeroCaptionZh,
+} from "./copy.js";
+import {
   bucketWeeks,
+  busiestElapsedWeek,
   grooveCountForYear,
   grooveRadius,
   mulberry32,
+  type RecordWeek,
   theRecordWidget,
+  tonearmTip,
   zonedYear,
 } from "./index.js";
 
@@ -241,5 +270,254 @@ describe("renderPair — sandbox-safety invariant (RENDER-01)", () => {
     expect(() =>
       renderPair(theRecordWidget, data, optsFor("zh-TW", NOW), { light: editorialLight, dark: editorialDark }),
     ).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 04-02 Task 3 — boundary tests over the degenerate states the UI-SPEC
+// enumerates that the 04-01 tracer did not already close.
+// ---------------------------------------------------------------------------
+
+describe("Groove pitch — differs by at most 0.06px between a 53-week and a 54-week year (UI-SPEC Card Layout)", () => {
+  it("pitch(53) vs pitch(54): the difference is at most 0.06", () => {
+    const pitch = (G: number) => grooveRadius(0, G) - grooveRadius(1, G);
+    expect(Math.abs(pitch(53) - pitch(54))).toBeLessThanOrEqual(0.06);
+  });
+});
+
+describe("Pressed/future boundary — 1 January and 31 December (UI-SPEC Degenerate States #4/#5)", () => {
+  it("now = 1 January: exactly one elapsed bucket, the rest future", () => {
+    const now = new Date("2026-01-01T00:00:00Z");
+    const weeks = bucketWeeks([], 2026, now, "UTC");
+    expect(weeks.filter((w) => w.elapsed).length).toBe(1);
+    expect(weeks.filter((w) => !w.elapsed).length).toBe(weeks.length - 1);
+  });
+
+  it("now = 31 December: every bucket elapsed, zero future", () => {
+    const now = new Date("2026-12-31T00:00:00Z");
+    const weeks = bucketWeeks([], 2026, now, "UTC");
+    expect(weeks.every((w) => w.elapsed)).toBe(true);
+    expect(weeks.filter((w) => !w.elapsed).length).toBe(0);
+  });
+});
+
+describe("Tonearm tip radius — matches the current week's groove, not the last nonzero week (D-05)", () => {
+  it("now = 1 January: tip radius/coords equal the R_OUTER worked endpoint (UI-SPEC worked table)", () => {
+    const now = new Date("2026-01-01T00:00:00Z");
+    const markup = theRecordWidget.renderBody(baseProfileData([]), editorialLight, optsFor("en", now));
+    const tipMatch = markup.match(/<circle cx="([\d.]+)" cy="([\d.]+)" r="1.5" fill="[^"]+"\/>/);
+    expect(tipMatch).not.toBeNull();
+    // Compared with 1-decimal tolerance: the UI-SPEC's own worked table
+    // rounds the intermediate unit vector `u` to 4 decimals before deriving
+    // the tip, which introduces ~0.01px of drift versus computing directly
+    // from the exact (unrounded) formula, as tonearmTip() does here.
+    expect(Number(tipMatch![1])).toBeCloseTo(199.68, 1);
+    expect(Number(tipMatch![2])).toBeCloseTo(171.94, 1);
+  });
+
+  it("now = 31 December: tip radius/coords equal the R_INNER worked endpoint (UI-SPEC worked table)", () => {
+    const now = new Date("2026-12-31T00:00:00Z");
+    const markup = theRecordWidget.renderBody(baseProfileData([]), editorialLight, optsFor("en", now));
+    const tipMatch = markup.match(/<circle cx="([\d.]+)" cy="([\d.]+)" r="1.5" fill="[^"]+"\/>/);
+    expect(tipMatch).not.toBeNull();
+    expect(Number(tipMatch![1])).toBeCloseTo(153.61, 1);
+    expect(Number(tipMatch![2])).toBeCloseTo(162.36, 1);
+  });
+});
+
+describe("tonearmTip — reachability invariant holds at both radial extremes (record-tonearm overflow)", () => {
+  it("r = R_OUTER (86) produces finite, non-NaN coordinates", () => {
+    const tip = tonearmTip(86);
+    expect(Number.isFinite(tip.x)).toBe(true);
+    expect(Number.isFinite(tip.y)).toBe(true);
+  });
+
+  it("r = R_INNER (39) produces finite, non-NaN coordinates", () => {
+    const tip = tonearmTip(39);
+    expect(Number.isFinite(tip.x)).toBe(true);
+    expect(Number.isFinite(tip.y)).toBe(true);
+  });
+});
+
+describe("busiestElapsedWeek — ties resolve to the earliest (lowest-index) week (UI-SPEC Degenerate State #6, QA-02)", () => {
+  const week = (index: number, count: number): RecordWeek => ({ index, startDate: new Date(0), count, elapsed: true });
+
+  it("two elapsed weeks tied at the same max count: the earlier index wins", () => {
+    const weeks = [week(0, 5), week(1, 5), week(2, 3)];
+    expect(busiestElapsedWeek(weeks)).toEqual({ index: 0, count: 5 });
+  });
+
+  it("all-zero elapsed weeks return null (maxWeekly === 0)", () => {
+    const weeks = [week(0, 0), week(1, 0)];
+    expect(busiestElapsedWeek(weeks)).toBeNull();
+  });
+
+  it("no elapsed weeks returns null", () => {
+    expect(busiestElapsedWeek([])).toBeNull();
+  });
+});
+
+describe("Busiest-elapsed-count-of-0 — every elapsed groove takes the pressed floor, no branch (Degenerate State #1/#2)", () => {
+  it("an all-zero calendar renders every elapsed groove at exactly the pressed floor (width 0.55, opacity 0.42)", () => {
+    const markup = theRecordWidget.renderBody(baseProfileData([]), editorialLight, optsFor("en", NOW));
+    const pressedCircles = [
+      ...markup.matchAll(/<circle[^>]*fill="none"[^>]*stroke-width="(\d+\.\d+)" stroke-opacity="0\.42"\/>/g),
+    ];
+    expect(pressedCircles.length).toBeGreaterThan(0);
+    for (const m of pressedCircles) {
+      expect(m[1]).toBe("0.55");
+    }
+  });
+
+  it("the all-zero render emits exactly one more <path> element than a populated render with the same shape (D-06: only the caption is added)", () => {
+    const populated = theRecordWidget.renderBody(
+      baseProfileData([{ date: "2026-01-04", count: 3 }]),
+      editorialLight,
+      optsFor("en", NOW),
+    );
+    const empty = theRecordWidget.renderBody(baseProfileData([]), editorialLight, optsFor("en", NOW));
+    const countPaths = (markup: string) => (markup.match(/<path /g) ?? []).length;
+    expect(countPaths(empty)).toBe(countPaths(populated) + 1);
+  });
+
+  it("the all-zero render has the same groove-ring count as a populated render (same year/now)", () => {
+    const populated = theRecordWidget.renderBody(
+      baseProfileData([{ date: "2026-01-04", count: 3 }]),
+      editorialLight,
+      optsFor("en", NOW),
+    );
+    const empty = theRecordWidget.renderBody(baseProfileData([]), editorialLight, optsFor("en", NOW));
+    const grooveCount = (markup: string) => (markup.match(/<circle[^>]*fill="none"/g) ?? []).length;
+    expect(grooveCount(empty)).toBe(grooveCount(populated));
+  });
+});
+
+describe("Future weeks never influence the total, busiest-week anchor, or silent-week count (D-03 no-future-contribution guard)", () => {
+  it("bucketWeeks marks a week whose start date is after now as NOT elapsed even when it carries a nonzero count", () => {
+    const calendar = [{ date: "2026-12-27", count: 999 }]; // final week of 2026, future relative to NOW (2026-08-08)
+    const weeks = bucketWeeks(calendar, 2026, NOW, "UTC");
+    const finalWeek = weeks[weeks.length - 1]!;
+    expect(finalWeek.count).toBe(999);
+    expect(finalWeek.elapsed).toBe(false);
+  });
+
+  it("injecting a huge future-week count does not change the rendered pressed-groove stroke-widths (maxWeekly stays anchored to elapsed weeks only)", () => {
+    const baseCalendar = [{ date: "2026-01-04", count: 10 }]; // elapsed relative to NOW
+    const withFuture = [...baseCalendar, { date: "2026-12-27", count: 999_999 }];
+    const a = theRecordWidget.renderBody(baseProfileData(baseCalendar), editorialLight, optsFor("en", NOW));
+    const b = theRecordWidget.renderBody(baseProfileData(withFuture), editorialLight, optsFor("en", NOW));
+    const grooveWidths = (markup: string) =>
+      [...markup.matchAll(/<circle[^>]*fill="none"[^>]*stroke-width="(\d+\.\d+)"/g)].map((m) => m[1]);
+    expect(grooveWidths(b)).toEqual(grooveWidths(a));
+  });
+});
+
+describe("Seeded texture element counts are fixed constants (D-09) — never scale with data", () => {
+  it.each([
+    { label: "populated", calendar: [{ date: "2026-01-04", count: 3 }] },
+    { label: "all-zero", calendar: [] },
+  ])("$label: scuff+wear arc count is 70, dust dot count is 24", ({ calendar }) => {
+    const markup = theRecordWidget.renderBody(baseProfileData(calendar), editorialLight, optsFor("en", NOW));
+    const arcCount = (
+      markup.match(/<path d="[^"]*" fill="none" stroke="[^"]*" stroke-width="[\d.]+" stroke-opacity="[\d.]+"\/>/g) ??
+      []
+    ).length;
+    const dustCount = (
+      markup.match(/<circle cx="[\d.]+" cy="[\d.]+" r="[\d.]+" fill="[^"]*" fill-opacity="[\d.]+"\/>/g) ?? []
+    ).length;
+    expect(arcCount).toBe(70);
+    expect(dustCount).toBe(24);
+  });
+});
+
+describe("mulberry32 — different seeds diverge", () => {
+  it("produces a different sequence for a different seed", () => {
+    const seqA = Array.from({ length: 5 }, mulberry32(7));
+    const seqC = Array.from({ length: 5 }, mulberry32(8));
+    expect(seqA).not.toEqual(seqC);
+  });
+});
+
+describe("Absent contributionCalendar renders the same as an all-zero calendar (capability not composed)", () => {
+  it("does not throw when contributionCalendar is undefined", () => {
+    const data = baseProfileData(undefined);
+    expect(() => theRecordWidget.renderBody(data, editorialLight, optsFor("en", NOW))).not.toThrow();
+  });
+
+  it("produces the same groove-ring count as an explicit all-zero calendar", () => {
+    const undefinedMarkup = theRecordWidget.renderBody(baseProfileData(undefined), editorialLight, optsFor("en", NOW));
+    const emptyMarkup = theRecordWidget.renderBody(baseProfileData([]), editorialLight, optsFor("en", NOW));
+    const grooveCount = (markup: string) => (markup.match(/<circle[^>]*fill="none"/g) ?? []).length;
+    expect(grooveCount(undefinedMarkup)).toBe(grooveCount(emptyMarkup));
+  });
+});
+
+describe("Page-number footer — absent-means-emit-nothing contract (inherited Phase 3)", () => {
+  it("rendering with pageNumber/totalPages undefined produces markup that is an exact prefix of the same render with them defined", () => {
+    const data = baseProfileData([{ date: "2026-01-04", count: 3 }]);
+    const optsNoFooter = optsFor("en", NOW);
+    const optsWithFooter: RenderOptions = { ...optsNoFooter, pageNumber: 4, totalPages: 4 };
+    const withoutFooter = theRecordWidget.renderBody(data, editorialLight, optsNoFooter);
+    const withFooter = theRecordWidget.renderBody(data, editorialLight, optsWithFooter);
+    expect(withFooter.startsWith(withoutFooter)).toBe(true);
+    expect(withFooter.length).toBeGreaterThan(withoutFooter.length);
+  });
+});
+
+describe("Glyph coverage regression — every character this card can emit is covered (Pitfall 4)", () => {
+  it("every distinct character across copy.ts exports, describe() strings, digits, and separators is covered by its rendering font", () => {
+    const enDesc = theRecordWidget.describe(baseProfileData([]), optsFor("en", NOW));
+    const zhDesc = theRecordWidget.describe(baseProfileData([]), optsFor("zh-TW", NOW));
+
+    const enStrings = [
+      chromeEn.title,
+      totalLabelEn,
+      weeksPressedLabelEn,
+      busiestWeekLabelEn,
+      silentWeeksLabelEn,
+      noneValueEn,
+      needleCaptionEn,
+      zeroCaptionEn,
+      weeksPressedValue(33, 53),
+      busiestWeekValueEn(23, "142"),
+      silentWeeksValue(12),
+      pageFooterEn(4, 4),
+      enDesc.title,
+      enDesc.desc,
+      "0123456789",
+      " -/",
+    ];
+    const zhStrings = [
+      chromeZh.title,
+      mastheadEyebrowZh,
+      totalLabelZh,
+      weeksPressedLabelZh,
+      busiestWeekLabelZh,
+      silentWeeksLabelZh,
+      noneValueZh,
+      needleCaptionZh,
+      zeroCaptionZh,
+      weeksPressedValue(33, 53),
+      busiestWeekValueZh(23, "142"),
+      silentWeeksValue(12),
+      pageFooterZh(4, 4),
+      zhDesc.title,
+      zhDesc.desc,
+      "0123456789",
+      " -/",
+    ];
+
+    for (const str of enStrings) {
+      for (const char of Array.from(str)) {
+        expect(hasGlyph("mono-semibold", char) || hasGlyph("serif", char), `"${char}" in "${str}" (en)`).toBe(true);
+      }
+    }
+    for (const str of zhStrings) {
+      for (const char of Array.from(str)) {
+        expect(hasGlyph("mono-semibold", char) || hasGlyph("noto-tc", char), `"${char}" in "${str}" (zh-TW)`).toBe(
+          true,
+        );
+      }
+    }
   });
 });
