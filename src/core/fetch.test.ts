@@ -95,6 +95,37 @@ describe("buildQuery — repoList capability (CARD-03)", () => {
   });
 });
 
+describe("buildQuery — calendar capability (CARD-04)", () => {
+  it("calendar alone: emits the aliased calendar: contributionsCollection(from: selection, no stats fields", () => {
+    const query = buildQuery(new Set(["calendar"]), false) as string;
+
+    expect(query).toContain("calendar: contributionsCollection(from: $from)");
+    expect(query).not.toContain("statsRepos");
+    expect(query).not.toMatch(/^\s*contributionsCollection \{/m);
+  });
+
+  it("stats + calendar together: BOTH an unaliased contributionsCollection { and the aliased calendar: contributionsCollection(from: selection are present", () => {
+    const query = buildQuery(new Set(["stats", "calendar"]), false) as string;
+
+    expect(query).toMatch(/\bcontributionsCollection \{/);
+    expect(query).toContain("calendar: contributionsCollection(from: $from)");
+  });
+
+  it("the operation header declares $from: DateTime! when and only when the calendar capability is present", () => {
+    const withCalendar = buildQuery(new Set(["calendar"]), false) as string;
+    const withoutCalendar = buildQuery(new Set(["stats"]), false) as string;
+
+    expect(withCalendar).toContain("$from: DateTime!");
+    expect(withoutCalendar).not.toContain("$from");
+    expect(withoutCalendar).not.toContain("DateTime");
+  });
+
+  it("a query built without the calendar capability contains no reference to $from anywhere (threat T-04-01)", () => {
+    const query = buildQuery(new Set(["stats", "repoList"]), false) as string;
+    expect(query).not.toMatch(/from/i);
+  });
+});
+
 describe("buildQuery — login is never string-interpolated (T-02-02)", () => {
   it("has no way to inject a login string — the function does not even accept one", () => {
     // buildQuery's signature is (capabilities, includeForks) — there is no
@@ -270,6 +301,122 @@ describe("fetchProfileData — repoList capability (CARD-03)", () => {
     });
     expect(data.repositories).toHaveLength(2);
     expect(data.repositories?.[0]).toEqual(REPO_C_NEVER_PUSHED);
+  });
+});
+
+/**
+ * A calendar response whose first returned week is partial (three
+ * `contributionDays`, matching RESEARCH.md Pattern 3's "mid-year from a 1
+ * January window returns a partial first week" expectation) plus one full
+ * second week — enough to prove ordering and the totalContributions sum are
+ * both preserved through normalization.
+ */
+function calendarResponseBody() {
+  return {
+    data: {
+      user: {
+        login: "octocat",
+        name: "The Octocat",
+        avatarUrl: "https://example.com/avatar.png",
+        followers: { totalCount: 42 },
+        calendar: {
+          contributionCalendar: {
+            totalContributions: 9,
+            weeks: [
+              {
+                firstDay: "2026-01-01",
+                contributionDays: [
+                  { date: "2026-01-01", contributionCount: 1 },
+                  { date: "2026-01-02", contributionCount: 2 },
+                  { date: "2026-01-03", contributionCount: 0 },
+                ],
+              },
+              {
+                firstDay: "2026-01-04",
+                contributionDays: [
+                  { date: "2026-01-04", contributionCount: 3 },
+                  { date: "2026-01-05", contributionCount: 1 },
+                  { date: "2026-01-06", contributionCount: 0 },
+                  { date: "2026-01-07", contributionCount: 2 },
+                  { date: "2026-01-08", contributionCount: 0 },
+                  { date: "2026-01-09", contributionCount: 0 },
+                  { date: "2026-01-10", contributionCount: 0 },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      rateLimit: { cost: 1, limit: 5000, remaining: 4999 },
+    },
+  };
+}
+
+describe("fetchProfileData — calendar capability normalization (CARD-04)", () => {
+  it("flattens weeks[].contributionDays[] into ProfileData.contributionCalendar, preserving every day in order", async () => {
+    const fetchImpl = fakeGraphqlFetch(200, calendarResponseBody());
+    const { data } = await fetchProfileData(
+      new Set(["calendar"]),
+      "fake-token",
+      "octocat",
+      false,
+      "2026-01-01T00:00:00.000Z",
+      fetchImpl,
+    );
+
+    expect(data.contributionCalendar).toHaveLength(10);
+    expect(data.contributionCalendar?.[0]).toEqual({ date: "2026-01-01", count: 1 });
+    expect(data.contributionCalendar?.[9]).toEqual({ date: "2026-01-10", count: 0 });
+  });
+
+  it("sets ProfileData.contributionCalendarTotal to the response's totalContributions", async () => {
+    const fetchImpl = fakeGraphqlFetch(200, calendarResponseBody());
+    const { data } = await fetchProfileData(
+      new Set(["calendar"]),
+      "fake-token",
+      "octocat",
+      false,
+      "2026-01-01T00:00:00.000Z",
+      fetchImpl,
+    );
+
+    expect(data.contributionCalendarTotal).toBe(9);
+  });
+
+  it("leaves contributionCalendar/contributionCalendarTotal undefined when calendar was not a requested capability", async () => {
+    const fetchImpl = fakeGraphqlFetch(200, excludeForksResponseBody());
+    const { data } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, undefined, fetchImpl);
+
+    expect(data.contributionCalendar).toBeUndefined();
+    expect(data.contributionCalendarTotal).toBeUndefined();
+  });
+});
+
+describe("fetchProfileData — the from-date is never interpolated into query text (threat T-04-01)", () => {
+  it("the composed query contains no interpolated date literal — from reaches the request only through the variables object", async () => {
+    const calendarFrom = "2026-01-01T00:00:00.000Z";
+    let capturedBody: { query: string; variables: { from?: string } } | undefined;
+    const recordingFetchImpl: FetchImpl = (async (_url: unknown, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body ?? "{}"));
+      return new Response(JSON.stringify(calendarResponseBody()), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as FetchImpl;
+
+    await fetchProfileData(new Set(["calendar"]), "fake-token", "octocat", false, calendarFrom, recordingFetchImpl);
+
+    expect(capturedBody?.query).not.toContain(calendarFrom);
+    expect(capturedBody?.query).toContain("$from: DateTime!");
+    expect(capturedBody?.variables.from).toBe(calendarFrom);
+  });
+
+  it("CalendarWindowMissingError is thrown when the calendar capability is requested with no calendarFrom window", async () => {
+    const fetchImpl = vi.fn();
+    await expect(
+      fetchProfileData(new Set(["calendar"]), "fake-token", "octocat", false, undefined, fetchImpl as unknown as FetchImpl),
+    ).rejects.toThrow(/CalendarWindowMissingError|no calendarFrom/);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
 

@@ -5,11 +5,13 @@ import { editorialStatCardWidget } from "../widgets/editorial-stat-card/index.js
 import { formatStatNumber } from "../widgets/editorial-stat-card/format.js";
 import { mastheadWidget } from "../widgets/masthead/index.js";
 import { theGraveyardWidget } from "../widgets/the-graveyard/index.js";
+import { theRecordWidget } from "../widgets/the-record/index.js";
 import type { ResolvedConfig } from "./config.js";
-import { type FetchImpl, zeroCapabilityProfileData } from "./fetch.js";
+import { calendarWindowFrom, type FetchImpl, zeroCapabilityProfileData } from "./fetch.js";
 import type { ProfileData, RenderOptions } from "./model.js";
 import { optimizeSvg } from "./optimize.js";
 import {
+  ConflictingCalendarTimezoneError,
   ConflictingStatsOptionsError,
   fetchSharedData,
   InvalidCardOptionsError,
@@ -301,6 +303,76 @@ describe("fetchSharedData", () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.query).not.toContain("commitContributionsByRepository");
+  });
+});
+
+/**
+ * A `ResolvedCard` for `the-record` built by hand, exactly the way this
+ * file's existing masthead fixtures avoid the registry's no-unregister
+ * limitation (see the `beforeAll` comment above): `theRecordWidget` declares
+ * `requires: ["calendar"]`, which is all `fetchSharedData`'s calendar-window
+ * derivation logic needs to see.
+ */
+function theRecordCard(id: string, timezone: string): ResolvedCard {
+  return {
+    id,
+    widget: theRecordWidget,
+    parsedOptions: theRecordWidget.optionsSchema.parse({}) as unknown as Record<string, unknown>,
+    timezone,
+  };
+}
+
+describe("Plan 04-01 Task 3: fetchSharedData — calendar capability composition (CARD-04/D-01)", () => {
+  it("a card set including the-record produces a capability union containing 'calendar', and derives the window as calendarWindowFrom(now, card.timezone)", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const cards = [theRecordCard("the-record", "UTC")];
+
+    const capabilities = new Set(cards.flatMap((c) => c.widget.requires));
+    expect(capabilities.has("calendar")).toBe(true);
+
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
+
+    expect(calls).toHaveLength(1);
+    const variables = calls[0]?.variables as { from?: string };
+    expect(variables.from).toBe(calendarWindowFrom(NOW, "UTC"));
+  });
+
+  it("derives the window from a non-UTC timezone the same way (1 January UTC instant of the zoned year)", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const cards = [theRecordCard("the-record", "Asia/Taipei")];
+
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
+
+    const variables = calls[0]?.variables as { from?: string };
+    expect(variables.from).toBe(calendarWindowFrom(NOW, "Asia/Taipei"));
+  });
+
+  it("throws ConflictingCalendarTimezoneError naming both card ids when two calendar cards declare divergent timezones", async () => {
+    const { fetchImpl } = recordingFetch();
+    const cards = [theRecordCard("record-utc", "UTC"), theRecordCard("record-tpe", "Asia/Taipei")];
+
+    let caught: unknown;
+    try {
+      await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ConflictingCalendarTimezoneError);
+    const message = (caught as Error).message;
+    expect(message).toContain("record-utc");
+    expect(message).toContain("record-tpe");
+  });
+
+  it("a card set with no calendar-requiring card still issues exactly one request whose query declares no $from variable", async () => {
+    const { fetchImpl, calls } = recordingFetch();
+    const cards = resolveCards(config({ cards: [{ type: "editorial-stat-card" }] }));
+
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.query).not.toContain("$from");
+    expect(calls[0]?.query).not.toContain("DateTime");
   });
 });
 
