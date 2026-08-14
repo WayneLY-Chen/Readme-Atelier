@@ -185,10 +185,26 @@ function chromeFor(language: "en" | "zh-TW"): MastheadChrome {
 
 /**
  * UI-SPEC "API-Sourced Text: Truncation Policy" (WR-01/CR-companion): the
- * contents row's own total width budget — the row runs from `PADDING` to
- * `RIGHT_EDGE_X`, same as every other full-width row on this card.
+ * contents row's total width, from `PADDING` to `RIGHT_EDGE_X`, same as
+ * every other full-width row on this card. This is the row's TOTAL budget,
+ * not the joined-titles budget — it is spent by the prefix, the joined
+ * titles, and, when a citation is present, the citation plus its
+ * `CONTENTS_CITATION_GUTTER_PX` gutter, since `renderCitation` draws on the
+ * same `CONTENTS_BASELINE_Y` baseline. UI-SPEC "Masthead Contents Row Budget
+ * Retrofit": measured 2026-08-14, four enabled non-masthead cards (Almanac,
+ * Editorial Stat Card, The Graveyard, The Record) produce a 491.2px en
+ * contents row against this 447px total — the constant itself was fine, but
+ * the joined-titles budget used to equal it outright, ignoring the citation
+ * sharing the row. It no longer does; see the contents-row block below.
  */
 const CONTENTS_ROW_BUDGET_PX = RIGHT_EDGE_X - PADDING;
+
+/**
+ * UI-SPEC "Masthead Contents Row Budget Retrofit": the project's `md`
+ * spacing token, used here as the minimum clear space between the
+ * (possibly truncated) contents text and the citation's leftmost glyph.
+ */
+const CONTENTS_CITATION_GUTTER_PX = 16;
 
 /**
  * Width-budgeted truncation for the contents row's joined title list.
@@ -216,6 +232,23 @@ function truncateContentsToWidth(language: "en" | "zh-TW", text: string, budgetP
 }
 
 /**
+ * The citation's total rendered width — `{value} {label}` measured with the
+ * same language-branched split (`monoRunWidth`/`zhLabelWidth`) the citation
+ * itself renders with. Returns 0 for an undefined fact. This is the ONLY
+ * definition of how wide the citation is: `renderCitation`'s own
+ * right-alignment and the contents row's joined-titles budget both call it,
+ * so the two can never disagree about the citation's width (UI-SPEC
+ * "Masthead Contents Row Budget Retrofit").
+ */
+function citationWidth(fact: CitableFact | undefined, language: "en" | "zh-TW"): number {
+  if (fact === undefined) {
+    return 0;
+  }
+  const runWidth = (text: string): number => (language === "zh-TW" ? zhLabelWidth(text) : monoRunWidth(text));
+  return runWidth(fact.value) + runWidth(" ") + runWidth(fact.label);
+}
+
+/**
  * Renders the right-aligned citation half of the contents row
  * (`{value} {label}`, value in `theme.accent`, label in `theme.muted` — UI-SPEC
  * "Cross-Card Citation Display Contract"). Returns "" (no markup at all,
@@ -236,8 +269,7 @@ function renderCitation(
 
   const valueWidth = runWidth(fact.value);
   const spaceWidth = runWidth(" ");
-  const labelWidth = runWidth(fact.label);
-  const totalWidth = valueWidth + spaceWidth + labelWidth;
+  const totalWidth = citationWidth(fact, language);
   const valueX = RIGHT_EDGE_X - totalWidth;
   const labelX = valueX + valueWidth + spaceWidth;
 
@@ -365,11 +397,22 @@ export const mastheadWidget: WidgetDefinition<RenderOptions> = {
     const joined = contents.map((c) => c.title).join(chrome.contentsSeparator);
     const contentsPrefix =
       language === "zh-TW" ? `${chrome.contentsLabel}：` : `${chrome.contentsLabel} `;
+    // UI-SPEC "Masthead Contents Row Budget Retrofit": the citation drawn by
+    // renderCitation() below shares this row's baseline, so its measured
+    // width (0 when absent) plus the md gutter must come out of the
+    // joined-titles budget too — but ONLY when a citation is actually
+    // present. A disabled Stat Card means citedFacts.totalCommits is
+    // undefined means citationWidth() is 0 means no subtraction happens at
+    // all, preserving Phase 3's "no citation ⇒ full row available" contract
+    // byte-for-byte.
+    const citedCitationWidth = citationWidth(mastheadOpts.citedFacts?.totalCommits, language);
     const contentsText =
       joined === "" ? chrome.contentsLabel : (() => {
         const prefixWidth =
           language === "zh-TW" ? zhLabelWidth(contentsPrefix) : monoRunWidth(contentsPrefix);
-        const joinedBudgetPx = Math.max(0, CONTENTS_ROW_BUDGET_PX - prefixWidth);
+        const citationReserve =
+          citedCitationWidth > 0 ? citedCitationWidth + CONTENTS_CITATION_GUTTER_PX : 0;
+        const joinedBudgetPx = Math.max(0, CONTENTS_ROW_BUDGET_PX - prefixWidth - citationReserve);
         const truncatedJoined = truncateContentsToWidth(language, joined, joinedBudgetPx);
         return `${contentsPrefix}${truncatedJoined}`;
       })();
