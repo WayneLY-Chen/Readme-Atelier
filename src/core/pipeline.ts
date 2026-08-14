@@ -1,5 +1,5 @@
 import type { CardEntry, ResolvedConfig } from "./config.js";
-import { type FetchImpl, fetchProfileData } from "./fetch.js";
+import { calendarWindowFrom, type FetchImpl, fetchProfileData } from "./fetch.js";
 import type { ProfileData, RenderOptions, Theme } from "./model.js";
 import { collectCapabilities, get } from "./registry.js";
 import type { CitableFact, WidgetDefinition } from "./registry.js";
@@ -85,6 +85,25 @@ export class ConflictingStatsOptionsError extends Error {
         `同一次執行只會抓一次資料，無法讓每張卡片各自套用不同的 include_forks。請讓這些卡片使用相同的 include_forks 設定。`,
     );
     this.name = "ConflictingStatsOptionsError";
+  }
+}
+
+/**
+ * Two "calendar"-requiring cards declared conflicting timezones.
+ *
+ * `fetchSharedData` derives exactly one calendar window (`calendarWindowFrom`,
+ * CARD-04/D-01) per run — there is no way to honor two different windows
+ * from a single fetch. Modelled exactly on `ConflictingStatsOptionsError`
+ * above: a hard config error naming every offending card, rather than
+ * silently applying one card's timezone to the others.
+ */
+export class ConflictingCalendarTimezoneError extends Error {
+  constructor(ids: string[]) {
+    super(
+      `✗ 卡片 ${ids.map((id) => `"${id}"`).join("、")} 都需要 calendar 資料，但各自的 timezone 設定不一致——` +
+        `同一次執行只會推導出一個曆年起始日期，無法讓每張卡片各自套用不同的 timezone。請讓這些卡片使用相同的 timezone 設定。`,
+    );
+    this.name = "ConflictingCalendarTimezoneError";
   }
 }
 
@@ -295,6 +314,7 @@ export async function fetchSharedData(
   cards: ResolvedCard[],
   token: string,
   login: string,
+  now: Date,
   fetchImpl?: FetchImpl,
 ): Promise<{ data: ProfileData; pointCost: number }> {
   const capabilities = collectCapabilities(cards.map((card) => card.widget));
@@ -305,7 +325,19 @@ export async function fetchSharedData(
   }
   const includeForks = Boolean(statsCards[0]?.parsedOptions.include_forks);
 
-  return fetchProfileData(capabilities, token, login, includeForks, fetchImpl);
+  // CARD-04/D-01: derive the calendar window ONLY from cards that actually
+  // declare the capability — every other card set's fetch is unaffected.
+  // Mirrors the includeForks derivation immediately above, including its
+  // "diverging settings is a hard config error, never a silent pick" shape.
+  const calendarCards = cards.filter((card) => card.widget.requires.includes("calendar"));
+  const distinctTimezones = new Set(calendarCards.map((card) => card.timezone));
+  if (distinctTimezones.size > 1) {
+    throw new ConflictingCalendarTimezoneError(calendarCards.map((card) => card.id));
+  }
+  const calendarFrom =
+    calendarCards.length > 0 ? calendarWindowFrom(now, (calendarCards[0] as ResolvedCard).timezone) : undefined;
+
+  return fetchProfileData(capabilities, token, login, includeForks, calendarFrom, fetchImpl);
 }
 
 /**

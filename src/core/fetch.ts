@@ -78,6 +78,27 @@ const REPO_LIST_FRAGMENT = `
       }`;
 
 /**
+ * The Record's contribution-calendar fragment (CARD-04). The `STATS_FRAGMENT_*`
+ * constants above already select a BARE `contributionsCollection` (no
+ * arguments) — GraphQL forbids the same response name with different
+ * arguments in one selection set, so this must be aliased, exactly like the
+ * Phase 3 `statsRepos:`/`graveyardRepos:` precedent (`REPO_LIST_FRAGMENT`
+ * above). `from: $from` is declared as an operation variable (see
+ * `buildQuery`'s conditional header) rather than a literal, so this fragment
+ * text never itself carries a date value.
+ */
+const CALENDAR_FRAGMENT = `
+      calendar: contributionsCollection(from: $from) {
+        contributionCalendar {
+          totalContributions
+          weeks {
+            firstDay
+            contributionDays { date contributionCount }
+          }
+        }
+      }`;
+
+/**
  * Compose the GraphQL query text needed to satisfy the union of every
  * enabled widget's declared capabilities. Returns null for the zero-
  * capability case (DATA-03: Almanac needs no fetch at all).
@@ -90,6 +111,13 @@ const REPO_LIST_FRAGMENT = `
  * string-inject one even if handed a malicious value (threat T-02-02) — the
  * real value is supplied by the caller (`fetchProfileData`) via
  * `@octokit/graphql`'s variables mechanism, never text concatenation.
+ *
+ * `$from: DateTime!` is interpolated into the SAME operation-header template
+ * literal ONLY when the "calendar" capability is present (GraphQL's
+ * All-Variables-Used rule: an unconditional `$from` would break every
+ * non-calendar query, since a declared variable that's never referenced is
+ * itself an error). It is never appended after the header — the header is
+ * built as one string, in one place.
  */
 export function buildQuery(capabilities: Set<DataCapability>, includeForks: boolean): string | null {
   if (capabilities.size === 0) {
@@ -103,8 +131,13 @@ export function buildQuery(capabilities: Set<DataCapability>, includeForks: bool
   if (capabilities.has("repoList")) {
     fragments.push(REPO_LIST_FRAGMENT);
   }
+  if (capabilities.has("calendar")) {
+    fragments.push(CALENDAR_FRAGMENT);
+  }
 
-  return `query ProfileStats($login: String!) {
+  const calendarVariable = capabilities.has("calendar") ? ", $from: DateTime!" : "";
+
+  return `query ProfileStats($login: String!${calendarVariable}) {
     user(login: $login) {
       login
       name
@@ -114,6 +147,49 @@ ${fragments.join("\n")}
     }
     rateLimit { cost limit remaining }
   }`;
+}
+
+/**
+ * D-01's window start: midnight UTC of 1 January of `now`'s calendar year AS
+ * OBSERVED IN `timeZone` — never a rolling 365-day window, never the
+ * previous complete year (RESEARCH.md Pattern 3). Reads the zoned year with
+ * the same `Intl.DateTimeFormat` + `formatToParts` technique
+ * `src/widgets/almanac/lunar.ts` uses (read there for the shape only; this
+ * is core's own copy, never imported from a widget — RENDER-02).
+ *
+ * `Math.min` clamps the real boundary case where `now` falls early on 1
+ * January in a timezone ahead of UTC (so that zoned year's own UTC-midnight
+ * 1 January instant would be AFTER `now`) — the window start can never be
+ * later than `now`.
+ *
+ * Deliberately UTC midnight of the zoned year, not an offset-adjusted local
+ * midnight: the API's day-bucketing timezone semantics for
+ * `contributionCount` are not authoritatively documented (RESEARCH
+ * Assumption A3), grooves aggregate seven days at a time, so a one-day
+ * boundary shift is visually negligible — this must not be "optimized" into
+ * a multi-year fetch later (RESEARCH Assumption A2).
+ */
+export function calendarWindowFrom(now: Date, timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric" });
+  const year = Number(formatter.formatToParts(now).find((part) => part.type === "year")?.value);
+  return new Date(Math.min(Date.UTC(year, 0, 1), now.getTime())).toISOString();
+}
+
+/**
+ * Thrown when `fetchProfileData` is asked for the "calendar" capability but
+ * no `calendarFrom` window was supplied. A query that declares
+ * `$from: DateTime!` in its header must never be sent without a value for
+ * it — this must fail loudly rather than silently omit the variable and let
+ * the GraphQL server reject the whole request with a less actionable error.
+ */
+export class CalendarWindowMissingError extends Error {
+  constructor() {
+    super(
+      'CalendarWindowMissingError: the "calendar" capability was requested but no calendarFrom ' +
+        "window was supplied — a query declaring $from: DateTime! must never be sent without a value.",
+    );
+    this.name = "CalendarWindowMissingError";
+  }
 }
 
 /**
@@ -187,6 +263,13 @@ interface StatsQueryResult {
     graveyardRepos?: {
       nodes: { name: string; nameWithOwner: string; url: string; createdAt: string; pushedAt: string | null; isFork: boolean }[];
     };
+    /** Only present when "calendar" is a requested capability (CARD-04). */
+    calendar?: {
+      contributionCalendar: {
+        totalContributions: number;
+        weeks: { firstDay: string; contributionDays: { date: string; contributionCount: number }[] }[];
+      };
+    };
   };
   rateLimit: { cost: number; limit: number; remaining: number };
 }
@@ -216,15 +299,26 @@ export async function fetchProfileData(
   token: string,
   login: string,
   includeForks: boolean,
+  calendarFrom: string | undefined,
   fetchImpl: FetchImpl = fetch,
 ): Promise<{ data: ProfileData; pointCost: number }> {
   if (capabilities.size === 0) {
     return { data: zeroCapabilityProfileData(), pointCost: 0 };
   }
 
+  // A query declaring $from: DateTime! must never be sent without a value
+  // for it (see CalendarWindowMissingError's own doc comment) — fail loudly
+  // here, before the request is ever built.
+  if (capabilities.has("calendar") && calendarFrom === undefined) {
+    throw new CalendarWindowMissingError();
+  }
+
   const query = buildQuery(capabilities, includeForks) as string;
   const result = await graphql<StatsQueryResult>(query, {
     login,
+    // Spread in only when defined, matching the header's own conditional
+    // declaration — never concatenated into query text (threat T-04-01).
+    ...(calendarFrom !== undefined ? { from: calendarFrom } : {}),
     headers: { authorization: `token ${token}` },
     request: { fetch: fetchImpl },
   });
@@ -257,6 +351,17 @@ export async function fetchProfileData(
   // client-side re-filtering needed here in either branch.
   const totalStars = (user.statsRepos?.nodes ?? []).reduce((sum, node) => sum + node.stargazerCount, 0);
 
+  // Flatten weeks[].contributionDays[] into a flat daily array — core only
+  // normalizes shape, it never re-buckets into weeks. The-record (CARD-04)
+  // owns re-bucketing this flat list into its own Sunday-started week
+  // buckets (RESEARCH.md "core composes queries, widgets interpret
+  // ProfileData" boundary — same standing comment shape as `repositories`
+  // below).
+  const calendarCalendar = user.calendar?.contributionCalendar;
+  const contributionCalendar = calendarCalendar?.weeks.flatMap((week) =>
+    week.contributionDays.map((day) => ({ date: day.date, count: day.contributionCount })),
+  );
+
   const data: ProfileData = {
     login: user.login,
     name: user.name,
@@ -270,6 +375,8 @@ export async function fetchProfileData(
     // core/fetch.ts only composes the query and normalizes shape, never
     // domain-interprets a widget's own display logic (RESEARCH.md boundary).
     repositories: user.graveyardRepos?.nodes,
+    contributionCalendar,
+    contributionCalendarTotal: calendarCalendar?.totalContributions,
   };
 
   // restrictedContributionsCount (cc.restrictedContributionsCount) is

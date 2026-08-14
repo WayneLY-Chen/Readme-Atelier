@@ -237,7 +237,7 @@ function statsAndRepoListResponseBody() {
 describe("fetchProfileData — repoList capability (CARD-03)", () => {
   it("maps graveyardRepos.nodes into data.repositories, one-to-one", async () => {
     const fetchImpl = fakeGraphqlFetch(200, repoListResponseBody());
-    const { data } = await fetchProfileData(new Set(["repoList"]), "fake-token", "octocat", false, fetchImpl);
+    const { data } = await fetchProfileData(new Set(["repoList"]), "fake-token", "octocat", false, undefined, fetchImpl);
 
     expect(data.repositories).toHaveLength(2);
     expect(data.repositories?.[0]).toEqual(REPO_C_NEVER_PUSHED);
@@ -246,21 +246,21 @@ describe("fetchProfileData — repoList capability (CARD-03)", () => {
 
   it("passes pushedAt: null through unchanged — no createdAt fallback applied in fetch.ts", async () => {
     const fetchImpl = fakeGraphqlFetch(200, repoListResponseBody());
-    const { data } = await fetchProfileData(new Set(["repoList"]), "fake-token", "octocat", false, fetchImpl);
+    const { data } = await fetchProfileData(new Set(["repoList"]), "fake-token", "octocat", false, undefined, fetchImpl);
 
     expect(data.repositories?.[0].pushedAt).toBeNull();
   });
 
   it("leaves data.repositories undefined when repoList was not a requested capability", async () => {
     const fetchImpl = fakeGraphqlFetch(200, excludeForksResponseBody());
-    const { data } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, fetchImpl);
+    const { data } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, undefined, fetchImpl);
 
     expect(data.repositories).toBeUndefined();
   });
 
   it("stats + repoList together: both data.stats and data.repositories parse correctly, independently", async () => {
     const fetchImpl = fakeGraphqlFetch(200, statsAndRepoListResponseBody());
-    const { data } = await fetchProfileData(new Set(["stats", "repoList"]), "fake-token", "octocat", false, fetchImpl);
+    const { data } = await fetchProfileData(new Set(["stats", "repoList"]), "fake-token", "octocat", false, undefined, fetchImpl);
 
     expect(data.stats).toEqual({
       totalCommits: REPO_A.commit,
@@ -276,7 +276,7 @@ describe("fetchProfileData — repoList capability (CARD-03)", () => {
 describe("fetchProfileData — zero-capability boundary (DATA-03 extended guarantee)", () => {
   it("returns the placeholder immediately and never calls fetchImpl", async () => {
     const fetchImpl = vi.fn();
-    const result = await fetchProfileData(new Set(), "fake-token", "octocat", false, fetchImpl as unknown as FetchImpl);
+    const result = await fetchProfileData(new Set(), "fake-token", "octocat", false, undefined, fetchImpl as unknown as FetchImpl);
 
     expect(result).toEqual({
       data: {
@@ -296,7 +296,7 @@ describe("fetchProfileData — zero-capability boundary (DATA-03 extended guaran
 describe("fetchProfileData — fork exclusion (DATA-04)", () => {
   it("includeForks: false counts only the non-fork repo's contributions and stars", async () => {
     const fetchImpl = fakeGraphqlFetch(200, excludeForksResponseBody());
-    const { data } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, fetchImpl);
+    const { data } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, undefined, fetchImpl);
 
     expect(data.stats).toEqual({
       totalCommits: REPO_A.commit,
@@ -308,7 +308,7 @@ describe("fetchProfileData — fork exclusion (DATA-04)", () => {
 
   it("includeForks: true counts both repos via the cheap scalar/unfiltered path", async () => {
     const fetchImpl = fakeGraphqlFetch(200, includeForksResponseBody());
-    const { data } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", true, fetchImpl);
+    const { data } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", true, undefined, fetchImpl);
 
     expect(data.stats).toEqual({
       totalCommits: REPO_A.commit + REPO_B.commit,
@@ -322,7 +322,7 @@ describe("fetchProfileData — fork exclusion (DATA-04)", () => {
 describe("fetchProfileData — followers mapping and private-contribution non-leakage (DATA-05)", () => {
   it("maps followers.totalCount directly, and never surfaces restrictedContributionsCount anywhere in the returned data", async () => {
     const fetchImpl = fakeGraphqlFetch(200, excludeForksResponseBody());
-    const { data } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, fetchImpl);
+    const { data } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, undefined, fetchImpl);
 
     expect(data.followers).toBe(42);
     expect(JSON.stringify(data)).not.toContain(String(RESTRICTED_COUNT_MARKER));
@@ -338,7 +338,7 @@ describe("fetchProfileData — GitHub's real 200+errors[] rate-limit shape (DATA
     );
 
     await expect(
-      fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, fetchImpl),
+      fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, undefined, fetchImpl),
     ).rejects.toThrow(/rate limit/i);
   });
 });
@@ -346,7 +346,7 @@ describe("fetchProfileData — GitHub's real 200+errors[] rate-limit shape (DATA
 describe("fetchProfileData — point cost (DATA-07, Don't Hand-Roll)", () => {
   it("pointCost equals the response body's rateLimit.cost, not a recomputed value", async () => {
     const fetchImpl = fakeGraphqlFetch(200, excludeForksResponseBody());
-    const { pointCost } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, fetchImpl);
+    const { pointCost } = await fetchProfileData(new Set(["stats"]), "fake-token", "octocat", false, undefined, fetchImpl);
 
     expect(pointCost).toBe(3);
   });

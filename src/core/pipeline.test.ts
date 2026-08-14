@@ -218,7 +218,7 @@ describe("fetchSharedData", () => {
     const { fetchImpl, calls } = recordingFetch();
     const cards = resolveCards(config());
 
-    const result = await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    const result = await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
 
     expect(calls).toHaveLength(0);
     expect(result.pointCost).toBe(0);
@@ -229,7 +229,7 @@ describe("fetchSharedData", () => {
     // No fetchImpl passed at all — if this reached fetchProfileData's default
     // (the real global `fetch`), a real network call would be attempted and
     // this test would fail/hang instead of resolving instantly.
-    const result = await fetchSharedData(cards, "", "");
+    const result = await fetchSharedData(cards, "", "", NOW);
     expect(result.pointCost).toBe(0);
   });
 
@@ -239,7 +239,7 @@ describe("fetchSharedData", () => {
       config({ cards: [{ type: "almanac" }, { type: "editorial-stat-card" }] }),
     );
 
-    await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
 
     expect(calls).toHaveLength(1);
   });
@@ -250,7 +250,7 @@ describe("fetchSharedData", () => {
       config({ cards: [{ type: "editorial-stat-card", options: { include_forks: true } }] }),
     );
 
-    await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
 
     // The includeForks:true query shape never requests the per-repository
     // breakdown fields (core/fetch.ts's STATS_FRAGMENT_INCLUDE_FORKS).
@@ -261,7 +261,7 @@ describe("fetchSharedData", () => {
     const { fetchImpl, calls } = recordingFetch();
     const cards = resolveCards(config({ cards: [{ type: "editorial-stat-card" }] }));
 
-    await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
 
     expect(calls[0]?.query).toContain("commitContributionsByRepository");
   });
@@ -277,10 +277,10 @@ describe("fetchSharedData", () => {
       }),
     );
 
-    await expect(fetchSharedData(cards, "fake-token", "octocat", fetchImpl)).rejects.toThrow(
+    await expect(fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl)).rejects.toThrow(
       ConflictingStatsOptionsError,
     );
-    await expect(fetchSharedData(cards, "fake-token", "octocat", fetchImpl)).rejects.toThrow(
+    await expect(fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl)).rejects.toThrow(
       /"with-forks".*"without-forks"|"without-forks".*"with-forks"/,
     );
   });
@@ -296,7 +296,7 @@ describe("fetchSharedData", () => {
       }),
     );
 
-    await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.query).not.toContain("commitContributionsByRepository");
@@ -601,7 +601,7 @@ describe("resolveCards + fetchSharedData — the 'identity' DataCapability (MAST
     const capabilities = new Set(cards.flatMap((c) => c.widget.requires));
     expect(capabilities.size).toBeGreaterThan(0);
 
-    await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
     expect(calls).toHaveLength(1);
   });
 
@@ -612,7 +612,7 @@ describe("resolveCards + fetchSharedData — the 'identity' DataCapability (MAST
     const capabilities = new Set(cards.flatMap((c) => c.widget.requires));
     expect(capabilities.size).toBe(0);
 
-    await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
     expect(calls).toHaveLength(0);
   });
 });
@@ -729,7 +729,7 @@ describe("Plan 03-05: 四卡完整組合（MAST-01/02/03 收尾）", () => {
     const { fetchImpl } = recordingFetchWithRepoList();
     const cards = resolveCards(config({ cards: FOUR_CARD_CONFIG_CARDS }));
 
-    const { data } = await fetchSharedData(cards, "fake-token", "octocat", fetchImpl);
+    const { data } = await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
     const rendered = renderAllCards(cards, data, GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
 
     expect(rendered).toHaveLength(4);

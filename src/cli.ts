@@ -9,6 +9,7 @@ import { almanacWidget } from "./widgets/almanac/index.js";
 import { editorialStatCardWidget } from "./widgets/editorial-stat-card/index.js";
 import { mastheadWidget } from "./widgets/masthead/index.js";
 import { theGraveyardWidget } from "./widgets/the-graveyard/index.js";
+import { theRecordWidget } from "./widgets/the-record/index.js";
 
 /**
  * Local preview entry point (UX-04). Reads a real `widgets.yml` off disk (or
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
   register(editorialStatCardWidget);
   register(mastheadWidget);
   register(theGraveyardWidget);
+  register(theRecordWidget);
 
   const configPath = process.argv[2] ?? "widgets.yml";
   const yamlText = existsSync(configPath) ? readFileSync(configPath, "utf8") : undefined;
@@ -97,10 +99,14 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Hoisted so the shared fetch's calendar window (CARD-04/D-01) and the
+  // render pass can never disagree about which year is being drawn.
+  const now = new Date();
+
   let data;
   let pointCost: number;
   try {
-    ({ data, pointCost } = await fetchSharedData(cards, token ?? "", login ?? ""));
+    ({ data, pointCost } = await fetchSharedData(cards, token ?? "", login ?? "", now));
   } catch (error) {
     console.error(formatFetchFailureMessage(error));
     process.exit(1);
@@ -113,7 +119,7 @@ async function main(): Promise<void> {
     renderedCards = renderAllCards(
       cards,
       data,
-      { now: new Date(), seed: 0, language: config.language },
+      { now, seed: 0, language: config.language },
       resolveTheme(config.theme),
     );
   } catch (error) {

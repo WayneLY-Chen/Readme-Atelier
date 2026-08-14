@@ -15,6 +15,7 @@ import { almanacWidget } from "./widgets/almanac/index.js";
 import { editorialStatCardWidget } from "./widgets/editorial-stat-card/index.js";
 import { mastheadWidget } from "./widgets/masthead/index.js";
 import { theGraveyardWidget } from "./widgets/the-graveyard/index.js";
+import { theRecordWidget } from "./widgets/the-record/index.js";
 
 /**
  * The GitHub Action's real entry point (`action.yml`'s `main: dist/index.js`,
@@ -48,6 +49,7 @@ async function run(): Promise<void> {
   register(editorialStatCardWidget);
   register(mastheadWidget);
   register(theGraveyardWidget);
+  register(theRecordWidget);
 
   // GitHub Actions guarantees GITHUB_REPOSITORY correctly names the repo the
   // current workflow run belongs to (RESEARCH.md's Security Domain
@@ -105,10 +107,14 @@ async function run(): Promise<void> {
   // renders or publishes: no `renderAllCards`/`publishOutputBranch` call
   // exists on this path, so a half-rendered/half-published state is not
   // structurally reachable.
+  // Hoisted so the shared fetch's calendar window (CARD-04/D-01) and the
+  // render pass can never disagree about which year is being drawn.
+  const now = new Date();
+
   let data;
   let pointCost: number;
   try {
-    ({ data, pointCost } = await fetchSharedData(cards, token, owner));
+    ({ data, pointCost } = await fetchSharedData(cards, token, owner, now));
   } catch (error) {
     core.setFailed(formatFetchFailureMessage(error));
     return;
@@ -121,7 +127,7 @@ async function run(): Promise<void> {
     renderedCards = renderAllCards(
       cards,
       data,
-      { now: new Date(), seed: 0, language: config.language },
+      { now, seed: 0, language: config.language },
       resolveTheme(config.theme),
     );
   } catch (error) {

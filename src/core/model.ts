@@ -32,6 +32,15 @@ export interface ProfileData {
     totalStars: number;
   };
   contributionCalendar?: { date: string; count: number }[];
+  /**
+   * Only populated when "calendar" is a requested capability (CARD-04) —
+   * the year-scoped `contributionCalendar.totalContributions` GitHub returns
+   * alongside the daily breakdown above. The Record (the sole consumer) owns
+   * interpreting this figure (e.g. as the centre-label total); core only
+   * normalizes shape, never domain-interprets a widget's own display logic
+   * (RESEARCH.md boundary, same convention as `repositories` below).
+   */
+  contributionCalendarTotal?: number;
   commitTimestamps?: string[];
   languages?: { name: string; color: string; bytes: number }[];
   /**
