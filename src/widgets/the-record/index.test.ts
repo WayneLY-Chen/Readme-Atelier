@@ -453,7 +453,7 @@ describe("Seeded texture element counts are fixed constants (D-09) — never sca
   it.each([
     { label: "populated", calendar: [{ date: "2026-01-04", count: 3 }] },
     { label: "all-zero", calendar: [] },
-  ])("$label: scuff+wear arc count is 70, dust dot count is 24", ({ calendar }) => {
+  ])("$label: scuff+wear arc count is 73, dust dot count is 24", ({ calendar }) => {
     const markup = theRecordWidget.renderBody(baseProfileData(calendar), editorialLight, optsFor("en", NOW));
     const arcCount = (
       markup.match(/<path d="[^"]*" fill="none" stroke="[^"]*" stroke-width="[\d.]+" stroke-opacity="[\d.]+"\/>/g) ??
@@ -462,7 +462,11 @@ describe("Seeded texture element counts are fixed constants (D-09) — never sca
     const dustCount = (
       markup.match(/<circle cx="[\d.]+" cy="[\d.]+" r="[\d.]+" fill="[^"]*" fill-opacity="[\d.]+"\/>/g) ?? []
     ).length;
-    expect(arcCount).toBe(70);
+    // 64 scuffs + 9 wear arcs (TEXTURE_WEAR_COUNT was raised from 6 to 9 during
+    // D-08 loop A: at 6 arcs the rotation was imperceptible on screen). Kept as a
+    // literal rather than derived from the constants so an accidental change to
+    // either count fails here instead of silently re-tuning the disc.
+    expect(arcCount).toBe(73);
     expect(dustCount).toBe(24);
   });
 });

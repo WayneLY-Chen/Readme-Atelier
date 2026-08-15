@@ -158,7 +158,7 @@ const SPIN_DURATION_S = 24;
 // ---------------------------------------------------------------------------
 
 const TEXTURE_SCUFF_COUNT = 64;
-const TEXTURE_WEAR_COUNT = 6;
+const TEXTURE_WEAR_COUNT = 9; // the trackable arcs — see renderTexture's D-03 note
 const TEXTURE_DUST_COUNT = 24;
 const TEXTURE_R_MIN = R_LABEL + 3;
 const TEXTURE_R_MAX = R_DISC - 4;
@@ -490,22 +490,38 @@ function renderTexture(theme: Theme, seed: number): string {
   const rand = mulberry32(seed);
   let markup = "";
 
+  // Grain. Short arcs read as surface noise, not as trackable marks — the eye
+  // cannot follow a 1.5-9 degree tick around a slow rotation. Kept low so the
+  // disc does not brighten overall (see the D-03 note on TEXTURE_WEAR_COUNT).
   for (let i = 0; i < TEXTURE_SCUFF_COUNT; i++) {
     const centerAngle = rand() * 360;
     const radius = TEXTURE_R_MIN + rand() * (TEXTURE_R_MAX - TEXTURE_R_MIN);
     const sweep = 1.5 + rand() * (9 - 1.5);
-    const width = 0.3 + rand() * (0.8 - 0.3);
-    const opacity = 0.03 + rand() * (0.1 - 0.03);
+    const width = 0.4 + rand() * (0.9 - 0.4);
+    const opacity = 0.06 + rand() * (0.14 - 0.06);
     const d = arcPath(CX, CY, radius, centerAngle, sweep);
     markup += `<path d="${d}" fill="none" stroke="${theme.paper}" stroke-width="${width.toFixed(2)}" stroke-opacity="${opacity.toFixed(2)}"/>`;
   }
 
+  // The rotation carriers. These long (22-60 degree) arcs are the ONLY marks a
+  // human can actually track around a 24s revolution — grain and dust are
+  // point-like and read as static noise however bright they are. D-08 loop A
+  // found the card failing its own "the texture should visibly sweep" check
+  // because this layer was 6 arcs at 0.12-0.20 alpha; it is now 9 at 0.20-0.32.
+  //
+  // Deliberately NOT pushed further: texture strokes use `theme.paper`, the same
+  // role the grooves use, so brightening this layer eats into D-03's pressed-vs-
+  // future contrast. Peak texture ink here is 1.30 x 0.32 = 0.416, which stays
+  // below the pressed-groove peak (1.10 x 0.95 = 1.045) so the groove structure
+  // still dominates the disc, and the arcs are sparse and moving rather than a
+  // uniform lift. D-03 must be re-confirmed visually after any change to this
+  // layer — the formula half cannot see this interaction.
   for (let i = 0; i < TEXTURE_WEAR_COUNT; i++) {
     const centerAngle = rand() * 360;
     const radius = TEXTURE_R_MIN + rand() * (TEXTURE_R_MAX - TEXTURE_R_MIN);
     const sweep = 22 + rand() * (60 - 22);
-    const width = 0.5 + rand() * (0.9 - 0.5);
-    const opacity = 0.12 + rand() * (0.2 - 0.12);
+    const width = 0.8 + rand() * (1.3 - 0.8);
+    const opacity = 0.2 + rand() * (0.32 - 0.2);
     const d = arcPath(CX, CY, radius, centerAngle, sweep);
     markup += `<path d="${d}" fill="none" stroke="${theme.paper}" stroke-width="${width.toFixed(2)}" stroke-opacity="${opacity.toFixed(2)}"/>`;
   }
@@ -513,8 +529,8 @@ function renderTexture(theme: Theme, seed: number): string {
   for (let i = 0; i < TEXTURE_DUST_COUNT; i++) {
     const angle = rand() * 360;
     const radius = TEXTURE_R_MIN + rand() * (TEXTURE_R_MAX - TEXTURE_R_MIN);
-    const size = 0.25 + rand() * (0.6 - 0.25);
-    const opacity = 0.05 + rand() * (0.14 - 0.05);
+    const size = 0.3 + rand() * (0.7 - 0.3);
+    const opacity = 0.1 + rand() * (0.2 - 0.1);
     const x = CX + radius * Math.cos(toRad(angle));
     const y = CY + radius * Math.sin(toRad(angle));
     markup += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${size.toFixed(2)}" fill="${theme.paper}" fill-opacity="${opacity.toFixed(2)}"/>`;
