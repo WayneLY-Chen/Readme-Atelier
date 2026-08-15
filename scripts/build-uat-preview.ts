@@ -240,6 +240,8 @@ function main(): void {
     );
   }).join("\n\n");
 
+  writeDiagnosticSpinSvg();
+
   const html =
     `<!doctype html>\n` +
     `<html lang="en">\n` +
@@ -256,6 +258,17 @@ function main(): void {
     `  .card-cell { margin: 0; }\n` +
     `  .card-cell img { display: block; border: 1px solid #444; }\n` +
     `  figcaption { font-size: 12px; opacity: 0.7; margin-top: 4px; }\n` +
+    `  .diag { max-width: 900px; padding: 12px 16px; border: 1px solid #6B5B4B; background: #16140F; margin-bottom: 24px; }\n` +
+    `  .diag-strip { display: flex; align-items: center; gap: 16px; margin-top: 12px; }\n` +
+    `  .diag-strip img { border: 1px solid #444; display: block; }\n` +
+    // The banner reads the viewer's OWN OS preference off the host page, so
+    // "it isn't spinning" can be attributed correctly without guesswork.
+    `  .rm-on { display: none; }\n` +
+    `  .rm-off { display: block; }\n` +
+    `  @media (prefers-reduced-motion: reduce) {\n` +
+    `    .rm-on { display: block; color: #E0B080; }\n` +
+    `    .rm-off { display: none; }\n` +
+    `  }\n` +
     `</style>\n` +
     `</head>\n` +
     `<body>\n` +
@@ -277,12 +290,80 @@ function main(): void {
     `  <li><strong>D-03 legibility (the phase's only hard visual constraint):</strong> in EVERY section below, can you tell where the pressed (already-elapsed) grooves stop and the future (not-yet-happened) grooves begin, without being told? If not, note which section and what you see.</li>\n` +
     `  <li><strong>D-03, the harder half.</strong> The fixture contains <strong>two fully-silent elapsed weeks</strong> (SILENT WEEKS in the right column should read 2, not 0 — if it reads 0 the fixture is broken and this check is meaningless). Those two grooves are PAST weeks that happen to have zero contributions, and they must still look different from a FUTURE week. One sits mid-disc among active grooves; the other sits directly against the future band, which is the exact adjacency the constraint is about. Can you tell those two apart from the future grooves, in every theme?</li>\n` +
     `</ul>\n` +
+    `<div class="diag">\n` +
+    `  <strong>If the record does not appear to spin, read this before filing a bug.</strong>\n` +
+    `  <p class="rm-on"><strong>Your OS reduce-motion preference is currently ON.</strong> A still record is\n` +
+    `  therefore the CORRECT behaviour — this page is proving RENDER-06's accessibility half, not failing it.\n` +
+    `  To check the rotation itself, turn the setting off (Windows: Settings &rsaquo; Accessibility &rsaquo;\n` +
+    `  Visual effects &rsaquo; Animation effects) and reload.</p>\n` +
+    `  <p class="rm-off">Your OS reduce-motion preference is currently OFF, so the record is expected to turn.</p>\n` +
+    `  <p>The control below uses the <em>identical</em> mechanism — same <code>@keyframes</code> name, same class,\n` +
+    `  same 24s period, same chassis reduced-motion block, embedded through the same &lt;img src&gt; path — but\n` +
+    `  rotates a full-opacity hand instead of texture scuffs.</p>\n` +
+    `  <div class="diag-strip">\n` +
+    `    <img src="${OUTPUT_DIR}/_diagnostic-spin.svg" alt="A control graphic: a high-contrast hand rotating once every 24 seconds" width="200" height="200">\n` +
+    `    <ul>\n` +
+    `      <li><strong>Hand turns, record looks still</strong> &rarr; the animation works. The record's texture is\n` +
+    `      simply too faint to perceive: 94 scuffs at stroke-opacity 0.03&ndash;0.19 and stroke-width\n` +
+    `      0.3&ndash;0.84px, moving 15&deg; per second. That is a <em>visibility</em> finding about D-09's texture,\n` +
+    `      not a broken animation. Report it as such.</li>\n` +
+    `      <li><strong>Neither turns</strong> &rarr; check the banner above first. If reduce-motion is OFF and the\n` +
+    `      hand still will not move, CSS animation is not surviving &lt;img src&gt; in this browser — that IS a\n` +
+    `      RENDER-06 blocker.</li>\n` +
+    `      <li><strong>Both turn</strong> &rarr; RENDER-06's rotation half holds in the local loop. Loop B still owes\n` +
+    `      the camo-proxied confirmation.</li>\n` +
+    `    </ul>\n` +
+    `  </div>\n` +
+    `</div>\n` +
     `${sections}\n` +
     `</body>\n` +
     `</html>\n`;
 
   writeFileSync(HTML_PATH, html, "utf8");
   console.log(`[build-uat-preview] wrote ${HTML_PATH}`);
+}
+
+/**
+ * A CONTROL, not a card. "The Record isn't spinning" has two very different
+ * causes that look identical on screen, and this file separates them:
+ *
+ *   (a) the animation mechanism does not survive `<img src>` in this browser, or
+ *       the OS reduce-motion preference is on and correctly suppressing it; or
+ *   (b) the mechanism works fine and the rotation is simply imperceptible,
+ *       because the only thing inside The Record's spinning group is 94 texture
+ *       scuffs at stroke-opacity 0.03-0.19 and stroke-width 0.3-0.84px.
+ *
+ * This SVG uses the IDENTICAL mechanism — same `@keyframes` name, same class
+ * name, same `transform-origin` form, and the same chassis reduced-motion block
+ * ahead of it — but rotates a high-contrast, full-opacity hand that is
+ * impossible to miss. Embedded through the same `<img src>` path as every card.
+ *
+ * If the hand spins and the record does not: cause (b) — a design problem in the
+ * texture's visibility, not a broken animation.
+ * If the hand does not spin either: cause (a) — check the OS reduce-motion
+ * banner at the top of the page before concluding anything is broken.
+ */
+function writeDiagnosticSpinSvg(): void {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img">` +
+    `<title>Animation control — a plainly visible rotating hand</title>` +
+    `<desc>Uses the same @keyframes mechanism as The Record, at full opacity.</desc>` +
+    `<style>@media (prefers-reduced-motion: reduce){*{animation-duration:0.01ms!important;animation-iteration-count:1!important;}}` +
+    `@keyframes atelier-record-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}` +
+    `.atelier-record-spin{animation:atelier-record-spin 24s linear infinite;transform-origin:100px 100px}</style>` +
+    `<rect width="200" height="200" fill="#1c1a17"/>` +
+    `<circle cx="100" cy="100" r="86" fill="none" stroke="#6B5B4B" stroke-width="1"/>` +
+    `<g class="atelier-record-spin">` +
+    // Full-opacity, 6px-wide hand from centre to rim — the same 24s period as
+    // the record, so "one revolution every 24 seconds" is directly comparable.
+    `<line x1="100" y1="100" x2="100" y2="18" stroke="#C99A70" stroke-width="6" stroke-linecap="round"/>` +
+    `<circle cx="100" cy="26" r="9" fill="#C99A70"/>` +
+    `</g>` +
+    `<circle cx="100" cy="100" r="5" fill="#F7F1E7"/>` +
+    `</svg>\n`;
+  const path = `${OUTPUT_DIR}/_diagnostic-spin.svg`;
+  writeFileSync(path, svg, "utf8");
+  console.log(`[build-uat-preview] wrote ${path} (animation control)`);
 }
 
 main();
