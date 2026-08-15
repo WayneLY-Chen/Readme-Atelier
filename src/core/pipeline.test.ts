@@ -1,10 +1,12 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import * as fontModule from "./font.js";
 import { loadAllFonts } from "../node/fonts.js";
 import { almanacWidget } from "../widgets/almanac/index.js";
 import { editorialStatCardWidget } from "../widgets/editorial-stat-card/index.js";
 import { formatStatNumber } from "../widgets/editorial-stat-card/format.js";
 import { mastheadWidget } from "../widgets/masthead/index.js";
 import { theGraveyardWidget } from "../widgets/the-graveyard/index.js";
+import { needleCaptionEn } from "../widgets/the-record/copy.js";
 import { theRecordWidget } from "../widgets/the-record/index.js";
 import type { ResolvedConfig } from "./config.js";
 import { calendarWindowFrom, type FetchImpl, zeroCapabilityProfileData } from "./fetch.js";
@@ -22,9 +24,9 @@ import {
   UnknownWidgetError,
 } from "./pipeline.js";
 import type { RenderedCard, ResolvedCard } from "./pipeline.js";
-import { collectCapabilities, get, register } from "./registry.js";
+import { collectCapabilities, get, register, type CitableFact } from "./registry.js";
 import type { WidgetDefinition } from "./registry.js";
-import { renderPair } from "./svg.js";
+import { renderPair, SOFT_SIZE_BUDGET_BYTES } from "./svg.js";
 
 const NOW = new Date("2026-08-07T12:00:00Z");
 const GLOBAL_OPTS = { now: NOW, seed: 0 };
@@ -1020,5 +1022,317 @@ describe("Plan 03-05: 四卡完整組合（MAST-01/02/03 收尾）", () => {
     expect(masthead?.dark).toContain("<path");
     expect(masthead?.light).not.toContain("<text");
     expect(masthead?.dark).not.toContain("<text");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 04-05 Task 1: the full five-widget composition (CARD-04/RENDER-06/
+// RENDER-08/QA-01) — one composed query, exactly one animated card, both
+// size-guard layers, non-colliding masthead contents row, and the MAST-03
+// standalone-degradation contract extended to The Record.
+// ---------------------------------------------------------------------------
+
+const MS_PER_DAY_TEST = 86_400_000;
+
+/**
+ * A partial-year daily calendar (2026-01-01 .. NOW = 2026-08-07, this file's
+ * own `NOW`) with a deliberate seven-day busiest week and several scattered
+ * all-zero days, so The Record's busiest-week/silent-weeks rows and its
+ * groove ink both have real signal rather than an all-zero fixture.
+ */
+function fiveWidgetCalendarDays(): { date: string; contributionCount: number }[] {
+  const days: { date: string; contributionCount: number }[] = [];
+  const start = Date.UTC(2026, 0, 1);
+  const end = Date.UTC(2026, 7, 7);
+  let i = 0;
+  for (let ms = start; ms <= end; ms += MS_PER_DAY_TEST, i++) {
+    let contributionCount: number;
+    if (i >= 60 && i < 67) {
+      contributionCount = 25; // the deliberate busiest week
+    } else if (i % 9 === 0) {
+      contributionCount = 0; // scattered silent days
+    } else {
+      contributionCount = (i % 4) + 1;
+    }
+    days.push({ date: new Date(ms).toISOString().slice(0, 10), contributionCount });
+  }
+  return days;
+}
+
+/**
+ * A `StatsQueryResult`-shaped body satisfying all four capabilities the real
+ * five-widget set unions at once (stats, identity, repoList, calendar) —
+ * extends `fixtureResponseBodyWithRepoList`'s stats/repoList shape with a
+ * `calendar` alias carrying `fiveWidgetCalendarDays()`.
+ */
+function fixtureResponseBodyFiveWidgets(totalCommits = 9) {
+  const contributionDays = fiveWidgetCalendarDays();
+  const totalContributions = contributionDays.reduce((sum, d) => sum + d.contributionCount, 0);
+  return {
+    data: {
+      user: {
+        login: "octocat",
+        name: "The Octocat",
+        avatarUrl: "https://example.com/avatar.png",
+        followers: { totalCount: 5 },
+        contributionsCollection: {
+          restrictedContributionsCount: 0,
+          totalCommitContributions: totalCommits,
+          totalIssueContributions: 1,
+          totalPullRequestContributions: 1,
+          commitContributionsByRepository: [
+            { contributions: { totalCount: totalCommits }, repository: { isFork: false } },
+          ],
+          issueContributionsByRepository: [],
+          pullRequestContributionsByRepository: [],
+        },
+        statsRepos: { nodes: [] },
+        graveyardRepos: {
+          nodes: [
+            {
+              name: "old-project",
+              nameWithOwner: "octocat/old-project",
+              url: "https://github.com/octocat/old-project",
+              createdAt: "2020-01-01T00:00:00Z",
+              pushedAt: "2020-06-01T00:00:00Z",
+              isFork: false,
+            },
+          ],
+        },
+        calendar: {
+          contributionCalendar: {
+            totalContributions,
+            weeks: [{ firstDay: "2026-01-01", contributionDays }],
+          },
+        },
+      },
+      rateLimit: { cost: 1, limit: 5000, remaining: 4999 },
+    },
+  };
+}
+
+/** Same recording-fetch shape as `recordingFetch()`/`recordingFetchWithRepoList()`
+ * above, responding with `fixtureResponseBodyFiveWidgets()` instead. */
+function recordingFetchFiveWidgets(
+  totalCommits = 9,
+): { fetchImpl: FetchImpl; calls: { query: string; variables: unknown }[] } {
+  const calls: { query: string; variables: unknown }[] = [];
+  const fetchImpl: FetchImpl = (async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { query: string; variables: unknown };
+    calls.push(body);
+    return new Response(JSON.stringify(fixtureResponseBodyFiveWidgets(totalCommits)), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as unknown as FetchImpl;
+  return { fetchImpl, calls };
+}
+
+/**
+ * A `ResolvedCard` built by hand from a real widget object, bypassing the
+ * registry entirely — same convention `theRecordCard()` above and Plan
+ * 03-05's own "真正的 mastheadWidget" test already use, and the only way to
+ * get masthead + the-record's REAL (non-spy) widgets into one card set in
+ * this file, since the registry has no unregister/replace primitive and this
+ * file's masthead fixtures above already claim the name "masthead".
+ */
+function manualCard(id: string, widget: WidgetDefinition<any>, timezone = "UTC"): ResolvedCard {
+  return {
+    id,
+    widget,
+    parsedOptions: widget.optionsSchema.parse({}) as unknown as Record<string, unknown>,
+    timezone,
+  };
+}
+
+/**
+ * Wraps a real widget so every `renderBody` call's fully-merged `opts`
+ * (post pipeline injection of pageNumber/totalPages/contents/citedFacts) is
+ * captured into `sink[widget.name]`, without altering what actually renders
+ * — mirrors this file's own `capturingStatCard` shim above (Plan 03-05),
+ * generalized to any widget.
+ */
+function capturingWidget(
+  widget: WidgetDefinition<any>,
+  sink: Record<string, Record<string, unknown>>,
+): WidgetDefinition<any> {
+  return {
+    ...widget,
+    renderBody(data: ProfileData, theme: any, opts: any) {
+      sink[widget.name] = opts as Record<string, unknown>;
+      return widget.renderBody(data, theme, opts);
+    },
+  };
+}
+
+const FIVE_WIDGETS_IN_ORDER: { id: string; widget: WidgetDefinition<any> }[] = [
+  { id: "masthead", widget: mastheadWidget },
+  { id: "almanac", widget: almanacWidget },
+  { id: "editorial-stat-card", widget: editorialStatCardWidget },
+  { id: "the-graveyard", widget: theGraveyardWidget },
+  { id: "the-record", widget: theRecordWidget },
+];
+
+describe("Plan 04-05 Task 1: 五卡完整組合（CARD-04/RENDER-06/RENDER-08/QA-01 收尾）", () => {
+  it("one composed query for the real five-widget set: capability union is exactly {stats, identity, repoList, calendar}, the single request's query carries the stats fragment + repo-list alias + calendar alias with $from declared exactly once", async () => {
+    const capabilities = collectCapabilities(FIVE_WIDGETS_IN_ORDER.map((c) => c.widget));
+    expect(capabilities).toEqual(new Set(["stats", "identity", "repoList", "calendar"]));
+
+    const cards = FIVE_WIDGETS_IN_ORDER.map(({ id, widget }) => manualCard(id, widget));
+    const { fetchImpl, calls } = recordingFetchFiveWidgets();
+
+    await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
+
+    expect(calls).toHaveLength(1);
+    const query = calls[0]?.query as string;
+    // Stats fragment (default include_forks: false — the exclude-forks shape).
+    expect(query).toContain("commitContributionsByRepository");
+    // Repo-list alias (The Graveyard, CARD-03).
+    expect(query).toContain("graveyardRepos:");
+    // Calendar alias (The Record, CARD-04).
+    expect(query).toContain("calendar: contributionsCollection(from: $from)");
+    // $from declared exactly once in the operation header — not twice, and
+    // not omitted (GraphQL's All-Variables-Used rule).
+    expect((query.match(/\$from: DateTime!/g) ?? []).length).toBe(1);
+  });
+
+  it("renders all five real widgets through renderAllCards: 5 rendered cards, both size-guard layers pass with the largest observed byte size reported, exactly one animated card (The Record), and every non-masthead card carries a page number while the masthead carries none", async () => {
+    const capturedOpts: Record<string, Record<string, unknown>> = {};
+    const cards = FIVE_WIDGETS_IN_ORDER.map(({ id, widget }) =>
+      manualCard(id, capturingWidget(widget, capturedOpts)),
+    );
+
+    const { fetchImpl } = recordingFetchFiveWidgets();
+    const { data } = await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
+
+    const rendered = renderAllCards(cards, data, GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
+    expect(rendered).toHaveLength(5);
+
+    // Both size-guard layers already ran INSIDE renderAllCards (a failure
+    // would have thrown SizeBudgetError before any RenderedCard came back) —
+    // this additionally records the largest observed byte size so the
+    // record-card overflow backstop (04-UI-SPEC.md "overflow") has a real
+    // measured number rather than an estimate.
+    const allByteSizes = rendered.flatMap((rc) => [
+      Buffer.byteLength(rc.light, "utf8"),
+      Buffer.byteLength(rc.dark, "utf8"),
+    ]);
+    const maxBytes = Math.max(...allByteSizes);
+    // eslint-disable-next-line no-console -- deliberate: this is the measured
+    // number the record-card overflow backstop needs, not debug noise.
+    console.log(
+      `[04-05 Task 1] largest observed rendered byte size across the five-widget set: ${maxBytes} bytes (soft budget ${SOFT_SIZE_BUDGET_BYTES} bytes)`,
+    );
+    expect(
+      maxBytes,
+      `largest observed rendered byte size across the five-widget set: ${maxBytes} bytes (soft budget ${SOFT_SIZE_BUDGET_BYTES} bytes)`,
+    ).toBeLessThanOrEqual(SOFT_SIZE_BUDGET_BYTES);
+
+    // Exactly one animated CARD across the whole rendered set, and it is The
+    // Record's — a future card that starts animating fails this test rather
+    // than quietly stacking compositor work.
+    const animatedCardIds = rendered
+      .filter((rc) => rc.light.includes("@keyframes") || rc.dark.includes("@keyframes"))
+      .map((rc) => rc.id);
+    expect(animatedCardIds).toEqual(["the-record"]);
+
+    // Page-number distribution: the masthead is excluded from its own
+    // numbering (Q2, unchanged Phase 3 contract); every other card gets one.
+    expect(capturedOpts.masthead?.pageNumber).toBeUndefined();
+    expect(capturedOpts.masthead?.totalPages).toBeUndefined();
+    for (const id of ["almanac", "editorial-stat-card", "the-graveyard", "the-record"]) {
+      expect(capturedOpts[id]?.pageNumber, id).toBeDefined();
+      expect(capturedOpts[id]?.totalPages, id).toBe(4);
+    }
+  });
+
+  it("the masthead's contents row, genuinely composed from all four non-masthead cards, never collides with the citation: contents right edge is strictly left of the citation's left edge", async () => {
+    const capturedOpts: Record<string, Record<string, unknown>> = {};
+    const cards = FIVE_WIDGETS_IN_ORDER.map(({ id, widget }) =>
+      manualCard(id, capturingWidget(widget, capturedOpts)),
+    );
+
+    const { fetchImpl } = recordingFetchFiveWidgets();
+    const { data } = await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
+
+    const spy = vi.spyOn(fontModule, "assertCoverage");
+    renderAllCards(cards, data, GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
+
+    // The masthead's own renderBody calls assertCoverage("mono-semibold",
+    // <the exact post-truncation contents string>, ...) once per theme call
+    // — this observes the REAL rendered string, not an independently
+    // recomputed prediction (mirrors widgets/masthead/index.test.ts's own
+    // `renderAndCaptureContentsText` technique, applied here through the
+    // real pipeline instead of calling renderBody directly).
+    const contentsCall = spy.mock.calls.find(
+      (c) => c[0] === "mono-semibold" && typeof c[1] === "string" && (c[1] as string).startsWith("CONTENTS"),
+    );
+    spy.mockRestore();
+    expect(contentsCall).toBeDefined();
+    const contentsText = contentsCall![1] as string;
+
+    const mastheadOpts = capturedOpts.masthead as unknown as {
+      citedFacts?: { totalCommits?: CitableFact };
+    };
+    const fact = mastheadOpts.citedFacts?.totalCommits;
+    expect(fact).toBeDefined();
+
+    // Mirrors masthead/index.ts's own module-private monoRunWidth/
+    // citationWidth math (no public export exists — same duplication
+    // widgets/masthead/index.test.ts already uses for the identical reason).
+    const T1_SIZE = 8;
+    const T1_LETTER_SPACING = 1.6;
+    const PADDING = 24;
+    const RIGHT_EDGE_X = 495 - PADDING;
+    function monoRunWidth(text: string): number {
+      const chars = Array.from(text);
+      let width = 0;
+      chars.forEach((ch, i) => {
+        width +=
+          fontModule.measureAdvanceWidth("mono-semibold", ch, T1_SIZE) +
+          (i < chars.length - 1 ? T1_LETTER_SPACING : 0);
+      });
+      return width;
+    }
+    function citationWidth(value: string, label: string): number {
+      return monoRunWidth(value) + monoRunWidth(" ") + monoRunWidth(label);
+    }
+
+    const contentsRightEdge = PADDING + monoRunWidth(contentsText);
+    const citationLeftEdge = RIGHT_EDGE_X - citationWidth(fact!.value, fact!.label);
+    expect(contentsRightEdge).toBeLessThan(citationLeftEdge);
+  });
+
+  it("masthead disabled: the other four cards still render, no card receives a page number, and The Record's needle caption still renders while its page-number footer contributes no markup (MAST-03 standalone degradation, extended to CARD-04)", async () => {
+    const capturedOpts: Record<string, Record<string, unknown>> = {};
+    const fourWidgets = FIVE_WIDGETS_IN_ORDER.filter((c) => c.id !== "masthead");
+    const cards = fourWidgets.map(({ id, widget }) => manualCard(id, capturingWidget(widget, capturedOpts)));
+
+    const { fetchImpl } = recordingFetchFiveWidgets();
+    const { data } = await fetchSharedData(cards, "fake-token", "octocat", NOW, fetchImpl);
+
+    const spy = vi.spyOn(fontModule, "assertCoverage");
+    const rendered = renderAllCards(cards, data, GLOBAL_RENDER_OPTS, EDITORIAL_THEMES);
+
+    expect(rendered).toHaveLength(4);
+    for (const id of ["almanac", "editorial-stat-card", "the-graveyard", "the-record"]) {
+      expect(capturedOpts[id]?.pageNumber, id).toBeUndefined();
+      expect(capturedOpts[id]?.totalPages, id).toBeUndefined();
+    }
+
+    // The needle caption is unconditional (always renders) — its
+    // assertCoverage call for the exact copy string must be present.
+    const needleCall = spy.mock.calls.find((c) => c[0] === "mono-semibold" && c[1] === needleCaptionEn);
+    // The page-number footer is gated on pageNumber/totalPages both being
+    // defined — with no masthead enabled, neither is ever set, so index.ts's
+    // own Composition §5 block never runs and contributes literally zero
+    // additional markup (never even reaching an assertCoverage call).
+    const pageFooterCall = spy.mock.calls.find(
+      (c) => c[0] === "mono-semibold" && typeof c[1] === "string" && (c[1] as string).startsWith("PAGE "),
+    );
+    spy.mockRestore();
+
+    expect(needleCall).toBeDefined();
+    expect(pageFooterCall).toBeUndefined();
   });
 });
