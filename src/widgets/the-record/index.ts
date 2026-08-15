@@ -317,8 +317,10 @@ export function zonedYear(now: Date, timeZone: string): number {
 /**
  * Total number of Sunday-started calendar-week buckets covering `year`
  * (D-02 fixed geometry). Sunday-started calendar buckets, NOT ISO 8601
- * weeks — mathematically bounded in [52, 54] for every year (RESEARCH.md
- * Code Examples / UI-SPEC Degenerate State #3).
+ * weeks — mathematically bounded in [53, 54] for every year (365-day years
+ * always produce 53; 366-day leap years produce 54 only when 1 January
+ * falls on a Saturday, 53 otherwise — verified 1900-2100. RESEARCH.md Code
+ * Examples / UI-SPEC Degenerate State #3).
  */
 export function grooveCountForYear(year: number): number {
   const jan1 = new Date(Date.UTC(year, 0, 1));

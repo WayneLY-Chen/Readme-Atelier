@@ -78,7 +78,7 @@ describe("theRecordWidget — identity (CARD-04)", () => {
   });
 });
 
-describe("grooveCountForYear — bounded in [52, 54] (UI-SPEC Degenerate State #3)", () => {
+describe("grooveCountForYear — bounded in [53, 54] (UI-SPEC Degenerate State #3)", () => {
   it("2026 (Jan 1 = Thursday, non-leap) has 53 buckets", () => {
     expect(grooveCountForYear(2026)).toBe(53);
   });
