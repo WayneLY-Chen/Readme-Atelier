@@ -67252,9 +67252,9 @@ const patch = data_patch_require('./data/patch.json');
 
 
 const data_require = (0,external_module_namespaceObject.createRequire)(import.meta.url);
-const mdnAtrules = data_require('mdn-data/css/at-rules.json');
-const mdnProperties = data_require('mdn-data/css/properties.json');
-const mdnSyntaxes = data_require('mdn-data/css/syntaxes.json');
+const mdnAtrules = data_require('./mdn-data/css/at-rules.json');
+const mdnProperties = data_require('./mdn-data/css/properties.json');
+const mdnSyntaxes = data_require('./mdn-data/css/syntaxes.json');
 
 const hasOwn = Object.hasOwn || ((object, property) => Object.prototype.hasOwnProperty.call(object, property));
 const extendSyntax = /^\s*\|\s*/;
@@ -78435,9 +78435,9 @@ const data_patch_patch = lib_data_patch_require('./data/patch.json');
 
 
 const lib_data_require = (0,external_module_namespaceObject.createRequire)(import.meta.url);
-const data_mdnAtrules = lib_data_require('mdn-data/css/at-rules.json');
-const data_mdnProperties = lib_data_require('mdn-data/css/properties.json');
-const data_mdnSyntaxes = lib_data_require('mdn-data/css/syntaxes.json');
+const data_mdnAtrules = lib_data_require('./mdn-data/css/at-rules.json');
+const data_mdnProperties = lib_data_require('./mdn-data/css/properties.json');
+const data_mdnSyntaxes = lib_data_require('./mdn-data/css/syntaxes.json');
 
 const data_extendSyntax = /^\s*\|\s*/;
 
