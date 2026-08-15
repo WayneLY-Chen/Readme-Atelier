@@ -2,5 +2,13 @@ theme: editorial
 language: zh-TW
 timezone: Asia/Taipei
 
+# This repository is its own consumer (.github/workflows/cards.yml runs the
+# action as `./`), so this file doubles as the D-08 loop-B fixture: every
+# shipped card enabled at once, which is also the third Manual-Only
+# Verification — "all cards enabled together show no runaway animation".
 cards:
+  - type: masthead
   - type: almanac
+  - type: editorial-stat-card
+  - type: the-graveyard
+  - type: the-record
