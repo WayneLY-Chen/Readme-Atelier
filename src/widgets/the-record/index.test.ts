@@ -119,6 +119,43 @@ describe("MAX_STROKE_WIDTH (1.10) — merge is deliberate and bounded (CARD-04 a
   });
 });
 
+describe("Render pipeline at G=54 — the leap-year-starting-Saturday case MAX_STROKE_WIDTH's own comment calls \"the tightest count\" (WR-01)", () => {
+  it("renders well-formed markup for 2028 (grooveCountForYear === 54) via the real renderBody() path: no NaN/undefined/Infinity, 54 strictly-decreasing groove radii inside [R_INNER, R_OUTER], stroke widths within their documented bound", () => {
+    const now = new Date("2028-08-08T00:00:00Z");
+    expect(grooveCountForYear(2028)).toBe(54);
+
+    const calendar = [
+      { date: "2028-01-08", count: 5 },
+      { date: "2028-06-03", count: 9 },
+    ];
+    const markup = theRecordWidget.renderBody(baseProfileData(calendar), editorialLight, optsFor("en", now));
+
+    expect(markup).not.toMatch(/NaN|undefined|Infinity/);
+
+    // Groove rings only — excludes the rim-land highlight circle (r=90.40,
+    // outside [R_INNER, R_OUTER]), the only other fill="none" circle drawn.
+    const grooveCircles = [
+      ...markup.matchAll(
+        /<circle cx="[\d.]+" cy="[\d.]+" r="([\d.]+)" fill="none" stroke="[^"]*" stroke-width="([\d.]+)" stroke-opacity="[\d.]+"\/>/g,
+      ),
+    ].filter((m) => Number(m[1]) < 90);
+    expect(grooveCircles).toHaveLength(54);
+
+    const radii = grooveCircles.map((m) => Number(m[1]));
+    for (let i = 1; i < radii.length; i++) {
+      expect(radii[i]).toBeLessThan(radii[i - 1]!);
+    }
+    expect(radii[0]).toBe(86); // R_OUTER
+    expect(radii[radii.length - 1]).toBe(39); // R_INNER
+
+    const widths = grooveCircles.map((m) => Number(m[2]));
+    for (const w of widths) {
+      expect(w).toBeGreaterThanOrEqual(0.4); // FUTURE_STROKE_WIDTH floor
+      expect(w).toBeLessThanOrEqual(1.1); // MAX_STROKE_WIDTH
+    }
+  });
+});
+
 describe("bucketWeeks — strict index order, no sort (CARD-04 ordering)", () => {
   it("two weeks with identical counts still render at distinct radii, in bucket order", () => {
     // Bucket 0 = Sun 2025-12-28..Sat 2026-01-03 (the week containing Jan 1);
