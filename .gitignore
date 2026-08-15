@@ -12,3 +12,9 @@ Thumbs.db
 # D-08 loop-A UAT preview page (04-05 Task 2) — regenerable via `npm run preview:uat`;
 # the committed deliverable is scripts/build-uat-preview.ts, not this generated output.
 .uat-preview.html
+
+# Local planning + agent tooling — deliberately untracked.
+# These were previously committed and were removed from the entire git history
+# on 2026-08-16; keeping them ignored is what stops them being re-added.
+.planning/
+.claude/
