@@ -303,10 +303,14 @@ function main(): void {
     `  <div class="diag-strip">\n` +
     `    <img src="${OUTPUT_DIR}/_diagnostic-spin.svg" alt="A control graphic: a high-contrast hand rotating once every 24 seconds" width="200" height="200">\n` +
     `    <ul>\n` +
-    `      <li><strong>Hand turns, record looks still</strong> &rarr; the animation works. The record's texture is\n` +
-    `      simply too faint to perceive: 94 scuffs at stroke-opacity 0.03&ndash;0.19 and stroke-width\n` +
-    `      0.3&ndash;0.84px, moving 15&deg; per second. That is a <em>visibility</em> finding about D-09's texture,\n` +
-    `      not a broken animation. Report it as such.</li>\n` +
+    `      <li><strong>Hand turns, record looks still</strong> &rarr; the animation works and the finding is about\n` +
+    `      <em>visibility</em>, not a broken mechanism. The concentric grooves are rotationally symmetric, so the\n` +
+    `      seeded texture is the only evidence of motion; if that texture is too faint the disc reads as static.\n` +
+    `      This exact failure was found and fixed during Phase 4's own loop-A pass (the long "wear" arcs are the\n` +
+    `      only marks the eye can track around a 24s revolution &mdash; grain and dust read as static noise at any\n` +
+    `      brightness). If it recurs, tune <code>TEXTURE_WEAR_COUNT</code> and the wear layer's opacity in\n` +
+    `      <code>the-record/index.ts</code>, and re-confirm D-03 afterwards &mdash; texture and grooves share the\n` +
+    `      <code>paper</code> role, so brightening one trades against the other.</li>\n` +
     `      <li><strong>Neither turns</strong> &rarr; check the banner above first. If reduce-motion is OFF and the\n` +
     `      hand still will not move, CSS animation is not surviving &lt;img src&gt; in this browser — that IS a\n` +
     `      RENDER-06 blocker.</li>\n` +
