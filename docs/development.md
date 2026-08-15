@@ -67,7 +67,9 @@ export const myWidget: WidgetDefinition<RenderOptions> = {
 - **不能有 `<text>`。** 以圖片形式載入的 SVG 不能載入字型，所有文字必須是路徑。
   請用 `core/font.ts` 的 `textToPathData()`，那是唯一被允許呼叫 opentype.js 的地方。
 - **不能有 `<script>`、外部字型、外部圖片、`<foreignObject>`。** SMIL `<animate>` 與內嵌的
-  `@keyframes` CSS 可以用。
+  `@keyframes` CSS 可以用，**但只有 CSS 動畫會被 `prefers-reduced-motion` 的晶片層機制
+  （`core/svg.ts` 的 `REDUCED_MOTION_STYLE`）自動停用** —— 任何新卡片的動畫一律用
+  `@keyframes`，不要用 SMIL，否則會悄悄破壞 RENDER-06 的無障礙承諾。
 - **必須遵守 `prefers-reduced-motion`。**
 - **每個檔案 200KB 上限**，超過直接讓 build 失敗。
 
