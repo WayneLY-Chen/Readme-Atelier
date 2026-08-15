@@ -8,3 +8,7 @@ Thumbs.db
 
 # Local widget preview output (the CI workflow publishes to the `output` branch)
 .preview/
+
+# D-08 loop-A UAT preview page (04-05 Task 2) — regenerable via `npm run preview:uat`;
+# the committed deliverable is scripts/build-uat-preview.ts, not this generated output.
+.uat-preview.html

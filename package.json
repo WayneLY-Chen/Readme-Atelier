@@ -9,7 +9,8 @@
     "test:coverage": "vitest run --coverage",
     "build:fonts": "tsx scripts/build-fonts.ts",
     "build": "ncc build src/action-entry.ts -o dist --license licenses.txt",
-    "preview": "tsx src/cli.ts"
+    "preview": "tsx src/cli.ts",
+    "preview:uat": "tsx scripts/build-uat-preview.ts"
   },
   "dependencies": {
     "@actions/core": "^3.0.1",
