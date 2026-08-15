@@ -21,21 +21,27 @@
 分支，經 GitHub 的 camo 代理送到這裡——也就是任何人嵌進自己 README 時會走的同一條路徑。</sub>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/the-record-light.svg?v=1#gh-light-mode-only" width="495"
-       alt="唱片卡：把今年到目前為止的貢獻壓成一張黑膠唱片，每一圈溝紋代表一週，溝紋越粗該週越忙，唱針停在本週；碟面紋理以 24 秒一圈緩慢旋轉。">
-  <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/the-record-dark.svg?v=1#gh-dark-mode-only" width="495"
-       alt="唱片卡：把今年到目前為止的貢獻壓成一張黑膠唱片，每一圈溝紋代表一週，溝紋越粗該週越忙，唱針停在本週；碟面紋理以 24 秒一圈緩慢旋轉。">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/the-record-dark.svg?v=2">
+    <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/the-record-light.svg?v=2" alt="唱片卡：把今年到目前為止的貢獻壓成一張黑膠唱片，每一圈溝紋代表一週，溝紋越粗該週越忙，唱針停在本週；碟面紋理以 24 秒一圈緩慢旋轉。">
+  </picture>
 </p>
 
 <p align="center"><sub>唱片 The Record ・ 唯一會動的一張。若你的系統開啟了「減少動態效果」，它會靜止——這是刻意的。</sub></p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/masthead-light.svg?v=1#gh-light-mode-only" width="495" alt="刊頭卡：報頭樣式的標題列，列出本頁啟用的卡片目次與一則引用數據。">
-  <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/masthead-dark.svg?v=1#gh-dark-mode-only" width="495" alt="刊頭卡：報頭樣式的標題列，列出本頁啟用的卡片目次與一則引用數據。">
-  <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/editorial-stat-card-light.svg?v=1#gh-light-mode-only" width="495" alt="統計卡：以雜誌排版呈現 commits、PR、issues、stars、followers 五項數字。">
-  <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/editorial-stat-card-dark.svg?v=1#gh-dark-mode-only" width="495" alt="統計卡：以雜誌排版呈現 commits、PR、issues、stars、followers 五項數字。">
-  <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/the-graveyard-light.svg?v=1#gh-light-mode-only" width="495" alt="墓園卡：列出久未推送的儲存庫，以墓碑呈現其存活天數。">
-  <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/the-graveyard-dark.svg?v=1#gh-dark-mode-only" width="495" alt="墓園卡：列出久未推送的儲存庫，以墓碑呈現其存活天數。">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/masthead-dark.svg?v=2">
+    <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/masthead-light.svg?v=2" alt="刊頭卡：報頭樣式的標題列，列出本頁啟用的卡片目次與一則引用數據。">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/editorial-stat-card-dark.svg?v=2">
+    <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/editorial-stat-card-light.svg?v=2" alt="統計卡：以雜誌排版呈現 commits、PR、issues、stars、followers 五項數字。">
+  </picture>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/the-graveyard-dark.svg?v=2">
+    <img src="https://raw.githubusercontent.com/WayneLY-Chen/Readme-Atelier/output/the-graveyard-light.svg?v=2" alt="墓園卡：列出久未推送的儲存庫，以墓碑呈現其存活天數。">
+  </picture>
 </p>
 
 ## 怎麼用
