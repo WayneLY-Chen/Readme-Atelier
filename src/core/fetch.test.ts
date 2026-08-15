@@ -265,6 +265,46 @@ function statsAndRepoListResponseBody() {
   };
 }
 
+/**
+ * Plan 04-04 Task 3: masthead's "identity"-only capability (the first widget
+ * to push capabilities.size above 0 while requesting neither "stats" nor
+ * "repoList" nor "calendar" — see StatsQueryResult's own doc comment on
+ * `contributionsCollection`). The real API genuinely omits
+ * contributionsCollection/statsRepos/graveyardRepos/calendar from the
+ * response in this shape, since buildQuery never asked for them.
+ */
+function identityOnlyResponseBody() {
+  return {
+    data: {
+      user: {
+        login: "octocat",
+        name: "The Octocat",
+        avatarUrl: "https://example.com/avatar.png",
+        followers: { totalCount: 7 },
+      },
+      rateLimit: { cost: 1, limit: 5000, remaining: 4999 },
+    },
+  };
+}
+
+describe("fetchProfileData — identity-only capability, no stats fragment requested (masthead)", () => {
+  it("normalizes to zeroed stats rather than throwing when contributionsCollection is genuinely absent", async () => {
+    const fetchImpl = fakeGraphqlFetch(200, identityOnlyResponseBody());
+    const { data } = await fetchProfileData(
+      new Set(["identity"]),
+      "fake-token",
+      "octocat",
+      false,
+      undefined,
+      fetchImpl,
+    );
+
+    expect(data.stats).toEqual({ totalCommits: 0, totalIssues: 0, totalPRs: 0, totalStars: 0 });
+    expect(data.login).toBe("octocat");
+    expect(data.followers).toBe(7);
+  });
+});
+
 describe("fetchProfileData — repoList capability (CARD-03)", () => {
   it("maps graveyardRepos.nodes into data.repositories, one-to-one", async () => {
     const fetchImpl = fakeGraphqlFetch(200, repoListResponseBody());

@@ -22,7 +22,7 @@ import {
   UnknownWidgetError,
 } from "./pipeline.js";
 import type { RenderedCard, ResolvedCard } from "./pipeline.js";
-import { get, register } from "./registry.js";
+import { collectCapabilities, get, register } from "./registry.js";
 import type { WidgetDefinition } from "./registry.js";
 import { renderPair } from "./svg.js";
 
@@ -661,6 +661,46 @@ describe("renderAllCards — masthead citation & page numbering (MAST-01/02/03)"
     expect(error.message).toContain("some-card");
     expect(error.message).toContain("1");
     expect(error.message).toContain("undefined");
+  });
+
+  /**
+   * Plan 04-04 Task 3: the reverse direction of the same one-defined-
+   * one-undefined condition. `renderAllCards`'s own doc comment on
+   * PageNumberInvariantError states the guard is unreachable through the
+   * public API (both fields are always assigned together, from the same
+   * object-spread) — so, like the test above, this exercises the error
+   * class's own message construction directly rather than trying to force
+   * the unreachable branch through renderAllCards.
+   */
+  it("PageNumberInvariantError also names both field values when pageNumber (not totalPages) is the undefined one", () => {
+    const error = new PageNumberInvariantError("other-card", undefined, 4);
+    expect(error.name).toBe("PageNumberInvariantError");
+    expect(error.message).toContain("other-card");
+    expect(error.message).toContain("undefined");
+    expect(error.message).toContain("4");
+  });
+});
+
+/**
+ * Plan 04-04 Task 3 (QA-01): capability composition over the REAL, complete
+ * v1 widget set — every card genuinely registrable in this project, not a
+ * hand-picked subset. Guards against a future card silently widening (or
+ * narrowing) the union `fetchSharedData` derives its single shared query
+ * from.
+ */
+describe("Plan 04-04 Task 3: collectCapabilities — the real v1 widget set (QA-01)", () => {
+  it("unions exactly the capabilities the five real widgets declare, and nothing else", () => {
+    const allFiveWidgets = [
+      almanacWidget,
+      editorialStatCardWidget,
+      mastheadWidget,
+      theGraveyardWidget,
+      theRecordWidget,
+    ];
+
+    const capabilities = collectCapabilities(allFiveWidgets);
+
+    expect(capabilities).toEqual(new Set(["stats", "identity", "repoList", "calendar"]));
   });
 });
 
