@@ -37,28 +37,61 @@ const HTML_PATH = ".uat-preview.html";
 const MS_PER_DAY = 86_400_000;
 
 /**
- * A partial-year daily contribution calendar (2026-01-01 .. PINNED_NOW) with
- * a deliberate seven-day busiest week and several scattered all-zero days —
- * so The Record's groove ink (D-03/D-04) and its right-column callouts
- * (BUSIEST WEEK / SILENT WEEKS) carry real signal in the preview, not an
- * all-zero fixture. Days 60-66 (~early March) are the busiest week; every
- * ninth day is deliberately silent.
+ * Sunday-started weeks that must render as PRESSED-BUT-SILENT — an elapsed
+ * week whose every day is zero. These exist for one reason: D-03, the phase's
+ * only hard visual constraint, is the claim that a past week with zero
+ * contributions stays distinguishable from a future week. Without at least one
+ * such week in the fixture the preview page has no past-zero groove at all, so
+ * the comparison the page asks the reviewer to make is not on the page.
+ *
+ * A scattered silent *day* does NOT produce one: the groove encoding buckets by
+ * WEEK, so a lone zero day inside an otherwise-active week is invisible. The
+ * bug this replaced set every ninth DAY to zero and reported `SILENT WEEKS 0`.
+ *
+ * - `2026-04-05` — mid-year, so a past-zero groove sits surrounded by pressed
+ *   grooves of varying weight (is it distinguishable from its neighbours?).
+ * - `2026-07-26` — the second-to-last ELAPSED week, so a past-zero groove sits
+ *   directly against the future grooves (the exact D-03 adjacency). Deliberately
+ *   not the last elapsed week, which the stylus rests on.
+ */
+const SILENT_WEEK_STARTS = ["2026-04-05", "2026-07-26"] as const;
+
+function silentDayDates(): Set<string> {
+  const dates = new Set<string>();
+  for (const start of SILENT_WEEK_STARTS) {
+    const startMs = Date.parse(`${start}T00:00:00Z`);
+    for (let d = 0; d < 7; d++) {
+      dates.add(new Date(startMs + d * MS_PER_DAY).toISOString().slice(0, 10));
+    }
+  }
+  return dates;
+}
+
+/**
+ * A partial-year daily contribution calendar (2026-01-01 .. PINNED_NOW) with a
+ * deliberate seven-day busiest week and two fully-silent elapsed weeks — so The
+ * Record's groove ink (D-03/D-04) and its right-column callouts (BUSIEST WEEK /
+ * SILENT WEEKS) carry real signal in the preview, not an all-zero fixture and
+ * not a fixture whose SILENT WEEKS reads 0. Days 60-66 (~early March) are the
+ * busiest week; `SILENT_WEEK_STARTS` above are the zero weeks.
  */
 function syntheticCalendarDays(): { date: string; count: number }[] {
   const days: { date: string; count: number }[] = [];
+  const silent = silentDayDates();
   const start = Date.UTC(2026, 0, 1);
   const end = Date.UTC(2026, 7, 7); // matches PINNED_NOW's calendar date
   let i = 0;
   for (let ms = start; ms <= end; ms += MS_PER_DAY, i++) {
+    const date = new Date(ms).toISOString().slice(0, 10);
     let count: number;
-    if (i >= 60 && i < 67) {
+    if (silent.has(date)) {
+      count = 0; // a whole elapsed week at zero — the D-03 comparison group
+    } else if (i >= 60 && i < 67) {
       count = 30; // the deliberate busiest week
-    } else if (i % 9 === 0) {
-      count = 0; // deliberately silent days
     } else {
       count = (i % 5) + 1;
     }
-    days.push({ date: new Date(ms).toISOString().slice(0, 10), count });
+    days.push({ date, count });
   }
   return days;
 }
@@ -242,6 +275,7 @@ function main(): void {
     `  <li>The year on the centre label and the tonearm must both stay perfectly still while the disc turns.</li>\n` +
     `  <li>No other card on the page should move at all.</li>\n` +
     `  <li><strong>D-03 legibility (the phase's only hard visual constraint):</strong> in EVERY section below, can you tell where the pressed (already-elapsed) grooves stop and the future (not-yet-happened) grooves begin, without being told? If not, note which section and what you see.</li>\n` +
+    `  <li><strong>D-03, the harder half.</strong> The fixture contains <strong>two fully-silent elapsed weeks</strong> (SILENT WEEKS in the right column should read 2, not 0 — if it reads 0 the fixture is broken and this check is meaningless). Those two grooves are PAST weeks that happen to have zero contributions, and they must still look different from a FUTURE week. One sits mid-disc among active grooves; the other sits directly against the future band, which is the exact adjacency the constraint is about. Can you tell those two apart from the future grooves, in every theme?</li>\n` +
     `</ul>\n` +
     `${sections}\n` +
     `</body>\n` +
