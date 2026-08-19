@@ -1,0 +1,36 @@
+name: release
+on:
+  release:
+    types: [published] # The one human action (D-07): publish a v1.x.y GitHub Release.
+permissions:
+  contents: write # Needed to push the moved v1 tag.
+jobs:
+  verify-dist-and-move-v1:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5 # release event: GITHUB_REF = refs/tags/<tag_name>
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Must be the FULL build script (ncc + postbuild vendoring), not just
+      # ncc directly - a partial rebuild is missing vendored deps and makes
+      # the dist comparison below fail even when nothing is actually wrong.
+      - run: npm run build
+      - name: dist/ must match the committed bundle
+        # Phase 4 shipped an Action running two-phases-stale dist/index.js.
+        # This is the structural guard against a repeat: if the rebuild
+        # differs from what is committed, stop here - v1 never moves.
+        run: git diff --exit-code dist/
+      - name: Move v1
+        env:
+          # tag_name is attacker-controllable (an external, event-supplied
+          # string) - it is passed through env: and never interpolated
+          # directly into the run: script (workflow script injection guard).
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -fa v1 -m "Update v1 tag to ${TAG}"
+          git push origin v1 --force

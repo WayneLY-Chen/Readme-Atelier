@@ -1,0 +1,8 @@
+# Deliberately minimal scope - not a global `* text=auto`, which would
+# trigger a repo-wide renormalization diff on first checkout (RESEARCH.md
+# Pitfall 5). These two rules declare only the paths whose line endings must
+# be byte-stable across a local Windows checkout (core.autocrlf=true) and
+# the ubuntu-latest CI/release runner, so `git diff --exit-code dist/` after
+# a rebuild is deterministic rather than a false-positive from CRLF drift.
+dist/** -text
+*.ttf -text
