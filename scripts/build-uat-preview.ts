@@ -2,13 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import type { ResolvedConfig } from "../src/core/config.js";
 import type { ProfileData } from "../src/core/model.js";
 import { renderAllCards, resolveCards, resolveTheme } from "../src/core/pipeline.js";
-import { register } from "../src/core/registry.js";
 import { loadAllFonts } from "../src/node/fonts.js";
-import { almanacWidget } from "../src/widgets/almanac/index.js";
-import { editorialStatCardWidget } from "../src/widgets/editorial-stat-card/index.js";
-import { mastheadWidget } from "../src/widgets/masthead/index.js";
-import { theGraveyardWidget } from "../src/widgets/the-graveyard/index.js";
-import { theRecordWidget } from "../src/widgets/the-record/index.js";
+import { registerAllWidgets } from "../src/widgets/all.js";
 
 /**
  * The D-08 loop-A preview harness (04-05 Task 2): an OFFLINE renderer that
@@ -135,14 +130,6 @@ function syntheticProfileData(): ProfileData {
       },
     ],
   };
-}
-
-function registerAllWidgets(): void {
-  register(almanacWidget);
-  register(editorialStatCardWidget);
-  register(mastheadWidget);
-  register(theGraveyardWidget);
-  register(theRecordWidget);
 }
 
 const CARDS: ResolvedConfig["cards"] = [

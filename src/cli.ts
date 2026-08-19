@@ -2,14 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ConfigValidationError, formatConfigErrors, loadConfigOrDefault } from "./core/config.js";
 import { formatFetchFailureMessage } from "./core/fetch.js";
 import { fetchSharedData, renderAllCards, resolveCards, resolveTheme } from "./core/pipeline.js";
-import { collectCapabilities, register } from "./core/registry.js";
+import { collectCapabilities } from "./core/registry.js";
 import { loadAllFonts } from "./node/fonts.js";
 import { logPointCost } from "./node/point-cost.js";
-import { almanacWidget } from "./widgets/almanac/index.js";
-import { editorialStatCardWidget } from "./widgets/editorial-stat-card/index.js";
-import { mastheadWidget } from "./widgets/masthead/index.js";
-import { theGraveyardWidget } from "./widgets/the-graveyard/index.js";
-import { theRecordWidget } from "./widgets/the-record/index.js";
+import { registerAllWidgets } from "./widgets/all.js";
 
 /**
  * Local preview entry point (UX-04). Reads a real `widgets.yml` off disk (or
@@ -24,11 +20,7 @@ import { theRecordWidget } from "./widgets/the-record/index.js";
  */
 async function main(): Promise<void> {
   loadAllFonts();
-  register(almanacWidget);
-  register(editorialStatCardWidget);
-  register(mastheadWidget);
-  register(theGraveyardWidget);
-  register(theRecordWidget);
+  registerAllWidgets();
 
   const configPath = process.argv[2] ?? "widgets.yml";
   const yamlText = existsSync(configPath) ? readFileSync(configPath, "utf8") : undefined;
