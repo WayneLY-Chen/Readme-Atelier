@@ -1,6 +1,7 @@
 # 設定說明
 
-[← 回到 README](../README.md)
+[← 回到 README](../README.zh-TW.md)（English speakers: the [Configuration section](../README.md#configuration)
+of the root README covers the same fields.）
 
 `widgets.yml` 是你唯一需要修改的檔案，放在 repo 根目錄。
 

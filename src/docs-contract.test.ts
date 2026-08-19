@@ -101,3 +101,52 @@ describe("README.md / README.zh-TW.md — bilingual facade contract (UX-07, D-09
     expect(lineCount, `docs/README.en.md is ${lineCount} lines, expected a stub under 10`).toBeLessThan(10);
   });
 });
+
+/**
+ * QA-03 gate: CONTRIBUTING.md (root, English, D-12) must document the real,
+ * source-verified steps for adding a card - not an idealized version. These
+ * assertions check the identifying vocabulary this document must carry
+ * (registry.ts's actual interface name, the real one-line registration file,
+ * the .strict() footgun warning, and the two proposal gates from
+ * REQUIREMENTS.md's card backlog) plus the development.md -> CONTRIBUTING.md
+ * single-source-of-truth link (avoiding the two-copies-drift risk 05-PATTERNS.md
+ * flagged for this exact section).
+ */
+describe("CONTRIBUTING.md — QA-03 contribution guide contract", () => {
+  const contributing = read("CONTRIBUTING.md");
+  const development = read("docs/development.md");
+
+  it("exists at the repository root (GitHub's auto-recognized location)", () => {
+    expect(existsSync(path.join(repoRoot, "CONTRIBUTING.md"))).toBe(true);
+  });
+
+  it("documents the real WidgetDefinition interface and the all.ts registration step", () => {
+    expect(contributing).toContain("WidgetDefinition");
+    expect(contributing).toContain("all.ts");
+  });
+
+  it("contains a fenced example of the one-line register(...) call", () => {
+    expect(contributing).toMatch(/```[\s\S]*register\(myWidget\)[\s\S]*```/);
+  });
+
+  it("warns that optionsSchema must call .strict()", () => {
+    expect(contributing).toContain(".strict()");
+  });
+
+  it("documents both proposal gates: prior-art and drawing-board", () => {
+    expect(contributing.toLowerCase()).toContain("prior-art");
+    expect(contributing.toLowerCase()).toContain("drawing-board");
+  });
+
+  it("documents that a name collision throws DuplicateWidgetError rather than silently overwriting", () => {
+    expect(contributing).toContain("DuplicateWidgetError");
+  });
+
+  it("documents that themes are closed - not open to card-style PRs", () => {
+    expect(contributing.toLowerCase()).toContain("theme");
+  });
+
+  it("docs/development.md's card-adding section now links to CONTRIBUTING.md instead of duplicating it", () => {
+    expect(development).toContain("CONTRIBUTING.md");
+  });
+});
