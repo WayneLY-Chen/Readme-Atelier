@@ -79,24 +79,42 @@ describe("action.yml", () => {
  * point-cost logger, and the token-safe fetch-failure formatter — not just
  * `cli.ts`. Same "read the source, grep for the identifier" style this file
  * already uses above for `action.yml`'s own drift guards.
+ *
+ * Phase 5 Plan 01: the five individual `register(xxxWidget)` calls this
+ * block used to assert directly on `entrySource` were consolidated into
+ * `src/widgets/all.ts`'s `registerAllWidgets()` (QA-03/D-12 — one
+ * registration list, not three hand-copied ones). The drift guard's
+ * protection is unchanged, only its target moved: `action-entry.ts` is now
+ * asserted to call `registerAllWidgets(`, and the five individual
+ * `register(...)` lines are asserted directly against `src/widgets/all.ts`'s
+ * own source instead.
  */
 describe("action-entry.ts — Plan 02-03 pipeline wiring (DATA-01/02/07)", () => {
   const entrySource = readFileSync(path.join(repoRoot, "src", "action-entry.ts"), "utf8");
+  const allWidgetsSource = readFileSync(path.join(repoRoot, "src", "widgets", "all.ts"), "utf8");
 
-  it("registers the Editorial Stat Card widget", () => {
-    expect(entrySource).toContain("register(editorialStatCardWidget)");
+  it("registers every built-in widget via registerAllWidgets()", () => {
+    expect(entrySource).toContain("registerAllWidgets(");
   });
 
-  it("registers the masthead widget (Phase 3, MAST-01/02)", () => {
-    expect(entrySource).toContain("register(mastheadWidget)");
+  it("src/widgets/all.ts registers the Almanac widget", () => {
+    expect(allWidgetsSource).toContain("register(almanacWidget)");
   });
 
-  it("registers the-graveyard widget (Phase 3, CARD-03)", () => {
-    expect(entrySource).toContain("register(theGraveyardWidget)");
+  it("src/widgets/all.ts registers the Editorial Stat Card widget", () => {
+    expect(allWidgetsSource).toContain("register(editorialStatCardWidget)");
   });
 
-  it("registers the-record widget (Phase 4, CARD-04)", () => {
-    expect(entrySource).toContain("register(theRecordWidget)");
+  it("src/widgets/all.ts registers the masthead widget (Phase 3, MAST-01/02)", () => {
+    expect(allWidgetsSource).toContain("register(mastheadWidget)");
+  });
+
+  it("src/widgets/all.ts registers the-graveyard widget (Phase 3, CARD-03)", () => {
+    expect(allWidgetsSource).toContain("register(theGraveyardWidget)");
+  });
+
+  it("src/widgets/all.ts registers the-record widget (Phase 4, CARD-04)", () => {
+    expect(allWidgetsSource).toContain("register(theRecordWidget)");
   });
 
   it("calls resolveCards(), fetchSharedData(), and logPointCost() — not the old single-call renderAllCards(config, ...) shape", () => {

@@ -7,15 +7,10 @@ import { buildEmbedSnippet } from "./core/embed-snippet.js";
 import { formatFetchFailureMessage } from "./core/fetch.js";
 import { fetchSharedData, renderAllCards, resolveCards, resolveTheme } from "./core/pipeline.js";
 import { publishOutputBranch } from "./core/publish.js";
-import { register } from "./core/registry.js";
 import { loadAllFonts } from "./node/fonts.js";
 import { logPointCost } from "./node/point-cost.js";
 import { writeStepSummary } from "./node/step-summary.js";
-import { almanacWidget } from "./widgets/almanac/index.js";
-import { editorialStatCardWidget } from "./widgets/editorial-stat-card/index.js";
-import { mastheadWidget } from "./widgets/masthead/index.js";
-import { theGraveyardWidget } from "./widgets/the-graveyard/index.js";
-import { theRecordWidget } from "./widgets/the-record/index.js";
+import { registerAllWidgets } from "./widgets/all.js";
 
 /**
  * The GitHub Action's real entry point (`action.yml`'s `main: dist/index.js`,
@@ -45,11 +40,7 @@ async function run(): Promise<void> {
   // a real run, not this repo.
   const actionRepoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
   loadAllFonts(actionRepoRoot);
-  register(almanacWidget);
-  register(editorialStatCardWidget);
-  register(mastheadWidget);
-  register(theGraveyardWidget);
-  register(theRecordWidget);
+  registerAllWidgets();
 
   // GitHub Actions guarantees GITHUB_REPOSITORY correctly names the repo the
   // current workflow run belongs to (RESEARCH.md's Security Domain

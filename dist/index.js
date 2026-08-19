@@ -48307,20 +48307,10 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony import */ var _core_fetch_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(6657);
 /* harmony import */ var _core_pipeline_js__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(6924);
 /* harmony import */ var _core_publish_js__WEBPACK_IMPORTED_MODULE_8__ = __nccwpck_require__(1677);
-/* harmony import */ var _core_registry_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(4692);
-/* harmony import */ var _node_fonts_js__WEBPACK_IMPORTED_MODULE_10__ = __nccwpck_require__(514);
-/* harmony import */ var _node_point_cost_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(9162);
-/* harmony import */ var _node_step_summary_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(9917);
-/* harmony import */ var _widgets_almanac_index_js__WEBPACK_IMPORTED_MODULE_13__ = __nccwpck_require__(2443);
-/* harmony import */ var _widgets_editorial_stat_card_index_js__WEBPACK_IMPORTED_MODULE_14__ = __nccwpck_require__(9722);
-/* harmony import */ var _widgets_masthead_index_js__WEBPACK_IMPORTED_MODULE_15__ = __nccwpck_require__(9732);
-/* harmony import */ var _widgets_the_graveyard_index_js__WEBPACK_IMPORTED_MODULE_16__ = __nccwpck_require__(9476);
-/* harmony import */ var _widgets_the_record_index_js__WEBPACK_IMPORTED_MODULE_17__ = __nccwpck_require__(7546);
-
-
-
-
-
+/* harmony import */ var _node_fonts_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(514);
+/* harmony import */ var _node_point_cost_js__WEBPACK_IMPORTED_MODULE_10__ = __nccwpck_require__(9162);
+/* harmony import */ var _node_step_summary_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(9917);
+/* harmony import */ var _widgets_all_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(9657);
 
 
 
@@ -48359,12 +48349,8 @@ async function run() {
     // to `process.cwd()`, which is the CONSUMER's checked-out workspace during
     // a real run, not this repo.
     const actionRepoRoot = node_path__WEBPACK_IMPORTED_MODULE_1___default().join(node_path__WEBPACK_IMPORTED_MODULE_1___default().dirname((0,node_url__WEBPACK_IMPORTED_MODULE_2__.fileURLToPath)(import.meta.url)), "..");
-    (0,_node_fonts_js__WEBPACK_IMPORTED_MODULE_10__/* .loadAllFonts */ .c)(actionRepoRoot);
-    (0,_core_registry_js__WEBPACK_IMPORTED_MODULE_9__/* .register */ .kz)(_widgets_almanac_index_js__WEBPACK_IMPORTED_MODULE_13__/* .almanacWidget */ .M);
-    (0,_core_registry_js__WEBPACK_IMPORTED_MODULE_9__/* .register */ .kz)(_widgets_editorial_stat_card_index_js__WEBPACK_IMPORTED_MODULE_14__/* .editorialStatCardWidget */ .G);
-    (0,_core_registry_js__WEBPACK_IMPORTED_MODULE_9__/* .register */ .kz)(_widgets_masthead_index_js__WEBPACK_IMPORTED_MODULE_15__/* .mastheadWidget */ .G);
-    (0,_core_registry_js__WEBPACK_IMPORTED_MODULE_9__/* .register */ .kz)(_widgets_the_graveyard_index_js__WEBPACK_IMPORTED_MODULE_16__/* .theGraveyardWidget */ .vj);
-    (0,_core_registry_js__WEBPACK_IMPORTED_MODULE_9__/* .register */ .kz)(_widgets_the_record_index_js__WEBPACK_IMPORTED_MODULE_17__/* .theRecordWidget */ .ZW);
+    (0,_node_fonts_js__WEBPACK_IMPORTED_MODULE_9__/* .loadAllFonts */ .c)(actionRepoRoot);
+    (0,_widgets_all_js__WEBPACK_IMPORTED_MODULE_12__/* .registerAllWidgets */ .K)();
     // GitHub Actions guarantees GITHUB_REPOSITORY correctly names the repo the
     // current workflow run belongs to (RESEARCH.md's Security Domain
     // analysis) — T-01-11's mitigation for "force-push targets the wrong
@@ -48430,7 +48416,7 @@ async function run() {
         return;
     }
     // D-04: dual-surface point-cost log, immediately after a successful fetch.
-    (0,_node_point_cost_js__WEBPACK_IMPORTED_MODULE_11__/* .logPointCost */ .u)(pointCost);
+    (0,_node_point_cost_js__WEBPACK_IMPORTED_MODULE_10__/* .logPointCost */ .u)(pointCost);
     let renderedCards;
     try {
         renderedCards = (0,_core_pipeline_js__WEBPACK_IMPORTED_MODULE_7__/* .renderAllCards */ .Rf)(cards, data, { now, seed: 0, language: config.language }, (0,_core_pipeline_js__WEBPACK_IMPORTED_MODULE_7__/* .resolveTheme */ .eW)(config.theme));
@@ -48475,7 +48461,7 @@ async function run() {
             owner,
             repo: repoName,
         });
-        (0,_node_step_summary_js__WEBPACK_IMPORTED_MODULE_12__/* .writeStepSummary */ .o)(`### ${card.id}\n\n${snippet}\n`);
+        (0,_node_step_summary_js__WEBPACK_IMPORTED_MODULE_11__/* .writeStepSummary */ .o)(`### ${card.id}\n\n${snippet}\n`);
     }
 }
 await run();
@@ -97286,15 +97272,17 @@ function writeStepSummary(content) {
 
 /***/ }),
 
-/***/ 2443:
+/***/ 9657:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
 
 // EXPORTS
 __nccwpck_require__.d(__webpack_exports__, {
-  M: () => (/* binding */ almanacWidget)
+  K: () => (/* binding */ registerAllWidgets)
 });
 
+// EXTERNAL MODULE: ./src/core/registry.ts
+var registry = __nccwpck_require__(4692);
 // EXTERNAL MODULE: ./node_modules/zod/v4/classic/schemas.js + 16 modules
 var schemas = __nccwpck_require__(2314);
 // EXTERNAL MODULE: ./src/core/font.ts
@@ -109469,22 +109457,6 @@ const almanacWidget = {
     },
 };
 
-
-/***/ }),
-
-/***/ 9722:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
-
-
-// EXPORTS
-__nccwpck_require__.d(__webpack_exports__, {
-  G: () => (/* binding */ editorialStatCardWidget)
-});
-
-// EXTERNAL MODULE: ./node_modules/zod/v4/classic/schemas.js + 16 modules
-var schemas = __nccwpck_require__(2314);
-// EXTERNAL MODULE: ./src/core/font.ts
-var font = __nccwpck_require__(7654);
 ;// CONCATENATED MODULE: ./src/widgets/editorial-stat-card/copy.ts
 /**
  * Editorial Stat Card copy — 02-UI-SPEC.md "Copywriting Contract". Field
@@ -109492,7 +109464,7 @@ var font = __nccwpck_require__(7654);
  * five-field, no-field-dropped guarantee and the 3-over-2 grid's own
  * left-to-right, top-to-bottom reading order.
  */
-const chromeEn = {
+const copy_chromeEn = {
     title: "THE STATS",
 };
 const labelsEn = {
@@ -109508,7 +109480,7 @@ const labelsEn = {
  * never translated, shown only in zh-TW mode (en mode's own title already
  * reads "THE STATS", so no separate eyebrow is needed there).
  */
-const chromeZh = {
+const copy_chromeZh = {
     title: "統計卡",
     mastheadEyebrow: "THE STATS",
 };
@@ -109621,16 +109593,16 @@ function assertColumnBudget(formatted, language, field) {
 
 
 
-const CARD_WIDTH = 495;
-const CARD_HEIGHT = 204;
-const PADDING = 24;
-const T1_SIZE = 8;
+const editorial_stat_card_CARD_WIDTH = 495;
+const editorial_stat_card_CARD_HEIGHT = 204;
+const editorial_stat_card_PADDING = 24;
+const editorial_stat_card_T1_SIZE = 8;
 const editorial_stat_card_T2_SIZE = 32;
-const T3_SIZE = 17;
-const T1_LETTER_SPACING = 1.6;
+const editorial_stat_card_T3_SIZE = 17;
+const editorial_stat_card_T1_LETTER_SPACING = 1.6;
 const SM = 8;
 const MD = 16;
-function pathElement(d, fill) {
+function editorial_stat_card_pathElement(d, fill) {
     if (d === "") {
         return "";
     }
@@ -109646,7 +109618,7 @@ function pathElement(d, fill) {
  * helpers (RENDER-02: adding a card must not require touching another
  * card's private functions).
  */
-function letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
+function editorial_stat_card_letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
     let cursorX = x;
     let d = "";
     const chars = Array.from(text);
@@ -109661,7 +109633,7 @@ function letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
  * own cursor math exactly so the two never drift apart. Used both for the
  * zh-TW-only masthead eyebrow's right-alignment and for centering each
  * en-mode T1 column label under its numeral. */
-function letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
+function editorial_stat_card_letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
     const chars = Array.from(text);
     let width = 0;
     chars.forEach((ch, i) => {
@@ -109672,14 +109644,14 @@ function letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
 /** T1 eyebrow/label style for English text: IBM Plex Mono Semibold,
  * uppercase, letter-spaced, 8px. Left-aligned at (x, y) — callers needing
  * horizontal centering compute x themselves via eyebrowLabelWidth. */
-function eyebrowLabel(text, x, y, fill) {
+function editorial_stat_card_eyebrowLabel(text, x, y, fill) {
     const upper = text.toUpperCase();
     (0,font/* assertCoverage */.tE)("mono-semibold", upper, `editorial-stat-card T1 eyebrow/label: "${text}"`);
-    const d = letterSpacedPath("mono-semibold", upper, x, y, T1_SIZE, T1_LETTER_SPACING);
-    return pathElement(d, fill);
+    const d = editorial_stat_card_letterSpacedPath("mono-semibold", upper, x, y, editorial_stat_card_T1_SIZE, editorial_stat_card_T1_LETTER_SPACING);
+    return editorial_stat_card_pathElement(d, fill);
 }
 function eyebrowLabelWidth(text) {
-    return letterSpacedWidth("mono-semibold", text.toUpperCase(), T1_SIZE, T1_LETTER_SPACING);
+    return editorial_stat_card_letterSpacedWidth("mono-semibold", text.toUpperCase(), editorial_stat_card_T1_SIZE, editorial_stat_card_T1_LETTER_SPACING);
 }
 /**
  * T1 label style for zh-TW Chinese column labels (提交/PR/議題/星標/追蹤者)
@@ -109687,12 +109659,12 @@ function eyebrowLabelWidth(text) {
  * uppercase transform and no manual letter-spacing (neither concept exists
  * for Han script) — mirrors Almanac's own `zhLabel`.
  */
-function zhLabel(text, x, y, fill) {
+function editorial_stat_card_zhLabel(text, x, y, fill) {
     (0,font/* assertCoverage */.tE)("noto-tc", text, `editorial-stat-card T1 label (zh-TW): "${text}"`);
-    return pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, T1_SIZE), fill);
+    return editorial_stat_card_pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, editorial_stat_card_T1_SIZE), fill);
 }
 function zhLabelWidth(text) {
-    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, T1_SIZE);
+    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, editorial_stat_card_T1_SIZE);
 }
 /**
  * Renders a T1 column label horizontally centered at `centerX` (UI-SPEC
@@ -109704,19 +109676,19 @@ function zhLabelWidth(text) {
 function centeredLabel(text, language, centerX, y, fill) {
     if (language === "en") {
         const width = eyebrowLabelWidth(text);
-        return eyebrowLabel(text, centerX - width / 2, y, fill);
+        return editorial_stat_card_eyebrowLabel(text, centerX - width / 2, y, fill);
     }
     const width = zhLabelWidth(text);
-    return zhLabel(text, centerX - width / 2, y, fill);
+    return editorial_stat_card_zhLabel(text, centerX - width / 2, y, fill);
 }
 /**
  * T3 primary-content style: Source Serif 4 (`serif`) in en mode, Noto Serif
  * TC (`noto-tc`) in zh-TW mode. Used for the card's title only.
  */
-function contentText(fontName, text, x, y, fill, context) {
+function editorial_stat_card_contentText(fontName, text, x, y, fill, context) {
     (0,font/* assertCoverage */.tE)(fontName, text, context);
-    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, T3_SIZE);
-    return pathElement(d, fill);
+    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, editorial_stat_card_T3_SIZE);
+    return editorial_stat_card_pathElement(d, fill);
 }
 /**
  * Renders a formatted stat numeral centered at `centerX`, always in
@@ -109738,21 +109710,21 @@ function renderNumeral(formatted, language, centerX, y, fill) {
         const startX = centerX - (digitsWidth + suffixWidth) / 2;
         const d = (0,font/* textToPathData */.wD)("mono-semibold", digitsPart, startX, y, editorial_stat_card_T2_SIZE) +
             (0,font/* textToPathData */.wD)("noto-tc", suffixChar, startX + digitsWidth, y, editorial_stat_card_T2_SIZE * SUFFIX_SIZE_RATIO);
-        return pathElement(d, fill);
+        return editorial_stat_card_pathElement(d, fill);
     }
     const width = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", formatted, editorial_stat_card_T2_SIZE);
     const startX = centerX - width / 2;
-    return pathElement((0,font/* textToPathData */.wD)("mono-semibold", formatted, startX, y, editorial_stat_card_T2_SIZE), fill);
+    return editorial_stat_card_pathElement((0,font/* textToPathData */.wD)("mono-semibold", formatted, startX, y, editorial_stat_card_T2_SIZE), fill);
 }
 // ---------------------------------------------------------------------------
 // Layout geometry (UI-SPEC "Card Layout" — 3-over-2 grid).
 // ---------------------------------------------------------------------------
-const COLUMN_WIDTH = (CARD_WIDTH - 2 * PADDING - 2 * MD) / 3;
-const COL1_X = PADDING;
+const COLUMN_WIDTH = (editorial_stat_card_CARD_WIDTH - 2 * editorial_stat_card_PADDING - 2 * MD) / 3;
+const COL1_X = editorial_stat_card_PADDING;
 const COL2_X = COL1_X + COLUMN_WIDTH + MD;
 const COL3_X = COL2_X + COLUMN_WIDTH + MD;
 const ROW2_CONTENT_WIDTH = 2 * COLUMN_WIDTH + MD;
-const ROW2_START_X = PADDING + (CARD_WIDTH - 2 * PADDING - ROW2_CONTENT_WIDTH) / 2;
+const ROW2_START_X = editorial_stat_card_PADDING + (editorial_stat_card_CARD_WIDTH - 2 * editorial_stat_card_PADDING - ROW2_CONTENT_WIDTH) / 2;
 const COL4_X = ROW2_START_X;
 const COL5_X = COL4_X + COLUMN_WIDTH + MD;
 const COL1_CENTER_X = COL1_X + COLUMN_WIDTH / 2;
@@ -109771,11 +109743,11 @@ const HEADER_TITLE_BASELINE_Y = 44;
 const HEADER_RULE_Y = 58;
 const ROW1_TOP = 74;
 const ROW1_NUMERAL_BASELINE_Y = 98;
-const ROW1_LABEL_BASELINE_Y = ROW1_NUMERAL_BASELINE_Y + SM + T1_SIZE;
+const ROW1_LABEL_BASELINE_Y = ROW1_NUMERAL_BASELINE_Y + SM + editorial_stat_card_T1_SIZE;
 const ROW1_BOTTOM = ROW1_LABEL_BASELINE_Y + 4;
 const ROW2_TOP = ROW1_BOTTOM + MD;
 const ROW2_NUMERAL_BASELINE_Y = ROW2_TOP + 24;
-const ROW2_LABEL_BASELINE_Y = ROW2_NUMERAL_BASELINE_Y + SM + T1_SIZE;
+const ROW2_LABEL_BASELINE_Y = ROW2_NUMERAL_BASELINE_Y + SM + editorial_stat_card_T1_SIZE;
 const ROW2_BOTTOM = ROW2_LABEL_BASELINE_Y + 4;
 /** D-08: all five fields, fixed order — commits/prs/issues/stars/followers.
  * `stars`/`followers` sit in row 2 per the 3-over-2 grid ("what you did"
@@ -109837,7 +109809,7 @@ const editorialStatCardOptionsSchema = schemas/* object */.Ik({ include_forks: s
 const editorialStatCardWidget = {
     name: "editorial-stat-card",
     requires: ["stats"],
-    size: { width: CARD_WIDTH, height: CARD_HEIGHT },
+    size: { width: editorial_stat_card_CARD_WIDTH, height: editorial_stat_card_CARD_HEIGHT },
     optionsSchema: {
         parse(value) {
             const { include_forks } = editorialStatCardOptionsSchema.parse(value ?? {});
@@ -109867,21 +109839,21 @@ const editorialStatCardWidget = {
     renderBody(data, theme, opts) {
         const language = opts.language;
         const contentFont = language === "zh-TW" ? "noto-tc" : "serif";
-        const title = language === "zh-TW" ? chromeZh.title : chromeEn.title;
+        const title = language === "zh-TW" ? copy_chromeZh.title : copy_chromeEn.title;
         const labels = language === "zh-TW" ? labelsZh : labelsEn;
         let markup = "";
         // Header: title (T3), left-aligned — identical role to Almanac's.
-        markup += contentText(contentFont, title, PADDING, HEADER_TITLE_BASELINE_Y, theme.ink, `editorial-stat-card title (${language})`);
+        markup += editorial_stat_card_contentText(contentFont, title, editorial_stat_card_PADDING, HEADER_TITLE_BASELINE_Y, theme.ink, `editorial-stat-card title (${language})`);
         // Masthead eyebrow (zh-TW mode only) — decorative Latin brand
         // furniture, never translated, absent in en mode since en mode's own
         // title already reads "THE STATS" (mirrors Almanac's identical rule).
         if (language === "zh-TW") {
-            const eyebrowText = chromeZh.mastheadEyebrow;
+            const eyebrowText = copy_chromeZh.mastheadEyebrow;
             const eyebrowWidth = eyebrowLabelWidth(eyebrowText);
-            const eyebrowX = CARD_WIDTH - PADDING - eyebrowWidth;
-            markup += eyebrowLabel(eyebrowText, eyebrowX, HEADER_TITLE_BASELINE_Y, theme.muted);
+            const eyebrowX = editorial_stat_card_CARD_WIDTH - editorial_stat_card_PADDING - eyebrowWidth;
+            markup += editorial_stat_card_eyebrowLabel(eyebrowText, eyebrowX, HEADER_TITLE_BASELINE_Y, theme.muted);
         }
-        markup += `<line x1="${PADDING}" y1="${HEADER_RULE_Y}" x2="${CARD_WIDTH - PADDING}" y2="${HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
+        markup += `<line x1="${editorial_stat_card_PADDING}" y1="${HEADER_RULE_Y}" x2="${editorial_stat_card_CARD_WIDTH - editorial_stat_card_PADDING}" y2="${HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
         // D-08: five fields, D-09: zero renders exactly like any other value —
         // one uniform code path, no branch on magnitude.
         for (const column of buildColumns(data)) {
@@ -109913,11 +109885,11 @@ const editorialStatCardWidget = {
                 : `PAGE ${opts.pageNumber}/${opts.totalPages}`;
             if (language === "zh-TW") {
                 const pageWidth = zhLabelWidth(pageText);
-                markup += zhLabel(pageText, CARD_WIDTH - PADDING - pageWidth, ROW2_LABEL_BASELINE_Y, theme.muted);
+                markup += editorial_stat_card_zhLabel(pageText, editorial_stat_card_CARD_WIDTH - editorial_stat_card_PADDING - pageWidth, ROW2_LABEL_BASELINE_Y, theme.muted);
             }
             else {
                 const pageWidth = eyebrowLabelWidth(pageText);
-                markup += eyebrowLabel(pageText, CARD_WIDTH - PADDING - pageWidth, ROW2_LABEL_BASELINE_Y, theme.muted);
+                markup += editorial_stat_card_eyebrowLabel(pageText, editorial_stat_card_CARD_WIDTH - editorial_stat_card_PADDING - pageWidth, ROW2_LABEL_BASELINE_Y, theme.muted);
             }
         }
         return markup;
@@ -109939,22 +109911,6 @@ const editorialStatCardWidget = {
     },
 };
 
-
-/***/ }),
-
-/***/ 9732:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
-
-
-// EXPORTS
-__nccwpck_require__.d(__webpack_exports__, {
-  G: () => (/* binding */ mastheadWidget)
-});
-
-// EXTERNAL MODULE: ./node_modules/zod/v4/classic/schemas.js + 16 modules
-var schemas = __nccwpck_require__(2314);
-// EXTERNAL MODULE: ./src/core/font.ts
-var font = __nccwpck_require__(7654);
 ;// CONCATENATED MODULE: ./src/widgets/masthead/copy.ts
 /**
  * Masthead copy — 03-UI-SPEC.md "Masthead chrome strings" table.
@@ -109976,14 +109932,14 @@ var font = __nccwpck_require__(7654);
  * 宜/忌 budget errors), not to touch font assets or bypass the coverage gate.
  * `" - "` (ASCII hyphen) is confirmed present in both fonts' subsets.
  */
-const chromeEn = {
+const masthead_copy_chromeEn = {
     title: "README ATELIER",
     subtitleSuffix: "'S DEV LOG",
     issueNumberTemplate: (n) => `NO. ${n}`,
     contentsLabel: "CONTENTS",
     contentsSeparator: " - ",
 };
-const chromeZh = {
+const masthead_copy_chromeZh = {
     title: "README ATELIER",
     subtitleSuffix: " 的開發日誌",
     issueNumberTemplate: (n) => `第 ${n} 期`,
@@ -109995,15 +109951,15 @@ const chromeZh = {
 
 
 
-const CARD_WIDTH = 495;
-const CARD_HEIGHT = 116;
-const PADDING = 24;
-const T1_SIZE = 8;
-const T3_SIZE = 17;
-const T1_LETTER_SPACING = 1.6;
-const RIGHT_EDGE_X = CARD_WIDTH - PADDING; // 471
-const HEADER_TITLE_BASELINE_Y = 44;
-const HEADER_RULE_Y = 58;
+const masthead_CARD_WIDTH = 495;
+const masthead_CARD_HEIGHT = 116;
+const masthead_PADDING = 24;
+const masthead_T1_SIZE = 8;
+const masthead_T3_SIZE = 17;
+const masthead_T1_LETTER_SPACING = 1.6;
+const RIGHT_EDGE_X = masthead_CARD_WIDTH - masthead_PADDING; // 471
+const masthead_HEADER_TITLE_BASELINE_Y = 44;
+const masthead_HEADER_RULE_Y = 58;
 const SUBTITLE_BASELINE_Y = 74;
 const CONTENTS_BASELINE_Y = 90;
 /**
@@ -110020,7 +109976,7 @@ const SUBTITLE_BUDGET_PX = 140;
  */
 const ISSUE_NUMBER_EPOCH_MS = Date.UTC(2026, 0, 1);
 const ISSUE_NUMBER_TICK_MS = 6 * 60 * 60 * 1000; // 6-hour cadence, matching DIST-03's default cron
-function pathElement(d, fill) {
+function masthead_pathElement(d, fill) {
     if (d === "") {
         return "";
     }
@@ -110034,7 +109990,7 @@ function pathElement(d, fill) {
  * redeclared here rather than imported (RENDER-02: every widget carries its
  * own copy of these small chassis-adjacent helpers).
  */
-function letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
+function masthead_letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
     let cursorX = x;
     let d = "";
     const chars = Array.from(text);
@@ -110047,7 +110003,7 @@ function letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
 }
 /** Total rendered width of a letter-spaced run — mirrors letterSpacedPath's
  * own cursor math exactly so the two never drift apart. */
-function letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
+function masthead_letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
     const chars = Array.from(text);
     let width = 0;
     chars.forEach((ch, i) => {
@@ -110067,11 +110023,11 @@ function letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
  */
 function monoRun(text, x, y, fill) {
     (0,font/* assertCoverage */.tE)("mono-semibold", text, `masthead T1 mono run: "${text}"`);
-    const d = letterSpacedPath("mono-semibold", text, x, y, T1_SIZE, T1_LETTER_SPACING);
-    return pathElement(d, fill);
+    const d = masthead_letterSpacedPath("mono-semibold", text, x, y, masthead_T1_SIZE, masthead_T1_LETTER_SPACING);
+    return masthead_pathElement(d, fill);
 }
 function monoRunWidth(text) {
-    return letterSpacedWidth("mono-semibold", text, T1_SIZE, T1_LETTER_SPACING);
+    return masthead_letterSpacedWidth("mono-semibold", text, masthead_T1_SIZE, masthead_T1_LETTER_SPACING);
 }
 /**
  * T1 label style for zh-TW Chinese caption text — mirrors Almanac's/Stat
@@ -110081,21 +110037,21 @@ function monoRunWidth(text) {
  * "-" separator — read naturally at Noto Serif TC's own metrics too, since
  * the font's subset includes the full ASCII-printable range).
  */
-function zhLabel(text, x, y, fill) {
+function masthead_zhLabel(text, x, y, fill) {
     (0,font/* assertCoverage */.tE)("noto-tc", text, `masthead T1 label (zh-TW): "${text}"`);
-    return pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, T1_SIZE), fill);
+    return masthead_pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, masthead_T1_SIZE), fill);
 }
-function zhLabelWidth(text) {
-    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, T1_SIZE);
+function masthead_zhLabelWidth(text) {
+    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, masthead_T1_SIZE);
 }
 /**
  * T3 primary-content style: Source Serif 4 (`serif`) in en mode, Noto Serif
  * TC (`noto-tc`) in zh-TW mode. Used for the title and the issue number.
  */
-function contentText(fontName, text, x, y, fill, context) {
+function masthead_contentText(fontName, text, x, y, fill, context) {
     (0,font/* assertCoverage */.tE)(fontName, text, context);
-    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, T3_SIZE);
-    return pathElement(d, fill);
+    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, masthead_T3_SIZE);
+    return masthead_pathElement(d, fill);
 }
 /**
  * RESEARCH.md Open Question Q1's locked recommendation: a deterministic tick
@@ -110116,7 +110072,7 @@ function formatTimestamp(now) {
  * object (or `undefined`) is the only valid input. */
 const mastheadOptionsSchema = schemas/* object */.Ik({}).strict();
 function chromeFor(language) {
-    return language === "zh-TW" ? chromeZh : chromeEn;
+    return language === "zh-TW" ? masthead_copy_chromeZh : masthead_copy_chromeEn;
 }
 /**
  * UI-SPEC "API-Sourced Text: Truncation Policy" (WR-01/CR-companion): the
@@ -110132,7 +110088,7 @@ function chromeFor(language) {
  * the joined-titles budget used to equal it outright, ignoring the citation
  * sharing the row. It no longer does; see the contents-row block below.
  */
-const CONTENTS_ROW_BUDGET_PX = RIGHT_EDGE_X - PADDING;
+const CONTENTS_ROW_BUDGET_PX = RIGHT_EDGE_X - masthead_PADDING;
 /**
  * UI-SPEC "Masthead Contents Row Budget Retrofit": the project's `md`
  * spacing token, used here as the minimum clear space between the
@@ -110150,7 +110106,7 @@ const CONTENTS_CITATION_GUTTER_PX = 16;
  * "truncated" text still overflow its budget.
  */
 function truncateContentsToWidth(language, text, budgetPx) {
-    const measure = (t) => (language === "zh-TW" ? zhLabelWidth(t) : monoRunWidth(t));
+    const measure = (t) => (language === "zh-TW" ? masthead_zhLabelWidth(t) : monoRunWidth(t));
     if (measure(text) <= budgetPx) {
         return text;
     }
@@ -110176,7 +110132,7 @@ function citationWidth(fact, language) {
     if (fact === undefined) {
         return 0;
     }
-    const runWidth = (text) => (language === "zh-TW" ? zhLabelWidth(text) : monoRunWidth(text));
+    const runWidth = (text) => (language === "zh-TW" ? masthead_zhLabelWidth(text) : monoRunWidth(text));
     return runWidth(fact.value) + runWidth(" ") + runWidth(fact.label);
 }
 /**
@@ -110190,8 +110146,8 @@ function renderCitation(fact, language, theme) {
     if (fact === undefined) {
         return "";
     }
-    const runWidth = (text) => (language === "zh-TW" ? zhLabelWidth(text) : monoRunWidth(text));
-    const renderRun = (text, x, fill) => language === "zh-TW" ? zhLabel(text, x, CONTENTS_BASELINE_Y, fill) : monoRun(text, x, CONTENTS_BASELINE_Y, fill);
+    const runWidth = (text) => (language === "zh-TW" ? masthead_zhLabelWidth(text) : monoRunWidth(text));
+    const renderRun = (text, x, fill) => language === "zh-TW" ? masthead_zhLabel(text, x, CONTENTS_BASELINE_Y, fill) : monoRun(text, x, CONTENTS_BASELINE_Y, fill);
     const valueWidth = runWidth(fact.value);
     const spaceWidth = runWidth(" ");
     const totalWidth = citationWidth(fact, language);
@@ -110210,7 +110166,7 @@ function renderCitation(fact, language, theme) {
 const mastheadWidget = {
     name: "masthead",
     requires: ["identity"],
-    size: { width: CARD_WIDTH, height: CARD_HEIGHT },
+    size: { width: masthead_CARD_WIDTH, height: masthead_CARD_HEIGHT },
     optionsSchema: {
         parse(value) {
             mastheadOptionsSchema.parse(value ?? {});
@@ -110242,12 +110198,12 @@ const mastheadWidget = {
         const chrome = chromeFor(language);
         let markup = "";
         // (1) Header row: title left-aligned, issue number right-aligned.
-        markup += contentText(contentFont, chrome.title, PADDING, HEADER_TITLE_BASELINE_Y, theme.ink, `masthead title (${language})`);
+        markup += masthead_contentText(contentFont, chrome.title, masthead_PADDING, masthead_HEADER_TITLE_BASELINE_Y, theme.ink, `masthead title (${language})`);
         const issueNumberText = chrome.issueNumberTemplate(computeIssueNumber(mastheadOpts.now));
-        const issueNumberWidth = (0,font/* measureAdvanceWidth */.zN)(contentFont, issueNumberText, T3_SIZE);
-        markup += contentText(contentFont, issueNumberText, RIGHT_EDGE_X - issueNumberWidth, HEADER_TITLE_BASELINE_Y, theme.accent, `masthead issue number (${language})`);
+        const issueNumberWidth = (0,font/* measureAdvanceWidth */.zN)(contentFont, issueNumberText, masthead_T3_SIZE);
+        markup += masthead_contentText(contentFont, issueNumberText, RIGHT_EDGE_X - issueNumberWidth, masthead_HEADER_TITLE_BASELINE_Y, theme.accent, `masthead issue number (${language})`);
         // (2) Hairline rule.
-        markup += `<line x1="${PADDING}" y1="${HEADER_RULE_Y}" x2="${CARD_WIDTH - PADDING}" y2="${HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
+        markup += `<line x1="${masthead_PADDING}" y1="${masthead_HEADER_RULE_Y}" x2="${masthead_CARD_WIDTH - masthead_PADDING}" y2="${masthead_HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
         // (3) Subtitle + timestamp row. Login is ALWAYS rendered in
         // mono-semibold, never uppercased, regardless of card language — GitHub
         // usernames are ASCII-only and case-preserving. Length-truncated per
@@ -110260,17 +110216,17 @@ const mastheadWidget = {
         // the build.
         const login = data.login;
         const literalSuffixWidth = language === "zh-TW"
-            ? zhLabelWidth(chrome.subtitleSuffix)
+            ? masthead_zhLabelWidth(chrome.subtitleSuffix)
             : monoRunWidth(chrome.subtitleSuffix);
         const loginBudget = Math.max(0, SUBTITLE_BUDGET_PX - literalSuffixWidth);
-        const truncatedLogin = (0,font/* truncateToWidth */.A4)("mono-semibold", login, T1_SIZE, loginBudget);
-        const loginPathData = (0,font/* apiSourcedTextPathData */.M4)("mono-semibold", truncatedLogin, PADDING, SUBTITLE_BASELINE_Y, T1_SIZE);
-        const loginWidth = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", truncatedLogin, T1_SIZE);
-        markup += pathElement(loginPathData, theme.muted);
-        const suffixX = PADDING + loginWidth;
+        const truncatedLogin = (0,font/* truncateToWidth */.A4)("mono-semibold", login, masthead_T1_SIZE, loginBudget);
+        const loginPathData = (0,font/* apiSourcedTextPathData */.M4)("mono-semibold", truncatedLogin, masthead_PADDING, SUBTITLE_BASELINE_Y, masthead_T1_SIZE);
+        const loginWidth = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", truncatedLogin, masthead_T1_SIZE);
+        markup += masthead_pathElement(loginPathData, theme.muted);
+        const suffixX = masthead_PADDING + loginWidth;
         markup +=
             language === "zh-TW"
-                ? zhLabel(chrome.subtitleSuffix, suffixX, SUBTITLE_BASELINE_Y, theme.muted)
+                ? masthead_zhLabel(chrome.subtitleSuffix, suffixX, SUBTITLE_BASELINE_Y, theme.muted)
                 : monoRun(chrome.subtitleSuffix, suffixX, SUBTITLE_BASELINE_Y, theme.muted);
         const timestampText = formatTimestamp(mastheadOpts.now);
         const timestampWidth = monoRunWidth(timestampText);
@@ -110296,7 +110252,7 @@ const mastheadWidget = {
         // byte-for-byte.
         const citedCitationWidth = citationWidth(mastheadOpts.citedFacts?.totalCommits, language);
         const contentsText = joined === "" ? chrome.contentsLabel : (() => {
-            const prefixWidth = language === "zh-TW" ? zhLabelWidth(contentsPrefix) : monoRunWidth(contentsPrefix);
+            const prefixWidth = language === "zh-TW" ? masthead_zhLabelWidth(contentsPrefix) : monoRunWidth(contentsPrefix);
             const citationReserve = citedCitationWidth > 0 ? citedCitationWidth + CONTENTS_CITATION_GUTTER_PX : 0;
             const joinedBudgetPx = Math.max(0, CONTENTS_ROW_BUDGET_PX - prefixWidth - citationReserve);
             const truncatedJoined = truncateContentsToWidth(language, joined, joinedBudgetPx);
@@ -110304,8 +110260,8 @@ const mastheadWidget = {
         })();
         markup +=
             language === "zh-TW"
-                ? zhLabel(contentsText, PADDING, CONTENTS_BASELINE_Y, theme.muted)
-                : monoRun(contentsText, PADDING, CONTENTS_BASELINE_Y, theme.muted);
+                ? masthead_zhLabel(contentsText, masthead_PADDING, CONTENTS_BASELINE_Y, theme.muted)
+                : monoRun(contentsText, masthead_PADDING, CONTENTS_BASELINE_Y, theme.muted);
         // Citation half — independently absent from the contents half (UI-SPEC
         // masthead-contents-row "partial"). renderCitation() returns "" (no
         // markup, no reserved space) when the fact is undefined.
@@ -110314,24 +110270,6 @@ const mastheadWidget = {
     },
 };
 
-
-/***/ }),
-
-/***/ 9476:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
-
-
-// EXPORTS
-__nccwpck_require__.d(__webpack_exports__, {
-  vj: () => (/* binding */ theGraveyardWidget)
-});
-
-// UNUSED EXPORTS: countBuried, selectTombstones
-
-// EXTERNAL MODULE: ./node_modules/zod/v4/classic/schemas.js + 16 modules
-var schemas = __nccwpck_require__(2314);
-// EXTERNAL MODULE: ./src/core/font.ts
-var font = __nccwpck_require__(7654);
 ;// CONCATENATED MODULE: ./src/widgets/the-graveyard/copy.ts
 /**
  * The Graveyard copy — 03-UI-SPEC.md "Graveyard chrome strings" table.
@@ -110361,8 +110299,8 @@ var font = __nccwpck_require__(7654);
  * separator would throw `GlyphCoverageError` on every populated Graveyard
  * card in that language.
  */
-const chromeEn = { title: "THE GRAVEYARD" };
-const chromeZh = { title: "廢墟" };
+const the_graveyard_copy_chromeEn = { title: "THE GRAVEYARD" };
+const the_graveyard_copy_chromeZh = { title: "廢墟" };
 const emptyCaptionEn = "Everything here is still alive.";
 const emptyCaptionZh = "這裡目前什麼都還活著。";
 const shortestLivedLabelEn = "SHORTEST-LIVED:";
@@ -110392,15 +110330,15 @@ function bornDiedZh(born, died) {
 
 
 
-const CARD_WIDTH = 495;
-const CARD_HEIGHT = 204;
-const PADDING = 24;
-const T1_SIZE = 8;
-const T3_SIZE = 17;
-const T1_LETTER_SPACING = 1.6;
-const RIGHT_EDGE_X = CARD_WIDTH - PADDING; // 471
-const HEADER_TITLE_BASELINE_Y = 44;
-const HEADER_RULE_Y = 58;
+const the_graveyard_CARD_WIDTH = 495;
+const the_graveyard_CARD_HEIGHT = 204;
+const the_graveyard_PADDING = 24;
+const the_graveyard_T1_SIZE = 8;
+const the_graveyard_T3_SIZE = 17;
+const the_graveyard_T1_LETTER_SPACING = 1.6;
+const the_graveyard_RIGHT_EDGE_X = the_graveyard_CARD_WIDTH - the_graveyard_PADDING; // 471
+const the_graveyard_HEADER_TITLE_BASELINE_Y = 44;
+const the_graveyard_HEADER_RULE_Y = 58;
 const GROUND_Y = 158;
 const DAY_LABEL_Y = 152;
 const CALLOUT_LINE1_Y = 180;
@@ -110427,13 +110365,13 @@ function clamp(value, min, max) {
 // card must not require touching another card's private functions).
 // Structurally identical to editorial-stat-card/index.ts's own set.
 // ---------------------------------------------------------------------------
-function pathElement(d, fill) {
+function the_graveyard_pathElement(d, fill) {
     if (d === "") {
         return "";
     }
     return `<path d="${d}" fill="${fill}"/>`;
 }
-function letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
+function the_graveyard_letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
     let cursorX = x;
     let d = "";
     const chars = Array.from(text);
@@ -110444,7 +110382,7 @@ function letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
     });
     return d;
 }
-function letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
+function the_graveyard_letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
     const chars = Array.from(text);
     let width = 0;
     chars.forEach((ch, i) => {
@@ -110454,40 +110392,40 @@ function letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
 }
 /** T1 eyebrow/label style for English text: IBM Plex Mono Semibold,
  * uppercase, letter-spaced, 8px. Left-aligned at (x, y). */
-function eyebrowLabel(text, x, y, fill) {
+function the_graveyard_eyebrowLabel(text, x, y, fill) {
     const upper = text.toUpperCase();
     (0,font/* assertCoverage */.tE)("mono-semibold", upper, `the-graveyard T1 eyebrow/label: "${text}"`);
-    const d = letterSpacedPath("mono-semibold", upper, x, y, T1_SIZE, T1_LETTER_SPACING);
-    return pathElement(d, fill);
+    const d = the_graveyard_letterSpacedPath("mono-semibold", upper, x, y, the_graveyard_T1_SIZE, the_graveyard_T1_LETTER_SPACING);
+    return the_graveyard_pathElement(d, fill);
 }
-function eyebrowLabelWidth(text) {
-    return letterSpacedWidth("mono-semibold", text.toUpperCase(), T1_SIZE, T1_LETTER_SPACING);
+function the_graveyard_eyebrowLabelWidth(text) {
+    return the_graveyard_letterSpacedWidth("mono-semibold", text.toUpperCase(), the_graveyard_T1_SIZE, the_graveyard_T1_LETTER_SPACING);
 }
 /** T1 label style for zh-TW text: Noto Serif TC, 8px, no uppercase
  * transform, no manual letter-spacing. */
-function zhLabel(text, x, y, fill) {
+function the_graveyard_zhLabel(text, x, y, fill) {
     (0,font/* assertCoverage */.tE)("noto-tc", text, `the-graveyard T1 label (zh-TW): "${text}"`);
-    return pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, T1_SIZE), fill);
+    return the_graveyard_pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, the_graveyard_T1_SIZE), fill);
 }
-function zhLabelWidth(text) {
-    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, T1_SIZE);
+function the_graveyard_zhLabelWidth(text) {
+    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, the_graveyard_T1_SIZE);
 }
 /** Renders a T1 label horizontally centered at `centerX` — mirrors
  * editorial-stat-card's own `centeredLabel`, used here for the per-tombstone
  * day-count labels. */
-function centeredLabel(text, language, centerX, y, fill) {
+function the_graveyard_centeredLabel(text, language, centerX, y, fill) {
     if (language === "en") {
-        const width = eyebrowLabelWidth(text);
-        return eyebrowLabel(text, centerX - width / 2, y, fill);
+        const width = the_graveyard_eyebrowLabelWidth(text);
+        return the_graveyard_eyebrowLabel(text, centerX - width / 2, y, fill);
     }
-    const width = zhLabelWidth(text);
-    return zhLabel(text, centerX - width / 2, y, fill);
+    const width = the_graveyard_zhLabelWidth(text);
+    return the_graveyard_zhLabel(text, centerX - width / 2, y, fill);
 }
 /** T3 primary-content style: Source Serif 4 (en) / Noto Serif TC (zh-TW). */
-function contentText(fontName, text, x, y, fill, context) {
+function the_graveyard_contentText(fontName, text, x, y, fill, context) {
     (0,font/* assertCoverage */.tE)(fontName, text, context);
-    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, T3_SIZE);
-    return pathElement(d, fill);
+    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, the_graveyard_T3_SIZE);
+    return the_graveyard_pathElement(d, fill);
 }
 /**
  * Shared filter step behind both `selectTombstones` and `countBuried`:
@@ -110549,7 +110487,7 @@ const graveyardOptionsSchema = schemas/* object */.Ik({ include_forks: schemas/*
 const theGraveyardWidget = {
     name: "the-graveyard",
     requires: ["repoList"],
-    size: { width: CARD_WIDTH, height: CARD_HEIGHT },
+    size: { width: the_graveyard_CARD_WIDTH, height: the_graveyard_CARD_HEIGHT },
     optionsSchema: {
         parse(value) {
             const { include_forks } = graveyardOptionsSchema.parse(value ?? {});
@@ -110580,7 +110518,7 @@ const theGraveyardWidget = {
         const { include_forks: includeForks } = opts;
         const language = opts.language;
         const contentFont = language === "zh-TW" ? "noto-tc" : "serif";
-        const title = language === "zh-TW" ? chromeZh.title : chromeEn.title;
+        const title = language === "zh-TW" ? the_graveyard_copy_chromeZh.title : the_graveyard_copy_chromeEn.title;
         const tombstones = selectTombstones(data.repositories ?? [], opts.now, includeForks);
         const N = tombstones.length;
         const totalBuried = countBuried(data.repositories ?? [], opts.now, includeForks);
@@ -110589,25 +110527,25 @@ const theGraveyardWidget = {
         // Unlike Almanac/Stat Card's zh-only decorative eyebrow, this header-right
         // slot carries functional, card-specific data and is shown in BOTH
         // languages (UI-SPEC's explicit, deliberate departure).
-        markup += contentText(contentFont, title, PADDING, HEADER_TITLE_BASELINE_Y, theme.ink, `the-graveyard title (${language})`);
+        markup += the_graveyard_contentText(contentFont, title, the_graveyard_PADDING, the_graveyard_HEADER_TITLE_BASELINE_Y, theme.ink, `the-graveyard title (${language})`);
         const buriedCountText = language === "zh-TW" ? buriedCountZh(totalBuried) : buriedCountEn(totalBuried);
         if (language === "zh-TW") {
-            const width = zhLabelWidth(buriedCountText);
-            markup += zhLabel(buriedCountText, RIGHT_EDGE_X - width, HEADER_TITLE_BASELINE_Y, theme.muted);
+            const width = the_graveyard_zhLabelWidth(buriedCountText);
+            markup += the_graveyard_zhLabel(buriedCountText, the_graveyard_RIGHT_EDGE_X - width, the_graveyard_HEADER_TITLE_BASELINE_Y, theme.muted);
         }
         else {
-            const width = eyebrowLabelWidth(buriedCountText);
-            markup += eyebrowLabel(buriedCountText, RIGHT_EDGE_X - width, HEADER_TITLE_BASELINE_Y, theme.muted);
+            const width = the_graveyard_eyebrowLabelWidth(buriedCountText);
+            markup += the_graveyard_eyebrowLabel(buriedCountText, the_graveyard_RIGHT_EDGE_X - width, the_graveyard_HEADER_TITLE_BASELINE_Y, theme.muted);
         }
         // (2) Hairline rule.
-        markup += `<line x1="${PADDING}" y1="${HEADER_RULE_Y}" x2="${CARD_WIDTH - PADDING}" y2="${HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
+        markup += `<line x1="${the_graveyard_PADDING}" y1="${the_graveyard_HEADER_RULE_Y}" x2="${the_graveyard_CARD_WIDTH - the_graveyard_PADDING}" y2="${the_graveyard_HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
         // (3) Tombstone zone — same code path for every N from 0 to
         // TOMBSTONE_CAP (D-04's "one code path, not two" extended to every
         // cardinality). N === 0 means the loop below simply runs zero times.
-        const contentWidth = CARD_WIDTH - 2 * PADDING;
+        const contentWidth = the_graveyard_CARD_WIDTH - 2 * the_graveyard_PADDING;
         const maxLifespan = Math.max(0, ...tombstones.map((t) => t.lifespanDays));
         tombstones.forEach((tombstone, i) => {
-            const centerX = PADDING + (i + 0.5) * (contentWidth / N);
+            const centerX = the_graveyard_PADDING + (i + 0.5) * (contentWidth / N);
             const height = maxLifespan === 0
                 ? TOMBSTONE_HEIGHT_FLOOR
                 : clamp(TOMBSTONE_HEIGHT_FLOOR + (tombstone.lifespanDays / maxLifespan) * TOMBSTONE_HEIGHT_RANGE, TOMBSTONE_HEIGHT_FLOOR, TOMBSTONE_HEIGHT_CEIL);
@@ -110621,27 +110559,27 @@ const theGraveyardWidget = {
                 `L${right},${bottom} Z`;
             markup += `<path d="${d}" fill="${theme.rule}" stroke="${theme.muted}" stroke-width="0.8"/>`;
             const dayLabel = language === "zh-TW" ? dayCountLabelZh(tombstone.lifespanDays) : dayCountLabelEn(tombstone.lifespanDays);
-            markup += centeredLabel(dayLabel, language, centerX, DAY_LABEL_Y, theme.muted);
+            markup += the_graveyard_centeredLabel(dayLabel, language, centerX, DAY_LABEL_Y, theme.muted);
         });
         // (4) Ground line — heavier than the project's usual 1px hairline
         // (UI-SPEC: this is a structural horizon, not a section divider).
-        markup += `<line x1="${PADDING}" y1="${GROUND_Y}" x2="${CARD_WIDTH - PADDING}" y2="${GROUND_Y}" stroke="${theme.ink}" stroke-width="1.5"/>`;
+        markup += `<line x1="${the_graveyard_PADDING}" y1="${GROUND_Y}" x2="${the_graveyard_CARD_WIDTH - the_graveyard_PADDING}" y2="${GROUND_Y}" stroke="${theme.ink}" stroke-width="1.5"/>`;
         if (N > 0) {
             // (5) Shortest-lived callout — populated state only.
             const shortest = tombstones.reduce((min, t) => (t.lifespanDays < min.lifespanDays ? t : min));
             const label = language === "zh-TW" ? shortestLivedLabelZh : shortestLivedLabelEn;
-            const labelWidth = language === "zh-TW" ? zhLabelWidth(label) : eyebrowLabelWidth(label);
+            const labelWidth = language === "zh-TW" ? the_graveyard_zhLabelWidth(label) : the_graveyard_eyebrowLabelWidth(label);
             markup +=
                 language === "zh-TW"
-                    ? zhLabel(label, PADDING, CALLOUT_LINE1_Y, theme.muted)
-                    : eyebrowLabel(label, PADDING, CALLOUT_LINE1_Y, theme.muted);
+                    ? the_graveyard_zhLabel(label, the_graveyard_PADDING, CALLOUT_LINE1_Y, theme.muted)
+                    : the_graveyard_eyebrowLabel(label, the_graveyard_PADDING, CALLOUT_LINE1_Y, theme.muted);
             // The repo name is the phase's first shortest-lived-callout consumer
             // of the API-sourced text safety path (Plan 03-01 Task 2): measure +
             // truncate-with-ellipsis first, THEN convert to path data with
             // per-character glyph-placeholder degrade — never assertCoverage +
             // textToPathData directly, since a repo name is end-user-authored and
             // must degrade gracefully rather than fail the build (UX-06).
-            const truncatedName = (0,font/* truncateToWidth */.A4)("mono-semibold", shortest.name, T1_SIZE, REPO_NAME_BUDGET_PX);
+            const truncatedName = (0,font/* truncateToWidth */.A4)("mono-semibold", shortest.name, the_graveyard_T1_SIZE, REPO_NAME_BUDGET_PX);
             // en's chrome copy ("SHORTEST-LIVED:") has no trailing space, but the
             // UI-SPEC's line-1 format ("SHORTEST-LIVED: {name}") puts one between
             // the colon and the name; zh-TW's colon ("最短命：") touches the name
@@ -110649,10 +110587,10 @@ const theGraveyardWidget = {
             // zhLabel) and the name (apiSourcedTextPathData) are two independent
             // rendering calls, the gap is reserved here rather than embedded in
             // either string.
-            const labelGapPx = language === "zh-TW" ? 0 : (0,font/* measureAdvanceWidth */.zN)("mono-semibold", " ", T1_SIZE);
-            const nameX = PADDING + labelWidth + labelGapPx;
-            const namePathData = (0,font/* apiSourcedTextPathData */.M4)("mono-semibold", truncatedName, nameX, CALLOUT_LINE1_Y, T1_SIZE);
-            markup += pathElement(namePathData, theme.accent);
+            const labelGapPx = language === "zh-TW" ? 0 : (0,font/* measureAdvanceWidth */.zN)("mono-semibold", " ", the_graveyard_T1_SIZE);
+            const nameX = the_graveyard_PADDING + labelWidth + labelGapPx;
+            const namePathData = (0,font/* apiSourcedTextPathData */.M4)("mono-semibold", truncatedName, nameX, CALLOUT_LINE1_Y, the_graveyard_T1_SIZE);
+            markup += the_graveyard_pathElement(namePathData, theme.accent);
             // Line 2: born/died dates — both engine-formatted (YYYY-MM-DD slices
             // of ISO strings), so this stays on the existing
             // assertCoverage+textToPathData engine-authored-text path.
@@ -110661,8 +110599,8 @@ const theGraveyardWidget = {
             const bornDiedText = language === "zh-TW" ? bornDiedZh(born, died) : bornDiedEn(born, died);
             markup +=
                 language === "zh-TW"
-                    ? zhLabel(bornDiedText, PADDING, CALLOUT_LINE2_Y, theme.muted)
-                    : eyebrowLabel(bornDiedText, PADDING, CALLOUT_LINE2_Y, theme.muted);
+                    ? the_graveyard_zhLabel(bornDiedText, the_graveyard_PADDING, CALLOUT_LINE2_Y, theme.muted)
+                    : the_graveyard_eyebrowLabel(bornDiedText, the_graveyard_PADDING, CALLOUT_LINE2_Y, theme.muted);
         }
         else {
             // Empty state (UX-06, D-04, D-05): same frame, same chrome, same
@@ -110670,7 +110608,7 @@ const theGraveyardWidget = {
             // card's entire payload in this state, so it renders at content tier
             // (T3, ink), not caption tier.
             const emptyCaption = language === "zh-TW" ? emptyCaptionZh : emptyCaptionEn;
-            markup += contentText(contentFont, emptyCaption, PADDING, 118, theme.ink, `the-graveyard empty caption (${language})`);
+            markup += the_graveyard_contentText(contentFont, emptyCaption, the_graveyard_PADDING, 118, theme.ink, `the-graveyard empty caption (${language})`);
         }
         // (6) Page-number footer (MAST-03) — present in BOTH states, always at
         // CALLOUT_LINE2_Y: shares the callout's own dates baseline when
@@ -110682,36 +110620,18 @@ const theGraveyardWidget = {
                 ? `頁 ${opts.pageNumber} / ${opts.totalPages}`
                 : `PAGE ${opts.pageNumber}/${opts.totalPages}`;
             if (language === "zh-TW") {
-                const width = zhLabelWidth(pageText);
-                markup += zhLabel(pageText, RIGHT_EDGE_X - width, CALLOUT_LINE2_Y, theme.muted);
+                const width = the_graveyard_zhLabelWidth(pageText);
+                markup += the_graveyard_zhLabel(pageText, the_graveyard_RIGHT_EDGE_X - width, CALLOUT_LINE2_Y, theme.muted);
             }
             else {
-                const width = eyebrowLabelWidth(pageText);
-                markup += eyebrowLabel(pageText, RIGHT_EDGE_X - width, CALLOUT_LINE2_Y, theme.muted);
+                const width = the_graveyard_eyebrowLabelWidth(pageText);
+                markup += the_graveyard_eyebrowLabel(pageText, the_graveyard_RIGHT_EDGE_X - width, CALLOUT_LINE2_Y, theme.muted);
             }
         }
         return markup;
     },
 };
 
-
-/***/ }),
-
-/***/ 7546:
-/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
-
-
-// EXPORTS
-__nccwpck_require__.d(__webpack_exports__, {
-  ZW: () => (/* binding */ theRecordWidget)
-});
-
-// UNUSED EXPORTS: bucketWeeks, busiestElapsedWeek, grooveCountForYear, grooveRadius, mulberry32, tonearmTip, zonedYear
-
-// EXTERNAL MODULE: ./node_modules/zod/v4/classic/schemas.js + 16 modules
-var schemas = __nccwpck_require__(2314);
-// EXTERNAL MODULE: ./src/core/font.ts
-var font = __nccwpck_require__(7654);
 ;// CONCATENATED MODULE: ./src/widgets/the-record/copy.ts
 /**
  * The Record copy — 04-UI-SPEC.md "The Record chrome strings" table.
@@ -110737,8 +110657,8 @@ var font = __nccwpck_require__(7654);
  * (`the-graveyard/copy.ts`, `masthead/copy.ts`) — do not reintroduce either
  * here, and do not add any arrow or triangle glyph in their place.
  */
-const chromeEn = { title: "THE RECORD" };
-const chromeZh = { title: "唱片" };
+const the_record_copy_chromeEn = { title: "THE RECORD" };
+const the_record_copy_chromeZh = { title: "唱片" };
 /** zh-TW-only decorative Latin masthead eyebrow — never translated, absent
  * in en mode (en mode's own title already reads as the brand). Almanac/
  * Editorial Stat Card convention, not Graveyard's functional-data variant —
@@ -110800,10 +110720,10 @@ function pageFooterZh(n, m) {
  * `formatRecordNumber`/`measureRecordNumeralWidth` from here) and this
  * module — same reasoning as editorial-stat-card/format.ts's own T2_SIZE
  * re-declaration. */
-const T2_SIZE = 32;
+const format_T2_SIZE = 32;
 /** 04-UI-SPEC.md "Number formatting": the zh-TW 萬/億 suffix renders in Noto
  * Serif TC at 92% of T2's declared size. */
-const SUFFIX_SIZE_RATIO = 0.92;
+const format_SUFFIX_SIZE_RATIO = 0.92;
 /**
  * Thrown by assertSlotBudget when a formatted string's measured render
  * width exceeds its slot's budget. Names all four load-bearing facts —
@@ -110862,10 +110782,10 @@ function measureRecordNumeralWidth(formatted, language) {
         const chars = Array.from(formatted);
         const suffixChar = chars[chars.length - 1];
         const digitsPart = chars.slice(0, -1).join("");
-        return ((0,font/* measureAdvanceWidth */.zN)("mono-semibold", digitsPart, T2_SIZE) +
-            (0,font/* measureAdvanceWidth */.zN)("noto-tc", suffixChar, T2_SIZE * SUFFIX_SIZE_RATIO));
+        return ((0,font/* measureAdvanceWidth */.zN)("mono-semibold", digitsPart, format_T2_SIZE) +
+            (0,font/* measureAdvanceWidth */.zN)("noto-tc", suffixChar, format_T2_SIZE * format_SUFFIX_SIZE_RATIO));
     }
-    return (0,font/* measureAdvanceWidth */.zN)("mono-semibold", formatted, T2_SIZE);
+    return (0,font/* measureAdvanceWidth */.zN)("mono-semibold", formatted, format_T2_SIZE);
 }
 /**
  * Per-render slot-width backstop (04-UI-SPEC.md "Text slot budgets") — every
@@ -110904,19 +110824,19 @@ function assertSlotBudget(field, formatted, widthPx, budgetPx) {
 // Geometry constants — each cites the UI-SPEC section / D-number that fixed
 // the value (04-UI-SPEC.md "Card Layout — The Record", "Geometry constants").
 // ---------------------------------------------------------------------------
-const CARD_WIDTH = 495;
-const CARD_HEIGHT = 272;
-const PADDING = 24;
-const RIGHT_EDGE_X = CARD_WIDTH - PADDING; // 471
-const T1_SIZE = 8;
+const the_record_CARD_WIDTH = 495;
+const the_record_CARD_HEIGHT = 272;
+const the_record_PADDING = 24;
+const the_record_RIGHT_EDGE_X = the_record_CARD_WIDTH - the_record_PADDING; // 471
+const the_record_T1_SIZE = 8;
 const the_record_T2_SIZE = 32;
 /** T3-mono size (UI-SPEC Typography "T3-mono"): an existing size (17) paired
  * with the existing IBM Plex Mono Semibold face — used here for the centre
  * label's year, per D-02's "all numerals route through IBM Plex Mono" rule. */
-const T3_SIZE = 17;
-const T1_LETTER_SPACING = 1.6;
-const HEADER_TITLE_BASELINE_Y = 44;
-const HEADER_RULE_Y = 58;
+const the_record_T3_SIZE = 17;
+const the_record_T1_LETTER_SPACING = 1.6;
+const the_record_HEADER_TITLE_BASELINE_Y = 44;
+const the_record_HEADER_RULE_Y = 58;
 const CX = 115; // record centre X
 const CY = 157; // record centre Y
 const R_DISC = 91; // disc body; spans x 24..206, y 66..248
@@ -111006,7 +110926,7 @@ const TEXTURE_WEAR_COUNT = 9; // the trackable arcs — see renderTexture's D-03
 const TEXTURE_DUST_COUNT = 24;
 const TEXTURE_R_MIN = R_LABEL + 3;
 const TEXTURE_R_MAX = R_DISC - 4;
-const MS_PER_DAY = 86_400_000;
+const the_record_MS_PER_DAY = 86_400_000;
 // ---------------------------------------------------------------------------
 // Chassis helpers — own copy, not imported (RENDER-02: adding/modifying a
 // card must not require touching another card's private functions).
@@ -111016,13 +110936,13 @@ const MS_PER_DAY = 86_400_000;
 // textToPathData fail-loud path applies (UI-SPEC "Engine-authored text →
 // fail loud; API-sourced text → degrade").
 // ---------------------------------------------------------------------------
-function pathElement(d, fill) {
+function the_record_pathElement(d, fill) {
     if (d === "") {
         return "";
     }
     return `<path d="${d}" fill="${fill}"/>`;
 }
-function letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
+function the_record_letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
     let cursorX = x;
     let d = "";
     const chars = Array.from(text);
@@ -111033,7 +110953,7 @@ function letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
     });
     return d;
 }
-function letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
+function the_record_letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
     const chars = Array.from(text);
     let width = 0;
     chars.forEach((ch, i) => {
@@ -111043,37 +110963,37 @@ function letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
 }
 /** T1 eyebrow/label style for English text: IBM Plex Mono Semibold,
  * uppercase, letter-spaced, 8px. Left-aligned at (x, y). */
-function eyebrowLabel(text, x, y, fill) {
+function the_record_eyebrowLabel(text, x, y, fill) {
     const upper = text.toUpperCase();
     (0,font/* assertCoverage */.tE)("mono-semibold", upper, `the-record T1 eyebrow/label: "${text}"`);
-    const d = letterSpacedPath("mono-semibold", upper, x, y, T1_SIZE, T1_LETTER_SPACING);
-    return pathElement(d, fill);
+    const d = the_record_letterSpacedPath("mono-semibold", upper, x, y, the_record_T1_SIZE, the_record_T1_LETTER_SPACING);
+    return the_record_pathElement(d, fill);
 }
-function eyebrowLabelWidth(text) {
-    return letterSpacedWidth("mono-semibold", text.toUpperCase(), T1_SIZE, T1_LETTER_SPACING);
+function the_record_eyebrowLabelWidth(text) {
+    return the_record_letterSpacedWidth("mono-semibold", text.toUpperCase(), the_record_T1_SIZE, the_record_T1_LETTER_SPACING);
 }
 /** T1 label style for zh-TW text: Noto Serif TC, 8px, no uppercase
  * transform, no manual letter-spacing. */
-function zhLabel(text, x, y, fill) {
+function the_record_zhLabel(text, x, y, fill) {
     (0,font/* assertCoverage */.tE)("noto-tc", text, `the-record T1 label (zh-TW): "${text}"`);
-    return pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, T1_SIZE), fill);
+    return the_record_pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, the_record_T1_SIZE), fill);
 }
-function zhLabelWidth(text) {
-    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, T1_SIZE);
+function the_record_zhLabelWidth(text) {
+    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, the_record_T1_SIZE);
 }
 /** T3 primary-content style: Source Serif 4 (en) / Noto Serif TC (zh-TW). */
-function contentText(fontName, text, x, y, fill, context) {
+function the_record_contentText(fontName, text, x, y, fill, context) {
     (0,font/* assertCoverage */.tE)(fontName, text, context);
-    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, T3_SIZE);
-    return pathElement(d, fill);
+    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, the_record_T3_SIZE);
+    return the_record_pathElement(d, fill);
 }
 /** T3-mono numeral style, horizontally centered at `centerX` (D-02: every
  * numeral routes through IBM Plex Mono for tabular discipline). */
 function centeredMonoText(text, centerX, y, fill, context) {
     (0,font/* assertCoverage */.tE)("mono-semibold", text, context);
-    const width = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", text, T3_SIZE);
-    const d = (0,font/* textToPathData */.wD)("mono-semibold", text, centerX - width / 2, y, T3_SIZE);
-    return pathElement(d, fill);
+    const width = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", text, the_record_T3_SIZE);
+    const d = (0,font/* textToPathData */.wD)("mono-semibold", text, centerX - width / 2, y, the_record_T3_SIZE);
+    return the_record_pathElement(d, fill);
 }
 /**
  * Renders the T2 total-contributions numeral LEFT-ALIGNED at `x` (adjusted
@@ -111085,17 +111005,17 @@ function centeredMonoText(text, centerX, y, fill, context) {
  * performs — the two must agree, or the budget check and the actual glyph
  * placement could silently disagree about the suffix's rendered width.
  */
-function renderNumeral(formatted, language, x, y, fill) {
+function the_record_renderNumeral(formatted, language, x, y, fill) {
     if (language === "zh-TW" && (formatted.endsWith("萬") || formatted.endsWith("億"))) {
         const chars = Array.from(formatted);
         const suffixChar = chars[chars.length - 1];
         const digitsPart = chars.slice(0, -1).join("");
         const digitsWidth = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", digitsPart, the_record_T2_SIZE);
         const d = (0,font/* textToPathData */.wD)("mono-semibold", digitsPart, x, y, the_record_T2_SIZE) +
-            (0,font/* textToPathData */.wD)("noto-tc", suffixChar, x + digitsWidth, y, the_record_T2_SIZE * SUFFIX_SIZE_RATIO);
-        return pathElement(d, fill);
+            (0,font/* textToPathData */.wD)("noto-tc", suffixChar, x + digitsWidth, y, the_record_T2_SIZE * format_SUFFIX_SIZE_RATIO);
+        return the_record_pathElement(d, fill);
     }
-    return pathElement((0,font/* textToPathData */.wD)("mono-semibold", formatted, x, y, the_record_T2_SIZE), fill);
+    return the_record_pathElement((0,font/* textToPathData */.wD)("mono-semibold", formatted, x, y, the_record_T2_SIZE), fill);
 }
 /**
  * A right column label/value row (UI-SPEC "Right column" y-table): the
@@ -111106,14 +111026,14 @@ function renderNumeral(formatted, language, x, y, fill) {
  * specific to this card's column layout), just local de-duplication.
  */
 function renderDataRow(label, value, y, language, theme) {
-    const labelWidth = language === "zh-TW" ? zhLabelWidth(label) : eyebrowLabelWidth(label);
+    const labelWidth = language === "zh-TW" ? the_record_zhLabelWidth(label) : the_record_eyebrowLabelWidth(label);
     assertSlotBudget("data-row label", label, labelWidth, DATA_ROW_LABEL_BUDGET_PX);
-    const valueWidth = language === "zh-TW" ? zhLabelWidth(value) : eyebrowLabelWidth(value);
+    const valueWidth = language === "zh-TW" ? the_record_zhLabelWidth(value) : the_record_eyebrowLabelWidth(value);
     assertSlotBudget("data-row value", value, valueWidth, DATA_ROW_VALUE_BUDGET_PX);
-    const labelMarkup = language === "zh-TW" ? zhLabel(label, COLUMN_X, y, theme.muted) : eyebrowLabel(label, COLUMN_X, y, theme.muted);
+    const labelMarkup = language === "zh-TW" ? the_record_zhLabel(label, COLUMN_X, y, theme.muted) : the_record_eyebrowLabel(label, COLUMN_X, y, theme.muted);
     const valueMarkup = language === "zh-TW"
-        ? zhLabel(value, RIGHT_EDGE_X - valueWidth, y, theme.ink)
-        : eyebrowLabel(value, RIGHT_EDGE_X - valueWidth, y, theme.ink);
+        ? the_record_zhLabel(value, the_record_RIGHT_EDGE_X - valueWidth, y, theme.ink)
+        : the_record_eyebrowLabel(value, the_record_RIGHT_EDGE_X - valueWidth, y, theme.ink);
     return labelMarkup + valueMarkup;
 }
 // ---------------------------------------------------------------------------
@@ -111136,7 +111056,7 @@ function zonedYear(now, timeZone) {
  */
 function grooveCountForYear(year) {
     const jan1 = new Date(Date.UTC(year, 0, 1));
-    const daysInYear = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / MS_PER_DAY;
+    const daysInYear = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / the_record_MS_PER_DAY;
     return Math.ceil((daysInYear + jan1.getUTCDay()) / 7); // getUTCDay(): 0 = Sunday
 }
 /** "YYYY-MM-DD" for `date` as observed in `timeZone` — used only to compare
@@ -111165,10 +111085,10 @@ function bucketWeeks(calendar, year, now, timeZone) {
     const grooveCount = grooveCountForYear(year);
     const jan1Ms = Date.UTC(year, 0, 1);
     const jan1Weekday = new Date(jan1Ms).getUTCDay(); // 0 = Sunday
-    const firstBucketStartMs = jan1Ms - jan1Weekday * MS_PER_DAY;
+    const firstBucketStartMs = jan1Ms - jan1Weekday * the_record_MS_PER_DAY;
     const nowDateString = zonedDateString(now, timeZone);
     const weeks = Array.from({ length: grooveCount }, (_, index) => {
-        const startMs = firstBucketStartMs + index * 7 * MS_PER_DAY;
+        const startMs = firstBucketStartMs + index * 7 * the_record_MS_PER_DAY;
         const startDate = new Date(startMs);
         return {
             index,
@@ -111179,7 +111099,7 @@ function bucketWeeks(calendar, year, now, timeZone) {
     });
     for (const day of calendar ?? []) {
         const dayMs = parseIsoDateUtcMs(day.date);
-        const bucketIndex = Math.floor((dayMs - firstBucketStartMs) / (7 * MS_PER_DAY));
+        const bucketIndex = Math.floor((dayMs - firstBucketStartMs) / (7 * the_record_MS_PER_DAY));
         const bucket = weeks[bucketIndex];
         if (bucket !== undefined) {
             bucket.count += day.count;
@@ -111328,7 +111248,7 @@ const theRecordOptionsSchema = schemas/* object */.Ik({}).strict();
 const theRecordWidget = {
     name: "the-record",
     requires: ["calendar"],
-    size: { width: CARD_WIDTH, height: CARD_HEIGHT },
+    size: { width: the_record_CARD_WIDTH, height: the_record_CARD_HEIGHT },
     optionsSchema: {
         parse(value) {
             theRecordOptionsSchema.parse(value ?? {});
@@ -111371,14 +111291,14 @@ const theRecordWidget = {
         // eyebrow, right-aligned (Almanac/Stat Card convention — this card has
         // no header-scale fact that needs to appear in both languages, unlike
         // Graveyard's functional-data deviation); hairline rule.
-        const title = language === "zh-TW" ? chromeZh.title : chromeEn.title;
-        assertSlotBudget("card title", title, (0,font/* measureAdvanceWidth */.zN)(contentFont, title, T3_SIZE), CARD_TITLE_BUDGET_PX);
-        markup += contentText(contentFont, title, PADDING, HEADER_TITLE_BASELINE_Y, theme.ink, `the-record title (${language})`);
+        const title = language === "zh-TW" ? the_record_copy_chromeZh.title : the_record_copy_chromeEn.title;
+        assertSlotBudget("card title", title, (0,font/* measureAdvanceWidth */.zN)(contentFont, title, the_record_T3_SIZE), CARD_TITLE_BUDGET_PX);
+        markup += the_record_contentText(contentFont, title, the_record_PADDING, the_record_HEADER_TITLE_BASELINE_Y, theme.ink, `the-record title (${language})`);
         if (language === "zh-TW") {
-            const eyebrowWidth = eyebrowLabelWidth(mastheadEyebrowZh);
-            markup += eyebrowLabel(mastheadEyebrowZh, RIGHT_EDGE_X - eyebrowWidth, HEADER_TITLE_BASELINE_Y, theme.muted);
+            const eyebrowWidth = the_record_eyebrowLabelWidth(mastheadEyebrowZh);
+            markup += the_record_eyebrowLabel(mastheadEyebrowZh, the_record_RIGHT_EDGE_X - eyebrowWidth, the_record_HEADER_TITLE_BASELINE_Y, theme.muted);
         }
-        markup += `<line x1="${PADDING}" y1="${HEADER_RULE_Y}" x2="${RIGHT_EDGE_X}" y2="${HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
+        markup += `<line x1="${the_record_PADDING}" y1="${the_record_HEADER_RULE_Y}" x2="${the_record_RIGHT_EDGE_X}" y2="${the_record_HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
         // (2) Disc body.
         markup += `<circle cx="${CX}" cy="${CY}" r="${R_DISC}" fill="${theme.ink}"/>`;
         // (3) Rim land highlight — the light edge of a pressed rim.
@@ -111431,7 +111351,7 @@ const theRecordWidget = {
         markup += `<circle cx="${CX}" cy="${CY}" r="${R_LABEL}" fill="${theme.accent}"/>`;
         markup += `<line x1="102" y1="172" x2="128" y2="172" stroke="${theme.paper}" stroke-width="0.80" stroke-opacity="0.5"/>`;
         const yearStr = String(year);
-        assertSlotBudget("centre-label year", yearStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", yearStr, T3_SIZE), CENTRE_LABEL_YEAR_BUDGET_PX);
+        assertSlotBudget("centre-label year", yearStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", yearStr, the_record_T3_SIZE), CENTRE_LABEL_YEAR_BUDGET_PX);
         markup += centeredMonoText(yearStr, CX, CY - 6, theme.paper, `the-record centre-label year`);
         markup += `<circle cx="${CX}" cy="${CY}" r="${SPINDLE_R}" fill="${theme.paper}"/>`;
         // (8) Tonearm (D-05) — drawn outside the spinning group; its position
@@ -111457,17 +111377,17 @@ const theRecordWidget = {
         // derived figure, and never inflated by an injected future day —
         // mirrors the groove/busiest-week/silent-week guard above).
         const totalLabel = language === "zh-TW" ? totalLabelZh : totalLabelEn;
-        const totalLabelWidth = language === "zh-TW" ? zhLabelWidth(totalLabel) : eyebrowLabelWidth(totalLabel);
+        const totalLabelWidth = language === "zh-TW" ? the_record_zhLabelWidth(totalLabel) : the_record_eyebrowLabelWidth(totalLabel);
         assertSlotBudget("total label", totalLabel, totalLabelWidth, DATA_ROW_LABEL_BUDGET_PX);
         markup +=
             language === "zh-TW"
-                ? zhLabel(totalLabel, COLUMN_X, TOTAL_LABEL_Y, theme.muted)
-                : eyebrowLabel(totalLabel, COLUMN_X, TOTAL_LABEL_Y, theme.muted);
+                ? the_record_zhLabel(totalLabel, COLUMN_X, TOTAL_LABEL_Y, theme.muted)
+                : the_record_eyebrowLabel(totalLabel, COLUMN_X, TOTAL_LABEL_Y, theme.muted);
         const total = data.contributionCalendarTotal ?? elapsedWeeks.reduce((sum, w) => sum + w.count, 0);
         const formattedTotal = formatRecordNumber(total, language);
         assertSlotBudget("total numeral", formattedTotal, measureRecordNumeralWidth(formattedTotal, language), TOTAL_NUMERAL_BUDGET_PX);
-        markup += renderNumeral(formattedTotal, language, COLUMN_X, TOTAL_NUMERAL_Y, theme.ink);
-        markup += `<line x1="${COLUMN_X}" y1="${COLUMN_RULE_Y}" x2="${RIGHT_EDGE_X}" y2="${COLUMN_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
+        markup += the_record_renderNumeral(formattedTotal, language, COLUMN_X, TOTAL_NUMERAL_Y, theme.ink);
+        markup += `<line x1="${COLUMN_X}" y1="${COLUMN_RULE_Y}" x2="${the_record_RIGHT_EDGE_X}" y2="${COLUMN_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
         // Row 1: WEEKS PRESSED — {elapsed} / {G}.
         const row1Label = language === "zh-TW" ? weeksPressedLabelZh : weeksPressedLabelEn;
         const row1Value = weeksPressedValue(elapsedWeeks.length, grooveCount);
@@ -111498,31 +111418,62 @@ const theRecordWidget = {
         // Same scene, same code path, still rotating; only this one conditional.
         if (maxWeekly === 0) {
             const zeroCaption = language === "zh-TW" ? zeroCaptionZh : zeroCaptionEn;
-            assertSlotBudget("zero-state caption", zeroCaption, (0,font/* measureAdvanceWidth */.zN)(contentFont, zeroCaption, T3_SIZE), ZERO_CAPTION_BUDGET_PX);
-            markup += contentText(contentFont, zeroCaption, COLUMN_X, ZERO_CAPTION_Y, theme.ink, `the-record zero-state caption (${language})`);
+            assertSlotBudget("zero-state caption", zeroCaption, (0,font/* measureAdvanceWidth */.zN)(contentFont, zeroCaption, the_record_T3_SIZE), ZERO_CAPTION_BUDGET_PX);
+            markup += the_record_contentText(contentFont, zeroCaption, COLUMN_X, ZERO_CAPTION_Y, theme.ink, `the-record zero-state caption (${language})`);
         }
         // (11) Needle caption — always present, T1 accent.
         const needleCaption = language === "zh-TW" ? needleCaptionZh : needleCaptionEn;
-        const needleCaptionWidth = language === "zh-TW" ? zhLabelWidth(needleCaption) : eyebrowLabelWidth(needleCaption);
+        const needleCaptionWidth = language === "zh-TW" ? the_record_zhLabelWidth(needleCaption) : the_record_eyebrowLabelWidth(needleCaption);
         assertSlotBudget("needle caption", needleCaption, needleCaptionWidth, NEEDLE_CAPTION_BUDGET_PX);
         markup +=
             language === "zh-TW"
-                ? zhLabel(needleCaption, COLUMN_X, FOOTER_Y, theme.accent)
-                : eyebrowLabel(needleCaption, COLUMN_X, FOOTER_Y, theme.accent);
+                ? the_record_zhLabel(needleCaption, COLUMN_X, FOOTER_Y, theme.accent)
+                : the_record_eyebrowLabel(needleCaption, COLUMN_X, FOOTER_Y, theme.accent);
         // (12) Page-number footer — only when both fields are defined, so a
         // disabled masthead leaves literally zero additional markup here
         // (inherited Phase 3 contract, unchanged).
         if (opts.pageNumber !== undefined && opts.totalPages !== undefined) {
             const pageText = language === "zh-TW" ? pageFooterZh(opts.pageNumber, opts.totalPages) : pageFooterEn(opts.pageNumber, opts.totalPages);
-            const pageWidth = language === "zh-TW" ? zhLabelWidth(pageText) : eyebrowLabelWidth(pageText);
+            const pageWidth = language === "zh-TW" ? the_record_zhLabelWidth(pageText) : the_record_eyebrowLabelWidth(pageText);
             markup +=
                 language === "zh-TW"
-                    ? zhLabel(pageText, RIGHT_EDGE_X - pageWidth, FOOTER_Y, theme.muted)
-                    : eyebrowLabel(pageText, RIGHT_EDGE_X - pageWidth, FOOTER_Y, theme.muted);
+                    ? the_record_zhLabel(pageText, the_record_RIGHT_EDGE_X - pageWidth, FOOTER_Y, theme.muted)
+                    : the_record_eyebrowLabel(pageText, the_record_RIGHT_EDGE_X - pageWidth, FOOTER_Y, theme.muted);
         }
         return markup;
     },
 };
+
+;// CONCATENATED MODULE: ./src/widgets/all.ts
+
+
+
+
+
+
+/**
+ * The ONE registration list for every built-in widget (QA-03 / D-12). Before
+ * this file existed, the same five `register(...)` calls were hand-copied
+ * into three separate composition roots (`src/action-entry.ts`,
+ * `src/cli.ts`, `scripts/build-uat-preview.ts`) — a fourth copy was about to
+ * be added for the Phase 5 playground entry point. Adding a sixth card now
+ * costs exactly two changes: a new `src/widgets/<name>/` directory, and one
+ * new line here. No entry point, and no file under `src/core/`, needs to
+ * change.
+ *
+ * `register()` throws `DuplicateWidgetError` (src/core/registry.ts) if a name
+ * is already registered — it never silently overwrites. Because of that,
+ * `registerAllWidgets()` itself must be called exactly ONCE per process: a
+ * composition root that calls it twice (e.g. once at module load and again
+ * inside a hot-reload/re-render loop) will throw on the second call.
+ */
+function registerAllWidgets() {
+    (0,registry/* register */.kz)(almanacWidget);
+    (0,registry/* register */.kz)(editorialStatCardWidget);
+    (0,registry/* register */.kz)(mastheadWidget);
+    (0,registry/* register */.kz)(theGraveyardWidget);
+    (0,registry/* register */.kz)(theRecordWidget);
+}
 
 
 /***/ }),
