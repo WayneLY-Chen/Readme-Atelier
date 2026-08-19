@@ -475,7 +475,7 @@ export class ConfigValidationError extends Error {
  * hand-written string template, so the default-config text and the actual
  * default object can never drift apart from each other.
  */
-function configToYaml(config: ResolvedConfig): string {
+export function configToYaml(config: ResolvedConfig): string {
   return yamlStringify(config);
 }
 
