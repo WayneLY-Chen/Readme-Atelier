@@ -32,7 +32,7 @@ export interface CopyArtifactOptions {
   button: HTMLButtonElement;
   /** The `<pre>`/`<code>` element to auto-select on failure. */
   target: HTMLElement;
-  /** The shared `role="status" aria-live="polite"` region (one for the whole page). */
+  /** The shared status/live-announcement region (one for the whole page). */
   statusRegion: HTMLElement;
   /** Human-readable name used in status announcements, e.g. "workflow YAML". */
   label: string;

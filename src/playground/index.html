@@ -83,10 +83,15 @@
   }
 
   /* ---- 44x44 minimum touch target (Spacing Scale exception) ---- */
-  button, select, input[type="checkbox"] + label {
+  button, select {
     min-height: 44px;
   }
   button { min-width: 44px; }
+  input[type="checkbox"] + label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
 
   /* ---- Reduced motion: every shell transition/animation is guarded. ---- */
   .is-copy-success, .is-copy-fail { transition: background-color 0.2s, border-color 0.2s; }
@@ -349,7 +354,9 @@
     .control-group[data-axis="card"] .control-options { display: none; }
     #card-select { display: block; width: 100%; min-height: 44px; }
     .control-group { flex-direction: column; align-items: flex-start; }
-    .artifact-header { flex-direction: column; align-items: stretch; }
+    /* Copy button stays ON THE SAME ROW as the artifact title, directly
+       above the code block — never stacked below it — so a thumb can reach
+       it without hunting for a floating top-right corner button. */
   }
 </style>
 </head>
