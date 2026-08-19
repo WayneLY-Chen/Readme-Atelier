@@ -201,10 +201,18 @@ function main(): void {
    * switched to a different card/theme".
    */
   async function loadZhFont(): Promise<void> {
+    const zhButton = Array.from(languageButtons).find((btn) => btn.dataset.value === "zh-TW");
+
     fontState = "loading";
     setGroupDisabled(controls, true);
     previewCanvas.classList.add("is-font-loading");
     zhFontError.hidden = true;
+    // Busy indicator INSIDE the button itself, not just the disabled state —
+    // UI-SPEC contract 1's loading row requires a visible busy cue on the
+    // "中文" button, not a silent freeze.
+    if (zhButton !== undefined) {
+      zhButton.textContent = "中文…";
+    }
     try {
       await ensureTcFont();
       fontState = "ready";
@@ -214,6 +222,9 @@ function main(): void {
       selectedLanguage = "en";
       zhFontError.hidden = false;
     } finally {
+      if (zhButton !== undefined) {
+        zhButton.textContent = "中文";
+      }
       setGroupDisabled(controls, false);
       previewCanvas.classList.remove("is-font-loading");
       updateLanguageButtons();
