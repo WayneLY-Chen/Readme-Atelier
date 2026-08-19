@@ -9,6 +9,7 @@
     "test:coverage": "vitest run --coverage",
     "build:fonts": "tsx scripts/build-fonts.ts",
     "build": "ncc build src/action-entry.ts -o dist --license licenses.txt && tsx scripts/postbuild.ts",
+    "build:playground": "tsx scripts/build-playground.ts",
     "preview": "tsx src/cli.ts",
     "preview:uat": "tsx scripts/build-uat-preview.ts"
   },
@@ -29,6 +30,7 @@
     "@types/node": "^24.0.0",
     "@vercel/ncc": "^0.44.1",
     "@vitest/coverage-v8": "4.1.10",
+    "esbuild": "0.28.1",
     "fontverter": "^2.0.0",
     "subset-font": "2.5.0",
     "tsx": "^4.23.5",

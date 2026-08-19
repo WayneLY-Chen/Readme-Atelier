@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>readme-atelier — playground</title>
+</head>
+<body>
+<h1>readme-atelier</h1>
+<p>Pick a card, a theme, a language — copy what you need.</p>
+
+<!--
+  UI-SPEC page-shell contract: this fallback is VISIBLE BY DEFAULT (no
+  `hidden` attribute) and is only ever hidden by script that runs AFTER the
+  bundle has successfully booted (see src/playground/main.ts). It must never
+  be hidden optimistically at parse time. This single element covers BOTH
+  failure modes: JavaScript disabled (no script ever runs, so this stays
+  visible) and a bundle runtime exception (main.ts's post-boot hide call is
+  simply never reached).
+-->
+<div id="playground-boot-fallback">
+  <p>
+    This interactive playground needs JavaScript enabled. See the
+    <a href="https://github.com/WayneLY-Chen/Readme-Atelier#adoption">README</a>
+    for setup instructions instead.
+  </p>
+</div>
+
+<div id="playground-app" hidden>
+  <section aria-label="Preview">
+    <img id="playground-card" alt="">
+  </section>
+</div>
+
+<script type="module" src="./playground.js"></script>
+</body>
+</html>

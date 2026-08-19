@@ -13,6 +13,12 @@ Thumbs.db
 # the committed deliverable is scripts/build-uat-preview.ts, not this generated output.
 .uat-preview.html
 
+# Playground browser bundle (Phase 5, UX-05) — Actions-built and deployed to
+# GitHub Pages by .github/workflows/pages.yml; regenerable via
+# `npm run build:playground`. The committed deliverables are
+# scripts/build-playground.ts and src/playground/**, not this output.
+_site/
+
 # Local planning + agent tooling — deliberately untracked.
 # These were previously committed and were removed from the entire git history
 # on 2026-08-16; keeping them ignored is what stops them being re-added.
