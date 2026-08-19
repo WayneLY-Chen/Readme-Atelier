@@ -4,10 +4,356 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>readme-atelier — playground</title>
+<style>
+  /* ---- Design tokens (05-UI-SPEC.md Color / Typography / Spacing) ---- */
+  :root {
+    --paper:  #F7F1E7;
+    --ink:    #302A25;
+    --accent: #8B5E3C;
+    --rule:   #CDBDA8;
+    --muted:  #6B5B4B;
+    --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+    --font-mono:  ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-2xl: 48px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:  #1D1916;
+      --ink:    #EDE3D4;
+      --accent: #C99A70;
+      --rule:   #4A3F35;
+      --muted:  #A28E78;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--paper);
+    color: var(--ink);
+    /* page-shell/overflow: the body itself must never scroll horizontally,
+       at any width — every wide-content area (preview canvas, artifact
+       <pre> blocks) is its own overflow-x:auto container instead. */
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: var(--font-serif);
+    padding: var(--space-lg);
+  }
+
+  /* ---- Typography scale (P1-P4) ---- */
+  .p1 {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 13px;
+    line-height: 1.2;
+  }
+  .p2 { font-family: var(--font-serif); font-weight: 400; font-size: 16px; line-height: 1.5; }
+  .p3 { font-family: var(--font-serif); font-weight: 600; font-size: 20px; line-height: 1.2; margin: 0; }
+  h1.p4 { font-family: var(--font-serif); font-weight: 600; font-size: 32px; line-height: 1.2; margin: 0 0 var(--space-sm) 0; }
+
+  a { color: var(--accent); }
+
+  /* ---- Shared panel chassis — deliberately identical to core/svg.ts's
+     wrapSvg() formula: paper fill + 6px radius + 1px rule border. ---- */
+  .panel {
+    background: var(--paper);
+    border-radius: 6px;
+    border: 1px solid var(--rule);
+    padding: var(--space-lg);
+  }
+
+  /* ---- Focus ring — never removed without an equally visible replacement. ---- */
+  button:focus-visible,
+  select:focus-visible,
+  input:focus-visible,
+  a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---- 44x44 minimum touch target (Spacing Scale exception) ---- */
+  button, select, input[type="checkbox"] + label {
+    min-height: 44px;
+  }
+  button { min-width: 44px; }
+
+  /* ---- Reduced motion: every shell transition/animation is guarded. ---- */
+  .is-copy-success, .is-copy-fail { transition: background-color 0.2s, border-color 0.2s; }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+
+  #playground-boot-fallback {
+    max-width: 640px;
+    margin: var(--space-2xl) auto;
+  }
+
+  #playground-app[hidden],
+  #playground-boot-fallback[hidden] {
+    display: none;
+  }
+
+  header {
+    max-width: 900px;
+    margin: 0 auto var(--space-2xl) auto;
+  }
+
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  /* ---- Preview ---- */
+  #preview-section h2 { margin: 0 0 var(--space-md) 0; }
+
+  #preview-canvas {
+    position: relative;
+    /* UI-SPEC contract 5: the canvas background is fixed to the neutral
+       `rule` token regardless of which card (light or dark) is shown, so a
+       light card's own paper background never merges into the page's own
+       paper background and "disappear" at the edge. */
+    background: var(--rule);
+    border-radius: 6px;
+    border: 1px solid var(--rule);
+    padding: var(--space-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 160px;
+  }
+
+  #playground-card {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    transition: opacity 0.2s;
+  }
+
+  #preview-canvas.is-font-loading #playground-card {
+    opacity: 0.4;
+  }
+
+  #preview-loading-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--space-md);
+  }
+  #preview-canvas.is-font-loading #preview-loading-overlay {
+    display: flex;
+  }
+
+  #preview-error-panel {
+    padding: var(--space-lg);
+  }
+  #preview-error-panel[hidden] { display: none; }
+
+  #new-account-toggle {
+    display: inline-block;
+    margin-top: var(--space-sm);
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  /* ---- Axis control bar ---- */
+  #controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .control-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .control-label {
+    color: var(--muted);
+    min-width: 100px;
+  }
+
+  .control-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  .axis-btn {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: var(--space-sm) var(--space-md);
+    cursor: pointer;
+  }
+  .axis-btn.is-selected {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
+  }
+  .axis-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  #card-select { display: none; }
+
+  .font-error {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .font-error[hidden] { display: none; }
+
+  /* ---- Adoption Kit ---- */
+  #adoption-kit h2 { margin: 0 0 var(--space-sm) 0; }
+  #adoption-kit > .p2 { margin: 0 0 var(--space-lg) 0; color: var(--muted); }
+
+  #card-checklist {
+    border: none;
+    padding: 0;
+    margin: 0 0 var(--space-lg) 0;
+  }
+  #card-checklist legend { padding: 0 0 var(--space-sm) 0; }
+  .checklist-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+  }
+  .checklist-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+  .checklist-item label { font-family: var(--font-serif); font-size: 16px; }
+
+  #username-field {
+    margin-bottom: var(--space-lg);
+  }
+  #username-field label { display: block; margin-bottom: var(--space-xs); }
+  #username-input {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    padding: var(--space-sm);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--paper);
+    color: var(--ink);
+    width: 100%;
+    max-width: 320px;
+    /* username-input/long-text: the field itself clips/scrolls an
+       over-long paste rather than growing and pushing layout wide. */
+    overflow-x: auto;
+    text-overflow: ellipsis;
+  }
+  #username-format-hint {
+    color: var(--muted);
+    font-size: 14px;
+    margin: var(--space-xs) 0 0 0;
+  }
+  #username-format-hint[hidden] { display: none; }
+
+  .artifact-panel + .artifact-panel { margin-top: var(--space-lg); }
+  .artifact-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+    flex-wrap: wrap;
+  }
+  .artifact-title { flex: 1 1 auto; }
+  .artifact-hint {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 0 0 var(--space-sm) 0;
+  }
+  .artifact-hint[hidden] { display: none; }
+  .copy-btn {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 13px;
+    background: var(--paper);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: var(--space-sm) var(--space-md);
+    cursor: pointer;
+  }
+  .copy-btn.is-copy-success { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+  .copy-btn.is-copy-fail { border-style: dashed; border-color: var(--muted); }
+
+  .artifact-panel pre {
+    margin: 0;
+    padding: var(--space-md);
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    /* adoption-artifacts/overflow: each panel's <pre> is its own
+       horizontal-scroll container — the page body never scrolls. */
+    overflow-x: auto;
+  }
+  .artifact-panel code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    white-space: pre;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  footer {
+    max-width: 900px;
+    margin: var(--space-2xl) auto 0 auto;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  /* ---- Responsive floor (480-899px: two-row control bar) ---- */
+  @media (max-width: 899px) {
+    .control-group[data-axis="card"] { order: -1; flex-basis: 100%; }
+  }
+
+  /* ---- Responsive floor (<480px: Card degrades to native <select>) ---- */
+  @media (max-width: 479px) {
+    .control-group[data-axis="card"] .control-options { display: none; }
+    #card-select { display: block; width: 100%; min-height: 44px; }
+    .control-group { flex-direction: column; align-items: flex-start; }
+    .artifact-header { flex-direction: column; align-items: stretch; }
+  }
+</style>
 </head>
 <body>
-<h1>readme-atelier</h1>
-<p>Pick a card, a theme, a language — copy what you need.</p>
 
 <!--
   UI-SPEC page-shell contract: this fallback is VISIBLE BY DEFAULT (no
@@ -18,8 +364,8 @@
   visible) and a bundle runtime exception (main.ts's post-boot hide call is
   simply never reached).
 -->
-<div id="playground-boot-fallback">
-  <p>
+<div id="playground-boot-fallback" class="panel">
+  <p class="p2">
     This interactive playground needs JavaScript enabled. See the
     <a href="https://github.com/WayneLY-Chen/Readme-Atelier#adoption">README</a>
     for setup instructions instead.
@@ -27,9 +373,164 @@
 </div>
 
 <div id="playground-app" hidden>
-  <section aria-label="Preview">
-    <img id="playground-card" alt="">
-  </section>
+  <header>
+    <h1 class="p4">readme-atelier</h1>
+    <p class="p2">Pick a card, a theme, a language — copy what you need.</p>
+  </header>
+
+  <main>
+    <section id="preview-section" aria-label="Preview">
+      <h2 class="p3">Preview</h2>
+      <div id="preview-canvas">
+        <img id="playground-card" alt="">
+        <div id="preview-loading-overlay" class="p1" aria-hidden="true">
+          Loading Traditional Chinese type (~4 MB)&hellip;
+        </div>
+      </div>
+      <div id="preview-error-panel" class="panel" hidden role="alert">
+        <p class="p2">
+          Something went wrong rendering this preview. Please
+          <a href="https://github.com/WayneLY-Chen/Readme-Atelier/issues">open an issue</a>
+          describing what you were doing.
+        </p>
+      </div>
+      <a href="#" id="new-account-toggle" class="p2">Preview a brand-new account instead</a>
+    </section>
+
+    <section id="controls" aria-label="Card, theme, language, and appearance controls">
+      <div class="control-group" data-axis="card">
+        <span class="control-label p1">Card</span>
+        <div id="card-tabs" class="control-options" role="group" aria-label="Card">
+          <button type="button" class="axis-btn" data-value="almanac">Almanac</button>
+          <button type="button" class="axis-btn" data-value="editorial-stat-card">Editorial Stat Card</button>
+          <button type="button" class="axis-btn" data-value="the-graveyard">The Graveyard</button>
+          <button type="button" class="axis-btn" data-value="the-record">The Record</button>
+          <button type="button" class="axis-btn" data-value="masthead">Masthead</button>
+        </div>
+        <select id="card-select" aria-label="Card">
+          <option value="almanac">Almanac</option>
+          <option value="editorial-stat-card">Editorial Stat Card</option>
+          <option value="the-graveyard">The Graveyard</option>
+          <option value="the-record">The Record</option>
+          <option value="masthead">Masthead</option>
+        </select>
+      </div>
+
+      <div class="control-group" data-axis="theme">
+        <span class="control-label p1">Theme</span>
+        <div id="theme-buttons" class="control-options" role="group" aria-label="Theme">
+          <button type="button" class="axis-btn" data-value="editorial">Editorial</button>
+          <button type="button" class="axis-btn" data-value="dracula">Dracula</button>
+          <button type="button" class="axis-btn" data-value="nord">Nord</button>
+          <button type="button" class="axis-btn" data-value="tokyonight">Tokyonight</button>
+        </div>
+      </div>
+
+      <div class="control-group" data-axis="language">
+        <span class="control-label p1">Language</span>
+        <div id="language-buttons" class="control-options" role="group" aria-label="Language">
+          <button type="button" class="axis-btn" data-value="en">EN</button>
+          <button type="button" class="axis-btn" data-value="zh-TW">中文</button>
+        </div>
+        <span id="zh-font-error" class="font-error" hidden>
+          Couldn't load the Chinese type file.
+          <button type="button" id="zh-font-retry" class="copy-btn">Retry</button>
+        </span>
+      </div>
+
+      <div class="control-group" data-axis="appearance">
+        <span class="control-label p1">Card Appearance</span>
+        <div id="appearance-buttons" class="control-options" role="group" aria-label="Card Appearance">
+          <button type="button" class="axis-btn" data-value="light">Light</button>
+          <button type="button" class="axis-btn" data-value="dark">Dark</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="adoption-kit" aria-label="Get your cards">
+      <h2 class="p3">Get your cards</h2>
+      <p class="p2">
+        These update live as you change the controls above. Save the first two files to your
+        repo, then paste the third into your README.
+      </p>
+
+      <fieldset id="card-checklist">
+        <legend class="p1">Cards to include</legend>
+        <div class="checklist-options">
+          <div class="checklist-item">
+            <input type="checkbox" id="check-almanac" data-value="almanac" checked>
+            <label for="check-almanac" class="p2">Almanac</label>
+          </div>
+          <div class="checklist-item">
+            <input type="checkbox" id="check-editorial-stat-card" data-value="editorial-stat-card" checked>
+            <label for="check-editorial-stat-card" class="p2">Editorial Stat Card</label>
+          </div>
+          <div class="checklist-item">
+            <input type="checkbox" id="check-the-graveyard" data-value="the-graveyard" checked>
+            <label for="check-the-graveyard" class="p2">The Graveyard</label>
+          </div>
+          <div class="checklist-item">
+            <input type="checkbox" id="check-the-record" data-value="the-record" checked>
+            <label for="check-the-record" class="p2">The Record</label>
+          </div>
+          <div class="checklist-item">
+            <input type="checkbox" id="check-masthead" data-value="masthead" checked>
+            <label for="check-masthead" class="p2">Masthead (structural — lists your other enabled cards)</label>
+          </div>
+        </div>
+      </fieldset>
+
+      <p id="empty-cards-hint" class="artifact-hint" hidden>
+        No cards selected — this <code>widgets.yml</code> would publish zero cards. Check at
+        least one above to get something to embed.
+      </p>
+
+      <div id="username-field">
+        <label for="username-input" class="p1">GitHub username</label>
+        <input type="text" id="username-input" placeholder="octocat" autocomplete="off" spellcheck="false">
+        <p id="username-format-hint" class="p2" hidden>
+          That doesn't look like a valid GitHub username, but you can still copy the example below.
+        </p>
+      </div>
+
+      <div class="artifact-panel panel">
+        <div class="artifact-header">
+          <span class="artifact-title p1">① Workflow — save as .github/workflows/readme-atelier.yml</span>
+          <button type="button" id="copy-workflow" class="copy-btn" aria-label="Copy workflow YAML">Copy</button>
+        </div>
+        <pre><code id="artifact-workflow" class="p1"></code></pre>
+      </div>
+
+      <div class="artifact-panel panel">
+        <div class="artifact-header">
+          <span class="artifact-title p1">② Config — save as widgets.yml</span>
+          <button type="button" id="copy-config" class="copy-btn" aria-label="Copy widgets.yml config">Copy</button>
+        </div>
+        <pre><code id="artifact-config" class="p1"></code></pre>
+      </div>
+
+      <div class="artifact-panel panel">
+        <div class="artifact-header">
+          <span class="artifact-title p1">③ Embed snippet — paste into your README.md</span>
+          <button type="button" id="copy-snippet" class="copy-btn" aria-label="Copy embed snippet">Copy</button>
+        </div>
+        <p id="snippet-example-hint" class="artifact-hint">
+          Showing an example — enter your GitHub username above to personalize this snippet.
+        </p>
+        <pre><code id="artifact-snippet" class="p1"></code></pre>
+      </div>
+
+      <div id="copy-status" class="sr-only" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer class="p2">
+    <p>
+      <a href="https://github.com/WayneLY-Chen/Readme-Atelier">readme-atelier</a> —
+      scheduled workflows are disabled after 60 days of repository inactivity; see the README
+      for the remedy.
+    </p>
+  </footer>
 </div>
 
 <script type="module" src="./playground.js"></script>
