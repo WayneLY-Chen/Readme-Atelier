@@ -319,9 +319,25 @@
        horizontal-scroll container — the page body never scrolls. */
     overflow-x: auto;
   }
+  /* ---- Adoption Kit code content — deliberately NOT `.p1` ----
+     P1's `text-transform: uppercase` is correct for short fixed labels, but
+     these three <code> elements hold the actual copy-pasteable file
+     content (workflow YAML / widgets.yml / embed-snippet HTML), which is
+     case-sensitive. Chromium's native Ctrl+C on a text-transform:uppercase
+     selection copies the RENDERED (uppercase) text rather than the
+     underlying DOM text — confirmed against this exact build via a real
+     headless-Chrome Selection.toString() probe. Applying `.p1` here would
+     make the copy-feedback contract's Selection/Range auto-select fallback
+     (05-UI-SPEC.md's copy-feedback table, failure row) silently hand the
+     visitor invalid uppercase YAML instead of the working file it must be.
+     Font family/size/line-height are kept identical to P1 (same visual
+     register — mono, small, tight); only the case-mangling transform and
+     letter-spacing (also a label-only affordance) are dropped. */
   .artifact-panel code {
     font-family: var(--font-mono);
+    font-weight: 600;
     font-size: 13px;
+    line-height: 1.2;
     white-space: pre;
   }
 
@@ -505,7 +521,7 @@
           <span class="artifact-title p1">① Workflow — save as .github/workflows/readme-atelier.yml</span>
           <button type="button" id="copy-workflow" class="copy-btn" aria-label="Copy workflow YAML">Copy</button>
         </div>
-        <pre><code id="artifact-workflow" class="p1"></code></pre>
+        <pre><code id="artifact-workflow"></code></pre>
       </div>
 
       <div class="artifact-panel panel">
@@ -513,7 +529,7 @@
           <span class="artifact-title p1">② Config — save as widgets.yml</span>
           <button type="button" id="copy-config" class="copy-btn" aria-label="Copy widgets.yml config">Copy</button>
         </div>
-        <pre><code id="artifact-config" class="p1"></code></pre>
+        <pre><code id="artifact-config"></code></pre>
       </div>
 
       <div class="artifact-panel panel">
@@ -524,7 +540,7 @@
         <p id="snippet-example-hint" class="artifact-hint">
           Showing an example — enter your GitHub username above to personalize this snippet.
         </p>
-        <pre><code id="artifact-snippet" class="p1"></code></pre>
+        <pre><code id="artifact-snippet"></code></pre>
       </div>
 
       <div id="copy-status" class="sr-only" role="status" aria-live="polite"></div>
