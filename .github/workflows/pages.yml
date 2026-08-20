@@ -1,0 +1,54 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+    # Pitfall 9 (05-RESEARCH.md): without this filter, every push to main
+    # triggers both cards.yml and pages.yml, wasting Actions minutes on a
+    # playground rebuild that has nothing to do with the change. Only rebuild
+    # when the playground's own inputs actually moved.
+    paths:
+      - "src/**"
+      - "assets/**"
+      - "package.json"
+      - "package-lock.json"
+  # Manual deploy hatch — also the button H-1 uses if the paths filter above
+  # ever suppresses a run the operator wants anyway.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write # to deploy to Pages
+  id-token: write # to verify the deployment originates from an appropriate source
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Single build authority: scripts/build-playground.ts owns every esbuild
+      # flag, the index.html copy, and the font copy — this workflow must
+      # never re-declare bundler settings inline (05-06-PLAN.md prohibition).
+      - run: npm run build:playground
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
