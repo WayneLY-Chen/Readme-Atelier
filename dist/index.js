@@ -48479,7 +48479,7 @@ __webpack_async_result__();
 /* harmony export */   g2: () => (/* binding */ ConfigValidationError),
 /* harmony export */   xN: () => (/* binding */ formatConfigErrors)
 /* harmony export */ });
-/* unused harmony export parseConfig */
+/* unused harmony exports parseConfig, configToYaml */
 /* harmony import */ var yaml__WEBPACK_IMPORTED_MODULE_0__ = __nccwpck_require__(8815);
 /* harmony import */ var zod__WEBPACK_IMPORTED_MODULE_2__ = __nccwpck_require__(2314);
 /* harmony import */ var _registry_js__WEBPACK_IMPORTED_MODULE_1__ = __nccwpck_require__(4692);
@@ -96562,9 +96562,22 @@ class SizeBudgetError extends Error {
  * Called twice per rendered file (once against SOFT_SIZE_BUDGET_BYTES, once
  * against HARD_SIZE_CANARY_BYTES) by the CLI/Action before any file is
  * written — any failure means nothing gets written at all.
+ *
+ * Uses `TextEncoder` rather than `Buffer.byteLength` — this function runs
+ * inside `renderAllCards()`, which is now also the playground's browser-side
+ * rendering path (D-01: same production pipeline, no parallel renderer).
+ * `Buffer` is a Node global with no browser equivalent and esbuild's
+ * `platform: "browser"` build does not polyfill it, so the Node-only form
+ * threw `ReferenceError: Buffer is not defined` at runtime in a real
+ * browser — invisible to `tsc`/`vitest` because both run under Node, and
+ * invisible to the bundle's own sandbox-discipline test because that test
+ * only checks for `require(`/Node-builtin *import specifiers*, not runtime
+ * globals referenced without an import. `TextEncoder` is a standard global
+ * in every browser and in Node 11+, so this one line works unmodified on
+ * both sides of D-01's "same code, two runtimes" contract.
  */
 function sizeGuard(svg, label, budgetBytes) {
-    const bytes = Buffer.byteLength(svg, "utf8");
+    const bytes = new TextEncoder().encode(svg).length;
     if (bytes > budgetBytes) {
         throw new SizeBudgetError(label, bytes, budgetBytes);
     }
