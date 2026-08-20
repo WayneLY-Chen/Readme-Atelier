@@ -12,6 +12,14 @@ on:
       - "assets/**"
       - "package.json"
       - "package-lock.json"
+      # scripts/build-playground.ts owns every bundler flag, the index.html
+      # copy and the font copy — editing it changes the deployed site even
+      # when nothing under src/ moved, so it must trigger a redeploy too.
+      # Omitting it meant a build-script-only change silently kept serving
+      # the previous site until someone noticed and hit Run workflow.
+      - "scripts/**"
+      # A change to this file's own build/deploy steps should redeploy as well.
+      - ".github/workflows/pages.yml"
   # Manual deploy hatch — also the button H-1 uses if the paths filter above
   # ever suppresses a run the operator wants anyway.
   workflow_dispatch:
