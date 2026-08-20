@@ -1,3 +1,4 @@
+// H-3 演練用的無害註解：刻意不重建 dist/，用來證明 release.yml 的 stale-dist 防呆會紅燈。
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
