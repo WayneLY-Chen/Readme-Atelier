@@ -4,6 +4,27 @@ on:
     branches: [main]
   pull_request:
 jobs:
+  # Until this job existed, nothing on CI ran the test suite at all - ci.yml
+  # only checked dist/ staleness, so whether the 495 tests passed depended
+  # entirely on each developer remembering to run them locally. CONTRIBUTING.md
+  # tells contributors to run `npm test`; this is what actually holds them to it
+  # on a pull request.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      # No GITHUB_TOKEN is injected on purpose: the whole suite must stay
+      # hermetic. A test that only passes when a token happens to be present in
+      # the environment is worse than no test - it reports green for the wrong
+      # reason (see src/cli.e2e.test.ts's header comment).
+      - run: npm test
+
   dist-staleness:
     runs-on: ubuntu-latest
     steps:
