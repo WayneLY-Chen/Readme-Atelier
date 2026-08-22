@@ -388,19 +388,67 @@ export async function fetchProfileData(
 }
 
 /**
+ * Optional context for `formatFetchFailureMessage`'s GAP-05-01 org-repo
+ * guidance. Callers construct this from `resolveProfileLogin`'s own return
+ * shape (`core/profile-login.ts`) — `login` is whatever was actually passed
+ * to `fetchProfileData`, `wasInferredFromRepoOwner` is true only when no
+ * explicit `profile-login` input was supplied.
+ */
+export interface FetchFailureLoginHint {
+  login: string;
+  wasInferredFromRepoOwner: boolean;
+}
+
+/**
+ * GitHub's own GraphQL error text for a login that does not resolve to a
+ * User — the exact, un-actionable message an org-repo adopter hits under
+ * GAP-05-01 (`user(login: $login)` can only ever resolve a User, never an
+ * Organization). Matched narrowly so unrelated failures (rate limits,
+ * network errors, a genuinely-typo'd explicit profile-login) never get this
+ * specific advice appended.
+ */
+const USER_LOGIN_UNRESOLVED_PATTERN = /Could not resolve to a User with the login of/;
+
+/**
  * Formats a fetch failure into the UI-SPEC "Error state" four-line message.
  * Reads ONLY `error.message` — never any other property of `error`
  * (`@octokit/graphql`'s `GraphqlResponseError` carries the full request
  * object, including the constructed `Authorization` header, on `.request`;
  * serializing the whole error object would leak the token into Action logs —
  * threat T-02-01).
+ *
+ * `loginHint` is optional and additive (GAP-05-01): existing callers that
+ * omit it (e.g. `src/cli.ts`, which always requires an explicit
+ * `GITHUB_LOGIN` — there is no repo-owner inference to guide about) see
+ * byte-identical output to before this parameter existed. When supplied AND
+ * the login was inferred from the repo owner (never explicitly configured)
+ * AND the failure text matches GitHub's User-resolution error, an
+ * actionable paragraph is appended naming the likely cause (the repo is
+ * org-owned) and the exact fix (add a `profile-login` input). An explicitly
+ * configured `profile-login` that still fails to resolve is a genuinely
+ * different problem (probably a typo) and gets no unrelated org-repo advice.
  */
-export function formatFetchFailureMessage(error: unknown): string {
+export function formatFetchFailureMessage(error: unknown, loginHint?: FetchFailureLoginHint): string {
   const message = error instanceof Error ? error.message : String(error);
-  return [
+  const lines = [
     "✗ Failed to fetch live profile data from GitHub's GraphQL API",
     `  ${message}`,
     "  Point cost for this attempt (if available) was logged above.",
     "  This may be a temporary rate-limit condition — see GITHUB_STEP_SUMMARY.",
-  ].join("\n");
+  ];
+
+  if (loginHint?.wasInferredFromRepoOwner && USER_LOGIN_UNRESOLVED_PATTERN.test(message)) {
+    lines.push(
+      "",
+      `  This repository's owner ("${loginHint.login}") could not be resolved as a GitHub User — it`,
+      "  is likely an Organization instead. GitHub's GraphQL API can only look up a User's profile",
+      "  data, never an Organization's, so the repository owner cannot be queried directly.",
+      "  Fix: add an optional profile-login input to your workflow file, naming the GitHub user",
+      "  whose profile these cards should show, e.g.:",
+      "    with:",
+      "      profile-login: <your-github-username>",
+    );
+  }
+
+  return lines.join("\n");
 }

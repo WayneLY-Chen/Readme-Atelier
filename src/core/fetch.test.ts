@@ -561,3 +561,38 @@ describe("formatFetchFailureMessage — never leaks error.request/headers (T-02-
     expect(message).toContain("API rate limit exceeded for installation.");
   });
 });
+
+describe("formatFetchFailureMessage — GAP-05-01 org-repo actionable guidance", () => {
+  it("appends profile-login guidance when the login was inferred from the repo owner AND the failure is GitHub's User-resolution error", () => {
+    const error = new Error("Could not resolve to a User with the login of 'SomeOrg'.");
+    const message = formatFetchFailureMessage(error, { login: "SomeOrg", wasInferredFromRepoOwner: true });
+
+    expect(message).toContain("SomeOrg");
+    expect(message).toContain("profile-login");
+    expect(message).toContain("Organization");
+    // The original four-line message must still be present verbatim underneath the addition.
+    expect(message).toContain("Could not resolve to a User with the login of 'SomeOrg'.");
+  });
+
+  it("does NOT append guidance when profile-login was explicitly configured, even for the identical error text (probably a typo, not an org-repo problem)", () => {
+    const error = new Error("Could not resolve to a User with the login of 'typo-user'.");
+    const message = formatFetchFailureMessage(error, { login: "typo-user", wasInferredFromRepoOwner: false });
+
+    expect(message).not.toContain("profile-login");
+  });
+
+  it("does NOT append guidance for an unrelated error even when the login was inferred", () => {
+    const error = new Error("API rate limit exceeded for installation.");
+    const message = formatFetchFailureMessage(error, { login: "SomeOrg", wasInferredFromRepoOwner: true });
+
+    expect(message).not.toContain("profile-login");
+  });
+
+  it("omits guidance entirely when no loginHint is passed — existing callers (src/cli.ts) see unchanged output", () => {
+    const error = new Error("Could not resolve to a User with the login of 'SomeOrg'.");
+    const message = formatFetchFailureMessage(error);
+
+    expect(message).not.toContain("profile-login");
+    expect(message).not.toContain("Organization");
+  });
+});
