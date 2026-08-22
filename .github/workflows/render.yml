@@ -7,6 +7,14 @@ on:
         type: string
         required: false
         default: "widgets.yml"
+      profile-login:
+        description: >-
+          GitHub username whose profile data the cards should query. Optional
+          on personal repositories (defaults to the repository owner);
+          required in practice on organization-owned repositories - see the
+          README's "Organization Repositories" section.
+        type: string
+        required: false
 
 # Declared here only as documentation of the minimum requirement. The
 # permission chain can only be downgraded, never elevated, by a called
@@ -32,3 +40,4 @@ jobs:
         with:
           github-token: ${{ github.token }}
           config-path: ${{ inputs.config-path }}
+          profile-login: ${{ inputs.profile-login }}
