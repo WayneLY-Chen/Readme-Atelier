@@ -48306,11 +48306,13 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony import */ var _core_embed_snippet_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(7402);
 /* harmony import */ var _core_fetch_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(6657);
 /* harmony import */ var _core_pipeline_js__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(6924);
+/* harmony import */ var _core_profile_login_js__WEBPACK_IMPORTED_MODULE_13__ = __nccwpck_require__(198);
 /* harmony import */ var _core_publish_js__WEBPACK_IMPORTED_MODULE_8__ = __nccwpck_require__(1677);
 /* harmony import */ var _node_fonts_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(514);
 /* harmony import */ var _node_point_cost_js__WEBPACK_IMPORTED_MODULE_10__ = __nccwpck_require__(9162);
 /* harmony import */ var _node_step_summary_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(9917);
 /* harmony import */ var _widgets_all_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(9657);
+
 
 
 
@@ -48355,15 +48357,32 @@ async function run() {
     // current workflow run belongs to (RESEARCH.md's Security Domain
     // analysis) — T-01-11's mitigation for "force-push targets the wrong
     // repo" rests on reading it directly, never accepting an override input.
-    // Read here (moved up from just-before-publish in Phase 1): the shared
-    // fetch below needs `owner` (the repo-owner segment) as its `login`
-    // argument, and that fetch now happens well before publish.
+    // `owner` below is ONLY ever used as the publish target (and the embed
+    // snippet's URL, which points at that same published location) — it is
+    // NEVER overridable by any input, and nothing below changes that.
     const repo = process.env.GITHUB_REPOSITORY;
     if (!repo) {
         _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .setFailed */ .C1("GITHUB_REPOSITORY is not set — refusing to publish without a known target.");
         return;
     }
     const owner = repo.split("/")[0];
+    // Profile-login resolution (GAP-05-01) — a DIFFERENT question from the
+    // publish target above, even though it defaults to the same value.
+    // `owner` (T-01-11's protected boundary, immediately above, untouched by
+    // this block) answers "where do rendered cards get published?" This
+    // answers "whose GitHub profile does the shared fetch query?" On a
+    // personal repository those two answers happen to coincide (you own both
+    // the repo and the profile), but on an organization-owned repository they
+    // diverge: `GITHUB_REPOSITORY`'s owner segment is the Organization, and
+    // GitHub's GraphQL `user(login: $login)` can only ever resolve a User,
+    // never an Organization — so every card needing live data fails on an org
+    // repo unless the real user is named explicitly. The OPTIONAL
+    // `profile-login` input (action.yml) lets an adopter do exactly that; when
+    // omitted, this falls back to `owner`, preserving today's exact behavior
+    // for every existing workflow file — this input is additive, never a
+    // relaxation of T-01-11's publish-target guarantee above.
+    const profileLoginInput = _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .getInput */ .V4("profile-login");
+    const { login: profileLogin, wasInferredFromRepoOwner } = (0,_core_profile_login_js__WEBPACK_IMPORTED_MODULE_13__/* .resolveProfileLogin */ .f)(profileLoginInput, owner);
     const yamlText = (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.existsSync)(configPath) ? (0,node_fs__WEBPACK_IMPORTED_MODULE_0__.readFileSync)(configPath, "utf8") : undefined;
     let config;
     let usedDefault;
@@ -48409,10 +48428,10 @@ async function run() {
     let data;
     let pointCost;
     try {
-        ({ data, pointCost } = await (0,_core_pipeline_js__WEBPACK_IMPORTED_MODULE_7__/* .fetchSharedData */ .Oj)(cards, token, owner, now));
+        ({ data, pointCost } = await (0,_core_pipeline_js__WEBPACK_IMPORTED_MODULE_7__/* .fetchSharedData */ .Oj)(cards, token, profileLogin, now));
     }
     catch (error) {
-        _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .setFailed */ .C1((0,_core_fetch_js__WEBPACK_IMPORTED_MODULE_6__/* .formatFetchFailureMessage */ .BX)(error));
+        _actions_core__WEBPACK_IMPORTED_MODULE_3__/* .setFailed */ .C1((0,_core_fetch_js__WEBPACK_IMPORTED_MODULE_6__/* .formatFetchFailureMessage */ .BX)(error, { login: profileLogin, wasInferredFromRepoOwner }));
         return;
     }
     // D-04: dual-surface point-cost log, immediately after a successful fetch.
@@ -50601,21 +50620,45 @@ async function fetchProfileData(capabilities, token, login, includeForks, calend
     return { data, pointCost: rateLimit.cost };
 }
 /**
+ * GitHub's own GraphQL error text for a login that does not resolve to a
+ * User — the exact, un-actionable message an org-repo adopter hits under
+ * GAP-05-01 (`user(login: $login)` can only ever resolve a User, never an
+ * Organization). Matched narrowly so unrelated failures (rate limits,
+ * network errors, a genuinely-typo'd explicit profile-login) never get this
+ * specific advice appended.
+ */
+const USER_LOGIN_UNRESOLVED_PATTERN = /Could not resolve to a User with the login of/;
+/**
  * Formats a fetch failure into the UI-SPEC "Error state" four-line message.
  * Reads ONLY `error.message` — never any other property of `error`
  * (`@octokit/graphql`'s `GraphqlResponseError` carries the full request
  * object, including the constructed `Authorization` header, on `.request`;
  * serializing the whole error object would leak the token into Action logs —
  * threat T-02-01).
+ *
+ * `loginHint` is optional and additive (GAP-05-01): existing callers that
+ * omit it (e.g. `src/cli.ts`, which always requires an explicit
+ * `GITHUB_LOGIN` — there is no repo-owner inference to guide about) see
+ * byte-identical output to before this parameter existed. When supplied AND
+ * the login was inferred from the repo owner (never explicitly configured)
+ * AND the failure text matches GitHub's User-resolution error, an
+ * actionable paragraph is appended naming the likely cause (the repo is
+ * org-owned) and the exact fix (add a `profile-login` input). An explicitly
+ * configured `profile-login` that still fails to resolve is a genuinely
+ * different problem (probably a typo) and gets no unrelated org-repo advice.
  */
-function formatFetchFailureMessage(error) {
+function formatFetchFailureMessage(error, loginHint) {
     const message = error instanceof Error ? error.message : String(error);
-    return [
+    const lines = [
         "✗ Failed to fetch live profile data from GitHub's GraphQL API",
         `  ${message}`,
         "  Point cost for this attempt (if available) was logged above.",
         "  This may be a temporary rate-limit condition — see GITHUB_STEP_SUMMARY.",
-    ].join("\n");
+    ];
+    if (loginHint?.wasInferredFromRepoOwner && USER_LOGIN_UNRESOLVED_PATTERN.test(message)) {
+        lines.push("", `  This repository's owner ("${loginHint.login}") could not be resolved as a GitHub User — it`, "  is likely an Organization instead. GitHub's GraphQL API can only look up a User's profile", "  data, never an Organization's, so the repository owner cannot be queried directly.", "  Fix: add an optional profile-login input to your workflow file, naming the GitHub user", "  whose profile these cards should show, e.g.:", "    with:", "      profile-login: <your-github-username>");
+    }
+    return lines.join("\n");
 }
 
 
@@ -97010,6 +97053,31 @@ function renderAllCards(cards, data, globalOpts, themes) {
         const { title, desc } = card.widget.describe(data, opts);
         return { id: card.id, light, dark, title, desc };
     });
+}
+
+
+/***/ }),
+
+/***/ 198:
+/***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
+
+/* harmony export */ __nccwpck_require__.d(__webpack_exports__, {
+/* harmony export */   f: () => (/* binding */ resolveProfileLogin)
+/* harmony export */ });
+/**
+ * `profileLoginInput` is expected to already be the raw
+ * `core.getInput("profile-login")` return value — empty string when the
+ * input was not supplied, matching every other optional input in this
+ * project's Action manifest. This function itself never touches
+ * `@actions/core`/`process.env`/`fs`, keeping it a plain, hermetically
+ * testable string function with no I/O.
+ */
+function resolveProfileLogin(profileLoginInput, repoOwner) {
+    const trimmed = profileLoginInput.trim();
+    if (trimmed.length > 0) {
+        return { login: trimmed, wasInferredFromRepoOwner: false };
+    }
+    return { login: repoOwner, wasInferredFromRepoOwner: true };
 }
 
 
