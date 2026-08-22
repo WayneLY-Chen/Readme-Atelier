@@ -114,8 +114,16 @@ UTF-8」，而不是丟一個看不懂的 schema 錯誤。
 |---|---|---|---|
 | `github-token` | 是 | — | 傳 `${{ github.token }}` 即可，不需要個人存取權杖 |
 | `config-path` | 否 | `widgets.yml` | 設定檔位置 |
+| `profile-login` | 否 | 沿用 repo 擁有者 | 卡片要查詢**誰**的 GitHub profile 資料。個人 repo 可省略；組織擁有的 repo 實務上必填——見 [README.zh-TW.md](../README.zh-TW.md) 的「組織 Repository」一節（CJK 標題錨點不穩定，故不直接連結該段落） |
 
 workflow 必須給 `permissions: contents: write`，否則 action 推送到 `output` 分支時會拿到 403。
+
+**`profile-login` 與發布目標是兩件事。** action 推送卡片到哪個 repo 的 `output` 分支，一律由
+`GITHUB_REPOSITORY` 決定，不接受任何 input 覆寫（這是刻意的安全設計，防止推到錯的 repo）。
+`profile-login` 只影響「要抓誰的 GitHub 資料來畫卡片」，兩者互不影響。組織擁有的 repo，owner
+是組織本身，而 GitHub 的 GraphQL API 只能查得到使用者（User）的 profile，查不到組織
+（Organization）的——所以除了 `almanac` 以外，任何需要即時資料的卡片在組織 repo 上都會失敗，
+除非明確指定 `profile-login: <你的 GitHub 使用者名稱>`。
 
 ## 幾件值得知道的事
 
