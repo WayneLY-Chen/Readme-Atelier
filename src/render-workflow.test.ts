@@ -71,6 +71,17 @@ describe("render.yml — the published @v1 reusable workflow contract", () => {
     expect(renderText).toContain("config-path");
     expect(renderText).toContain("WayneLY-Chen/Readme-Atelier@v1");
   });
+
+  it("declares a profile-login input, optional, with no default (GAP-05-01)", () => {
+    const profileLogin = render.on?.workflow_call?.inputs?.["profile-login"];
+    expect(profileLogin).toBeDefined();
+    expect(profileLogin?.required).toBe(false);
+    expect(profileLogin?.default).toBeUndefined();
+  });
+
+  it("wires profile-login through to the action as an expression (GAP-05-01)", () => {
+    expect(renderText).toContain("profile-login: ${{ inputs.profile-login }}");
+  });
 });
 
 /**
