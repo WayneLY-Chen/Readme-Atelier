@@ -156,10 +156,37 @@ the table above is this project's complete English coverage of the same fields.
 
 ## Organization Repositories
 
-New organization-owned repositories often set the default `GITHUB_TOKEN` permissions to
-read-only. That default is a **starting point, not a ceiling** — GitHub's own docs put it this
-way: *"If the default permissions for the `GITHUB_TOKEN` are restrictive, you may have to elevate
-the permissions."* That is exactly what step 1's template does by declaring
+**Getting publish permissions right does not automatically fix cards that need live GitHub data.**
+Permissions only govern *publishing* rendered cards to the `output` branch — a separate step from
+*fetching* the profile data those cards render. By default the fetch queries whichever account
+owns the repository, and GitHub's GraphQL API can only look up a **User**'s profile, never an
+**Organization**'s. On an organization-owned repository the owner *is* the organization, so every
+card beyond `almanac` (the only card needing zero live data) fails, even with permissions fully
+correct:
+
+> ✗ Failed to fetch live profile data from GitHub's GraphQL API
+>   Could not resolve to a User with the login of '\<your-org\>'.
+>   ...
+
+Fix it with the optional `profile-login` input, naming the GitHub **user** whose profile the
+cards should actually show:
+
+```yaml
+jobs:
+  render:
+    uses: WayneLY-Chen/Readme-Atelier/.github/workflows/render.yml@v1
+    with:
+      profile-login: <your-github-username>
+```
+
+Personal repositories never need this — the repository owner already is the right account, and
+leaving `profile-login` unset keeps today's exact behavior.
+
+Separately, new organization-owned repositories often set the default `GITHUB_TOKEN` permissions
+to read-only, which blocks *publishing* even once the profile-login above is sorted out. That
+default is a **starting point, not a ceiling** — GitHub's own docs put it this way: *"If the
+default permissions for the `GITHUB_TOKEN` are restrictive, you may have to elevate the
+permissions."* That is exactly what step 1's template does by declaring
 `permissions: contents: write` in your own workflow file — permissions can only be **downgraded**,
 never elevated, by a called reusable workflow, so this declaration has to live in *your* file, not
 in `render.yml`.

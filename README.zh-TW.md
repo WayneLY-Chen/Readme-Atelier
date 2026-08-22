@@ -147,7 +147,31 @@ cards:
 
 ## 組織 Repository
 
-新建立的組織擁有 repository，常把預設的 `GITHUB_TOKEN` 權限設成唯讀。這個預設是**起點，不是
+**權限設對了，不代表需要即時資料的卡片就會動。** 權限只管**發布**——把渲染好的卡片推到
+`output` 分支；那是完全獨立於**取資料**這一步的另一件事。預設情況下，取資料查的是這個 repo
+的擁有者，而 GitHub 的 GraphQL API 只能查得到**使用者（User）**的 profile，查不到**組織
+（Organization）**的。組織擁有的 repository，owner 本身就是組織，所以除了 `almanac`（唯一
+零 API 呼叫的卡片）以外的每一張卡，即使權限設定完全正確，還是會失敗：
+
+> ✗ Failed to fetch live profile data from GitHub's GraphQL API
+>   Could not resolve to a User with the login of '\<你的組織名稱\>'.
+>   ...
+
+修法是加上選用的 `profile-login` input，指名卡片實際上要顯示**誰**（一個真人帳號）的 profile：
+
+```yaml
+jobs:
+  render:
+    uses: WayneLY-Chen/Readme-Atelier/.github/workflows/render.yml@v1
+    with:
+      profile-login: <你的 GitHub 使用者名稱>
+```
+
+個人 repo 完全不需要這個——repo 擁有者本身就是對的帳號，不設 `profile-login` 就是維持過去
+的行為，不受影響。
+
+另外一件事：新建立的組織擁有 repository，常把預設的 `GITHUB_TOKEN` 權限設成唯讀，這會擋住
+**發布**這一步——即使上面的 profile-login 已經處理好了也一樣。這個預設是**起點，不是
 上限**——GitHub 官方文件原文這麼寫：*「If the default permissions for the `GITHUB_TOKEN` are
 restrictive, you may have to elevate the permissions.」*（若 `GITHUB_TOKEN` 的預設權限太嚴格，
 你可能需要自行拉高權限。）步驟 1 的範本正是這麼做的——在你自己的 workflow 檔裡宣告
