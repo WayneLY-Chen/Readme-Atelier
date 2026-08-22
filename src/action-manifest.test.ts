@@ -70,6 +70,12 @@ describe("action.yml", () => {
     expect(manifest.inputs["github-token"]?.required).toBe(true);
     expect(manifest.inputs["config-path"]?.default).toBe("widgets.yml");
   });
+
+  it("declares profile-login as optional with no default (GAP-05-01: fallback is code-computed from the repo owner, not a manifest default)", () => {
+    expect(manifest.inputs["profile-login"]).toBeDefined();
+    expect(manifest.inputs["profile-login"]?.required).toBe(false);
+    expect(manifest.inputs["profile-login"]?.default).toBeUndefined();
+  });
 });
 
 /**
@@ -125,5 +131,37 @@ describe("action-entry.ts — Plan 02-03 pipeline wiring (DATA-01/02/07)", () =>
 
   it("formats fetch failures via formatFetchFailureMessage() rather than serializing the raw error", () => {
     expect(entrySource).toContain("formatFetchFailureMessage(");
+  });
+});
+
+/**
+ * GAP-05-01 source-level wiring proof, same "read the source, grep for the
+ * identifier" style as the block above. `action-entry.ts`'s own top-level
+ * `await run()` makes it unsafe to import directly in a test (it would
+ * execute a real Action run) — `resolveProfileLogin`'s actual behavior is
+ * unit-tested directly in `src/core/profile-login.test.ts`; this only
+ * proves action-entry.ts calls it, reads the new input, and keeps the
+ * unrelated `owner`/`GITHUB_REPOSITORY` publish-target read (T-01-11)
+ * completely separate from it.
+ */
+describe("action-entry.ts — GAP-05-01 profile-login wiring", () => {
+  const entrySource = readFileSync(path.join(repoRoot, "src", "action-entry.ts"), "utf8");
+
+  it("reads the profile-login input and resolves it via resolveProfileLogin()", () => {
+    expect(entrySource).toContain('core.getInput("profile-login")');
+    expect(entrySource).toContain("resolveProfileLogin(");
+  });
+
+  it("still derives owner exclusively from GITHUB_REPOSITORY — T-01-11's publish-target boundary is untouched", () => {
+    expect(entrySource).toContain("process.env.GITHUB_REPOSITORY");
+    expect(entrySource).toContain('const owner = repo.split("/")[0];');
+  });
+
+  it("passes the resolved profileLogin (not owner) into fetchSharedData()", () => {
+    expect(entrySource).toContain("fetchSharedData(cards, token, profileLogin, now)");
+  });
+
+  it("passes a loginHint into formatFetchFailureMessage() on fetch failure, so org-repo guidance can be appended", () => {
+    expect(entrySource).toMatch(/formatFetchFailureMessage\(error,\s*\{\s*login:\s*profileLogin/);
   });
 });
