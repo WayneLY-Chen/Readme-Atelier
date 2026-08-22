@@ -21,6 +21,16 @@ inputs:
       Path to this repository's widgets.yml. Defaults to widgets.yml at the
       repository root. If the file does not exist, built-in defaults are used
       and printed to the run's log and job summary.
+  profile-login:
+    required: false
+    description: >-
+      GitHub username whose profile data (contributions, stars, repositories)
+      the cards should query. Optional on repositories owned by a personal
+      account - defaults to the repository owner, same as before this input
+      existed. Required in practice on an organization-owned repository:
+      GitHub's GraphQL API can only look up a User's profile, never an
+      Organization's, so the repository owner cannot be queried directly in
+      that case - set this to your own GitHub username instead.
 runs:
   using: "node24"
   main: "dist/index.js"
