@@ -6,6 +6,7 @@ import { ConfigValidationError, formatConfigErrors, loadConfigOrDefault } from "
 import { buildEmbedSnippet } from "./core/embed-snippet.js";
 import { formatFetchFailureMessage } from "./core/fetch.js";
 import { fetchSharedData, renderAllCards, resolveCards, resolveTheme } from "./core/pipeline.js";
+import { resolveProfileLogin } from "./core/profile-login.js";
 import { publishOutputBranch } from "./core/publish.js";
 import { loadAllFonts } from "./node/fonts.js";
 import { logPointCost } from "./node/point-cost.js";
@@ -46,15 +47,33 @@ async function run(): Promise<void> {
   // current workflow run belongs to (RESEARCH.md's Security Domain
   // analysis) — T-01-11's mitigation for "force-push targets the wrong
   // repo" rests on reading it directly, never accepting an override input.
-  // Read here (moved up from just-before-publish in Phase 1): the shared
-  // fetch below needs `owner` (the repo-owner segment) as its `login`
-  // argument, and that fetch now happens well before publish.
+  // `owner` below is ONLY ever used as the publish target (and the embed
+  // snippet's URL, which points at that same published location) — it is
+  // NEVER overridable by any input, and nothing below changes that.
   const repo = process.env.GITHUB_REPOSITORY;
   if (!repo) {
     core.setFailed("GITHUB_REPOSITORY is not set — refusing to publish without a known target.");
     return;
   }
   const owner = repo.split("/")[0];
+
+  // Profile-login resolution (GAP-05-01) — a DIFFERENT question from the
+  // publish target above, even though it defaults to the same value.
+  // `owner` (T-01-11's protected boundary, immediately above, untouched by
+  // this block) answers "where do rendered cards get published?" This
+  // answers "whose GitHub profile does the shared fetch query?" On a
+  // personal repository those two answers happen to coincide (you own both
+  // the repo and the profile), but on an organization-owned repository they
+  // diverge: `GITHUB_REPOSITORY`'s owner segment is the Organization, and
+  // GitHub's GraphQL `user(login: $login)` can only ever resolve a User,
+  // never an Organization — so every card needing live data fails on an org
+  // repo unless the real user is named explicitly. The OPTIONAL
+  // `profile-login` input (action.yml) lets an adopter do exactly that; when
+  // omitted, this falls back to `owner`, preserving today's exact behavior
+  // for every existing workflow file — this input is additive, never a
+  // relaxation of T-01-11's publish-target guarantee above.
+  const profileLoginInput = core.getInput("profile-login");
+  const { login: profileLogin, wasInferredFromRepoOwner } = resolveProfileLogin(profileLoginInput, owner);
 
   const yamlText = existsSync(configPath) ? readFileSync(configPath, "utf8") : undefined;
 
@@ -105,9 +124,9 @@ async function run(): Promise<void> {
   let data;
   let pointCost: number;
   try {
-    ({ data, pointCost } = await fetchSharedData(cards, token, owner, now));
+    ({ data, pointCost } = await fetchSharedData(cards, token, profileLogin, now));
   } catch (error) {
-    core.setFailed(formatFetchFailureMessage(error));
+    core.setFailed(formatFetchFailureMessage(error, { login: profileLogin, wasInferredFromRepoOwner }));
     return;
   }
   // D-04: dual-surface point-cost log, immediately after a successful fetch.
