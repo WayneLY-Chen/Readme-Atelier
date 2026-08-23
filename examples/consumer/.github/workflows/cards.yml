@@ -16,9 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Replace WayneLY-Chen/readme-atelier@main with your own fork/ref.
-      # Use @main while testing; @v1 once you cut a release tag.
-      - uses: WayneLY-Chen/readme-atelier@main
+      # Pin to the released tag, not to a branch. `@main` moves with every
+      # push, so a branch ref means this workflow silently adopts whatever
+      # landed there since it last ran -- including changes nobody reviewed
+      # against your config. This line said `@main` because it was written
+      # before v1 was tagged; the README has said `@v1` since.
+      # Replace the owner/repo below if you are running your own fork.
+      - uses: WayneLY-Chen/Readme-Atelier@v1
         with:
           github-token: ${{ github.token }}
           config-path: widgets.yml
