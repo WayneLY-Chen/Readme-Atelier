@@ -173,8 +173,9 @@ jobs:
 另外一件事：新建立的組織擁有 repository，常把預設的 `GITHUB_TOKEN` 權限設成唯讀，這會擋住
 **發布**這一步——即使上面的 profile-login 已經處理好了也一樣。這個預設是**起點，不是
 上限**——GitHub 官方文件原文這麼寫：*「If the default permissions for the `GITHUB_TOKEN` are
-restrictive, you may have to elevate the permissions.」*（若 `GITHUB_TOKEN` 的預設權限太嚴格，
-你可能需要自行拉高權限。）步驟 1 的範本正是這麼做的——在你自己的 workflow 檔裡宣告
+restrictive, you may have to elevate the permissions to allow some actions and commands to run successfully.」*
+（若 `GITHUB_TOKEN` 的預設權限太嚴格，你可能需要自行拉高權限，好讓某些
+actions 和指令能順利執行。）步驟 1 的範本正是這麼做的——在你自己的 workflow 檔裡宣告
 `permissions: contents: write`：權限鏈只能被呼叫端的 workflow **降級**，不能拉高，所以這行必須
 寫在**你自己的檔案**裡，寫在 `render.yml` 裡沒有用。
 

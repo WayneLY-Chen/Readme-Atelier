@@ -186,10 +186,10 @@ Separately, new organization-owned repositories often set the default `GITHUB_TO
 to read-only, which blocks *publishing* even once the profile-login above is sorted out. That
 default is a **starting point, not a ceiling** — GitHub's own docs put it this way: *"If the
 default permissions for the `GITHUB_TOKEN` are restrictive, you may have to elevate the
-permissions."* That is exactly what step 1's template does by declaring
-`permissions: contents: write` in your own workflow file — permissions can only be **downgraded**,
-never elevated, by a called reusable workflow, so this declaration has to live in *your* file, not
-in `render.yml`.
+permissions to allow some actions and commands to run successfully."* That is exactly what
+step 1's template does by declaring `permissions: contents: write` in your own workflow file —
+permissions can only be **downgraded**, never elevated, by a called reusable workflow, so this
+declaration has to live in *your* file, not in `render.yml`.
 
 If publish still fails after that, the real wall is usually your organization's **allowed-actions
 policy** (Settings → Actions → General → Policies): when it is set to "Allow select actions and
