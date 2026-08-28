@@ -186,6 +186,92 @@ describe("formatChange — degenerate branch: open === 0 && close > 0 => signed 
 });
 
 // ---------------------------------------------------------------------------
+// CR-01/WR-01 (06-REVIEW.md) — the change figure has a fixed 150px slot
+// budget (CHANGE_FIGURE_BUDGET_PX, index.ts) at T2 32px mono-semibold. Below
+// pins the exact reachable overflow the review measured, plus a wide sweep
+// proving formatChange can no longer produce a string that overflows it.
+// ---------------------------------------------------------------------------
+
+const CHANGE_FIGURE_BUDGET_PX = 150;
+
+describe("formatChange — CR-01: an unbounded percent reroutes to the bounded level presentation instead of overflowing its slot", () => {
+  it("open=1, close=20 (review's measured floor: +1900.0% would overflow) falls back to level", () => {
+    const result = formatChange(1, 20);
+    expect(result.kind).toBe("level");
+    if (result.kind === "level") {
+      expect(result.text).toBe("+19");
+      expect(result.text).not.toContain("%");
+    }
+  });
+
+  it("open=1, close=140 (review's headline repro: +13900.0% would measure 172.8px) falls back to level", () => {
+    const result = formatChange(1, 140);
+    expect(result.kind).toBe("level");
+    if (result.kind === "level") {
+      expect(result.text).toBe("+139");
+    }
+  });
+
+  it("a very large ratio (open=1, close=1_000_000) still returns an in-budget level string, not a throw", () => {
+    const result = formatChange(1, 1_000_000);
+    expect(result.kind).toBe("level");
+    if (result.kind === "level") {
+      // WR-01: the level branch's own magnitude is capped too, so an
+      // implausibly large delta still renders a safe, bounded string.
+      expect(result.text).toBe("+999999");
+      expect(measureAdvanceWidth("mono-semibold", result.text, 32)).toBeLessThanOrEqual(CHANGE_FIGURE_BUDGET_PX);
+    }
+  });
+
+  it("just below the fallback threshold (open=100, close=1099, +999.0%) still renders as percent", () => {
+    const result = formatChange(100, 1099);
+    expect(result.kind).toBe("percent");
+    if (result.kind === "percent") {
+      expect(result.text).toBe("+999.0%");
+      expect(measureAdvanceWidth("mono-semibold", result.text, 32)).toBeLessThanOrEqual(CHANGE_FIGURE_BUDGET_PX);
+    }
+  });
+
+  it("just at the fallback threshold (open=1, close=11, +1000.0%) reroutes to level", () => {
+    const result = formatChange(1, 11);
+    expect(result.kind).toBe("level");
+  });
+});
+
+describe("formatChange — no (open, close) pair in a wide swept range ever produces a string that overflows CHANGE_FIGURE_BUDGET_PX", () => {
+  it(
+    "sweeps open in [0, 500] and close in [0, 500], step 5 (10,201 pairs)",
+    () => {
+      for (let open = 0; open <= 500; open += 5) {
+        for (let close = 0; close <= 500; close += 5) {
+          const result = formatChange(open, close);
+          if (result.kind === "flat") continue;
+          const width = measureAdvanceWidth("mono-semibold", result.text, 32);
+          expect(width, `formatChange(${open}, ${close}) -> "${result.text}"`).toBeLessThanOrEqual(
+            CHANGE_FIGURE_BUDGET_PX,
+          );
+        }
+      }
+    },
+    20_000,
+  );
+
+  it("sweeps extreme open/close magnitudes (including the open===0 level branch) without throwing or overflowing", () => {
+    const extremes = [0, 1, 2, 7, 99, 1000, 999_999, 10_000_000, Number.MAX_SAFE_INTEGER];
+    for (const open of extremes) {
+      for (const close of extremes) {
+        const result = formatChange(open, close);
+        if (result.kind === "flat") continue;
+        const width = measureAdvanceWidth("mono-semibold", result.text, 32);
+        expect(width, `formatChange(${open}, ${close}) -> "${result.text}"`).toBeLessThanOrEqual(
+          CHANGE_FIGURE_BUDGET_PX,
+        );
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // assertSlotBudget / TickerSlotOverflowError
 // ---------------------------------------------------------------------------
 
