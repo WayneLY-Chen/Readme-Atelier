@@ -4,6 +4,7 @@ import { editorialStatCardWidget } from "./editorial-stat-card/index.js";
 import { mastheadWidget } from "./masthead/index.js";
 import { theGraveyardWidget } from "./the-graveyard/index.js";
 import { theRecordWidget } from "./the-record/index.js";
+import { vitalsWidget } from "./vitals/index.js";
 
 /**
  * The ONE registration list for every built-in widget (QA-03 / D-12). Before
@@ -27,4 +28,5 @@ export function registerAllWidgets(): void {
   register(mastheadWidget);
   register(theGraveyardWidget);
   register(theRecordWidget);
+  register(vitalsWidget);
 }

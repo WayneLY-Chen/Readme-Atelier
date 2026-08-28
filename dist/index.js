@@ -48311,7 +48311,7 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony import */ var _node_fonts_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(514);
 /* harmony import */ var _node_point_cost_js__WEBPACK_IMPORTED_MODULE_10__ = __nccwpck_require__(9162);
 /* harmony import */ var _node_step_summary_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(9917);
-/* harmony import */ var _widgets_all_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(9657);
+/* harmony import */ var _widgets_all_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(454);
 
 
 
@@ -97353,7 +97353,7 @@ function writeStepSummary(content) {
 
 /***/ }),
 
-/***/ 9657:
+/***/ 454:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
 
@@ -111525,7 +111525,579 @@ const theRecordWidget = {
     },
 };
 
+;// CONCATENATED MODULE: ./src/widgets/vitals/copy.ts
+/**
+ * Vitals copy — 06-UI-SPEC.md "Vitals chrome strings" table.
+ *
+ * Streak rule (documented here per the UI-SPEC's explicit instruction, "Card
+ * Layout 1 — Vitals" §5 "Streak rule"): CURRENT STREAK allows exactly ONE
+ * grace day. If the most recently recorded day has count === 0, the streak
+ * count starts from the day BEFORE it instead — because this project's own
+ * default cron is 6-hourly, so most renders happen before the adopter has
+ * committed anything "today." Never two grace days: a second zero day always
+ * breaks the streak. See index.ts's `computeStreak`.
+ *
+ * Status ladder (documented here per the same UI-SPEC instruction): STATUS
+ * is driven by `activeDays` (the count of recorded days with count > 0) out
+ * of the `n` recorded days in the trailing-28-day window — 0 -> FLATLINE,
+ * 1-9 -> FAINT, 10-20 -> STEADY, 21-28 -> RAPID. The thresholds apply to the
+ * raw active-day count even when `n < 28`, so a brand-new account cannot be
+ * pushed into a higher tier by a short window. See index.ts's `statusTier`.
+ *
+ * Separators are ASCII " - " and " / " ONLY. The banned-glyph list this
+ * project has accumulated (Phase 1/3/4 all lost time to a subset of these)
+ * is extended here per 06-UI-SPEC.md's "Glyph coverage" section:
+ *   - `·` (U+00B7 MIDDLE DOT)
+ *   - `．` (U+FF0E FULLWIDTH FULL STOP)
+ *   - `▸` (U+25B8 BLACK RIGHT-POINTING SMALL TRIANGLE)
+ *   - `…` (U+2026 HORIZONTAL ELLIPSIS)
+ *   - `▲` (U+25B2), `▼` (U+25BC) — absent from both subsets project-wide
+ *   - `●` (U+25CF) — absent from both subsets project-wide
+ *   - en copy additionally bans `—` (U+2014 EM DASH), present in noto-tc but
+ *     absent from the ASCII-only mono / Latin-1-only serif subsets
+ * Do not reintroduce any of these in this file.
+ */
+const titleEn = "VITALS";
+const titleZh = "生命徵象";
+/** zh-TW-only decorative Latin eyebrow — never translated, absent in en mode
+ * (Almanac/Editorial Stat Card/The Record convention: en mode's own title
+ * already names the card, so no header-scale fact needs both languages). */
+const eyebrowZh = "VITALS";
+const stat1LabelEn = "DAILY MEAN";
+const stat1LabelZh = "每日均值";
+const stat2LabelEn = "CURRENT STREAK";
+const stat2LabelZh = "目前連續";
+const stat3LabelEn = "STATUS";
+const stat3LabelZh = "狀態";
+const statusFlatlineEn = "FLATLINE";
+const statusFlatlineZh = "平線";
+const statusFaintEn = "FAINT";
+const statusFaintZh = "微弱";
+const statusSteadyEn = "STEADY";
+const statusSteadyZh = "平穩";
+const statusRapidEn = "RAPID";
+const statusRapidZh = "急促";
+const windowCaptionFullEn = "TRAILING 28 DAYS";
+const windowCaptionFullZh = "近 28 天的紀錄";
+const windowCaptionEmptyEn = "NO RECORDING";
+const windowCaptionEmptyZh = "尚無紀錄";
+/** Window caption, `1 <= n < 28` — `n` is a PRE-COMPUTED integer, never
+ * formatted by this function beyond template interpolation (same convention
+ * as The Record's `busiestWeekValueEn`/`Zh`). */
+function windowCaptionPartialEn(n) {
+    return `ONLY ${n} DAYS ON RECORD`;
+}
+function windowCaptionPartialZh(n) {
+    return `僅有 ${n} 天的紀錄`;
+}
+/** Page-number footer — inherited verbatim from Phase 3's shipped contract
+ * (same literal format, same absent-means-emit-nothing rule, applied
+ * independently by index.ts). */
+function copy_pageFooterEn(n, m) {
+    return `PAGE ${n}/${m}`;
+}
+function copy_pageFooterZh(n, m) {
+    return `頁 ${n} / ${m}`;
+}
+
+;// CONCATENATED MODULE: ./src/widgets/vitals/format.ts
+/**
+ * Thrown by assertSlotBudget when a formatted string's measured render width
+ * exceeds its slot's budget. Names all four load-bearing facts — field,
+ * formatted string, measured width, budget — never just "too long" (mirrors
+ * src/core/svg.ts's SizeBudgetError / the-record/format.ts's
+ * RecordSlotOverflowError convention).
+ */
+class VitalsSlotOverflowError extends Error {
+    constructor(field, formatted, widthPx, budgetPx) {
+        super(`VitalsSlotOverflowError: field "${field}" formatted as "${formatted}" measures ` +
+            `${widthPx}px, exceeding the ${budgetPx}px slot budget.`);
+        this.name = "VitalsSlotOverflowError";
+    }
+}
+/**
+ * Per-render slot-width backstop (06-UI-SPEC.md "Text slot budgets" —
+ * Vitals table). Every one of Vitals' seven text slots is engine-authored,
+ * so RENDER-05's fail-loud policy applies in full (Phase 3's
+ * truncate-with-ellipsis policy for API-sourced text does NOT apply to this
+ * card). Called before the corresponding path data is built, so an
+ * out-of-budget string fails the build loudly instead of silently
+ * overflowing the rendered card. Shape copied from the-record/format.ts's
+ * assertSlotBudget (RENDER-02: no widget imports another widget's private
+ * helper).
+ */
+function format_assertSlotBudget(field, formatted, widthPx, budgetPx) {
+    if (widthPx > budgetPx) {
+        throw new VitalsSlotOverflowError(field, formatted, widthPx, budgetPx);
+    }
+}
+/**
+ * `DAILY MEAN` formatting (06-UI-SPEC.md "Stat row" table): round to one
+ * decimal place and ALWAYS print the decimal place — `12.0`, never `12`.
+ * This is deliberately a DIFFERENT format from the project's shipped
+ * compact-number logic (editorial-stat-card/format.ts's `formatStatNumber`,
+ * the-record/format.ts's `formatRecordNumber`, both of which switch to a
+ * 萬/億-suffixed compact form above 10000) — a daily mean over a 28-day
+ * window can never reach that range, and this function must NOT import or
+ * duplicate that compaction logic (06-UI-SPEC.md Watch Item B: this is
+ * explicitly NOT counted as a fourth copy of the 萬/億 format).
+ */
+function formatDailyMean(mean) {
+    const rounded = Math.round(mean * 10) / 10;
+    return rounded.toFixed(1);
+}
+
+;// CONCATENATED MODULE: ./src/widgets/vitals/index.ts
+
+
+
+
+/**
+ * Phase 6's tracer (06-01): the first, and this phase's only, animated
+ * card. Draws the trailing 28 days of `data.contributionCalendar` as an ECG
+ * trace (06-UI-SPEC.md "Card Layout 1 — Vitals / 生命徵象", CARD-05).
+ */
+// ---------------------------------------------------------------------------
+// Geometry constants — each cites the UI-SPEC section that fixed the value
+// (06-UI-SPEC.md "Card Layout 1 — Vitals" "Canvas and geometry constants").
+// ---------------------------------------------------------------------------
+const vitals_CARD_WIDTH = 495;
+const vitals_CARD_HEIGHT = 272;
+const vitals_PADDING = 24;
+const vitals_RIGHT_EDGE_X = vitals_CARD_WIDTH - vitals_PADDING; // 471
+const vitals_T1_SIZE = 8;
+const vitals_T2_SIZE = 32;
+const vitals_T3_SIZE = 17;
+const vitals_T1_LETTER_SPACING = 1.6;
+const vitals_HEADER_TITLE_BASELINE_Y = 44;
+const vitals_HEADER_RULE_Y = 58;
+const PANEL_X = 24;
+const PANEL_Y = 72;
+const PANEL_W = 447;
+const PANEL_H = 88; // panel spans y 72..160
+const PLOT_X0 = 32;
+const PLOT_X1 = 463;
+const PLOT_W = PLOT_X1 - PLOT_X0; // 431 (sm = 8 inset each side)
+const WINDOW_DAYS = 28;
+const DAY_W = PLOT_W / WINDOW_DAYS; // 15.392857...
+const BASELINE_Y = 116; // isoelectric line, the panel's vertical midpoint
+const R_MAX = 36; // maximum upward R-wave deflection
+const R_MIN = 6; // minimum upward deflection for any day with count > 0
+const Q_RATIO = 0.12; // downward deflection, as a fraction of the day's R height
+const S_RATIO = 0.45; // downward deflection, as a fraction of the day's R height
+const GRID_Y = [96, 136]; // BASELINE_Y +/- 20; each is lg (24) inside a panel edge
+/** GRID_X = PLOT_X0 + DAY_W * {7, 14, 21} — the three interior week
+ * separators produce four week columns. */
+const GRID_X = [7, 14, 21].map((weeks) => PLOT_X0 + DAY_W * weeks);
+const PULSE_R = 3.5;
+const PULSE_CX = PLOT_X1;
+const PULSE_CY = BASELINE_Y;
+const STAT_LABEL_Y = 184;
+const STAT_VALUE_Y = 216;
+const vitals_FOOTER_Y = 240;
+const vitals_COL1_X = 24;
+const vitals_COL2_X = 176;
+// ---------------------------------------------------------------------------
+// Text slot budgets (06-UI-SPEC.md "Text slot budgets" — Vitals table) —
+// every one is a regression tripwire, checked via format.ts's
+// assertSlotBudget before its corresponding path data is built. Not
+// expected to fire: every string on this card is engine-authored, so
+// RENDER-05's fail-loud policy applies in full.
+// ---------------------------------------------------------------------------
+const vitals_CARD_TITLE_BUDGET_PX = 200;
+const ZH_EYEBROW_BUDGET_PX = 120;
+const STAT_LABEL_BUDGET_PX = 140; // stat label, col 1-2
+const STAT_VALUE_BUDGET_PX = 140; // stat value, col 1-2
+const STAT3_LABEL_BUDGET_PX = 100; // stat label, col 3 (right-aligned)
+const STATUS_WORD_BUDGET_PX = 120;
+const WINDOW_CAPTION_BUDGET_PX = 240;
+// ---------------------------------------------------------------------------
+// Animation constants (06-UI-SPEC.md "Animation Contract" literals).
+// ---------------------------------------------------------------------------
+const PULSE_NAME = "atelier-vitals-pulse";
+const PULSE_DURATION_S = 1.6;
+// ---------------------------------------------------------------------------
+// Module-scope invariant throws (06-UI-SPEC.md "Extent check") — a bad
+// geometry constant fails at IMPORT time, never silently at render time
+// (same convention as the-record/index.ts's tonearm-reachability check).
+// ---------------------------------------------------------------------------
+if (!(BASELINE_Y - R_MAX >= PANEL_Y + 8)) {
+    throw new Error(`vitals: R-wave headroom invariant violated — BASELINE_Y=${BASELINE_Y}, R_MAX=${R_MAX}, PANEL_Y=${PANEL_Y}`);
+}
+if (!(BASELINE_Y + S_RATIO * R_MAX <= PANEL_Y + PANEL_H)) {
+    throw new Error(`vitals: S-wave clearance invariant violated — BASELINE_Y=${BASELINE_Y}, S_RATIO=${S_RATIO}, R_MAX=${R_MAX}, ` +
+        `PANEL_Y=${PANEL_Y}, PANEL_H=${PANEL_H}`);
+}
+// ---------------------------------------------------------------------------
+// Chassis helpers — own copy, not imported (RENDER-02: adding/modifying a
+// card must not require touching another card's private functions).
+// Structurally identical to the-record/index.ts's own set. This card
+// deliberately does NOT import apiSourcedTextPathData or truncateToWidth —
+// every string here is engine-authored, so only the assertCoverage +
+// textToPathData fail-loud path applies.
+// ---------------------------------------------------------------------------
+function vitals_pathElement(d, fill) {
+    if (d === "") {
+        return "";
+    }
+    return `<path d="${d}" fill="${fill}"/>`;
+}
+function vitals_letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
+    let cursorX = x;
+    let d = "";
+    const chars = Array.from(text);
+    chars.forEach((ch, i) => {
+        d += (0,font/* textToPathData */.wD)(fontName, ch, cursorX, y, fontSize);
+        cursorX +=
+            (0,font/* measureAdvanceWidth */.zN)(fontName, ch, fontSize) + (i < chars.length - 1 ? letterSpacing : 0);
+    });
+    return d;
+}
+function vitals_letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
+    const chars = Array.from(text);
+    let width = 0;
+    chars.forEach((ch, i) => {
+        width += (0,font/* measureAdvanceWidth */.zN)(fontName, ch, fontSize) + (i < chars.length - 1 ? letterSpacing : 0);
+    });
+    return width;
+}
+/** T1 eyebrow/label style for English text: IBM Plex Mono Semibold,
+ * uppercase, letter-spaced, 8px. Left-aligned at (x, y). */
+function vitals_eyebrowLabel(text, x, y, fill) {
+    const upper = text.toUpperCase();
+    (0,font/* assertCoverage */.tE)("mono-semibold", upper, `vitals T1 eyebrow/label: "${text}"`);
+    const d = vitals_letterSpacedPath("mono-semibold", upper, x, y, vitals_T1_SIZE, vitals_T1_LETTER_SPACING);
+    return vitals_pathElement(d, fill);
+}
+function vitals_eyebrowLabelWidth(text) {
+    return vitals_letterSpacedWidth("mono-semibold", text.toUpperCase(), vitals_T1_SIZE, vitals_T1_LETTER_SPACING);
+}
+/** T1 label style for zh-TW text: Noto Serif TC, 8px, no uppercase
+ * transform, no manual letter-spacing. */
+function vitals_zhLabel(text, x, y, fill) {
+    (0,font/* assertCoverage */.tE)("noto-tc", text, `vitals T1 label (zh-TW): "${text}"`);
+    return vitals_pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, vitals_T1_SIZE), fill);
+}
+function vitals_zhLabelWidth(text) {
+    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, vitals_T1_SIZE);
+}
+/** T3 primary-content style: Source Serif 4 (en) / Noto Serif TC (zh-TW). */
+function vitals_contentText(fontName, text, x, y, fill, context) {
+    (0,font/* assertCoverage */.tE)(fontName, text, context);
+    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, vitals_T3_SIZE);
+    return vitals_pathElement(d, fill);
+}
+/** T2 numeral style, left-aligned at (x, y) (D-02: every numeral routes
+ * through IBM Plex Mono). Unlike The Record's `renderNumeral`, this card
+ * never needs the zh-TW 萬/億 mixed-font split — `DAILY MEAN` and `CURRENT
+ * STREAK` never reach that magnitude over a 28-day window. */
+function renderT2Value(text, x, y, fill, context) {
+    (0,font/* assertCoverage */.tE)("mono-semibold", text, context);
+    return vitals_pathElement((0,font/* textToPathData */.wD)("mono-semibold", text, x, y, vitals_T2_SIZE), fill);
+}
+// ---------------------------------------------------------------------------
+// Data interpretation — pure functions, exported for unit testing (same
+// convention as the-record's exported busiestElapsedWeek/bucketWeeks/etc).
+// ---------------------------------------------------------------------------
+/**
+ * The trailing WINDOW_DAYS entries of `contributionCalendar`, right-aligned
+ * (06-UI-SPEC.md "The ECG trace — Window"): the newest recorded day always
+ * occupies the rightmost slot. `n = min(28, calendar.length)`; `recorded`
+ * has length `n` and holds the counts of the `n` most recent days, oldest
+ * first — `recorded[recorded.length - 1]` is always the newest day.
+ */
+function computeVitalsWindow(calendar) {
+    const cal = calendar ?? [];
+    const n = Math.min(WINDOW_DAYS, cal.length);
+    const recorded = cal.slice(cal.length - n).map((d) => d.count);
+    return { n, recorded };
+}
+/**
+ * `h = c === 0 ? 0 : R_MIN + t * (R_MAX - R_MIN)`, `t = maxCount === 0 ? 0 :
+ * c / maxCount` (06-UI-SPEC.md "The ECG trace — Amplitude"). The
+ * `maxCount === 0` guard is the same defensive shape as The Record's
+ * `maxWeekly === 0` / The Graveyard's `maxLifespan === 0` (V4).
+ */
+function dayAmplitude(c, maxCount) {
+    if (c === 0) {
+        return 0;
+    }
+    const t = maxCount === 0 ? 0 : c / maxCount;
+    return R_MIN + t * (R_MAX - R_MIN);
+}
+/**
+ * The single day's vertex list (06-UI-SPEC.md "The ECG trace — Vertices"),
+ * for slot `i` (0-indexed within the 28-day window) with count `c`. Every
+ * day begins and ends exactly on the isoelectric line `BASELINE_Y`, so
+ * consecutive days concatenate into one continuous, seamless polyline.
+ */
+function dayVertices(i, c, maxCount) {
+    const x0 = PLOT_X0 + i * DAY_W;
+    const w = DAY_W;
+    const b = BASELINE_Y;
+    if (c === 0) {
+        return [
+            [x0, b],
+            [x0 + w, b],
+        ];
+    }
+    const h = dayAmplitude(c, maxCount);
+    return [
+        [x0, b],
+        [x0 + 0.28 * w, b],
+        [x0 + 0.36 * w, b + Q_RATIO * h],
+        [x0 + 0.46 * w, b - h],
+        [x0 + 0.58 * w, b + S_RATIO * h],
+        [x0 + 0.7 * w, b],
+        [x0 + w, b],
+    ];
+}
+/**
+ * Streak rule, exactly one grace day (06-UI-SPEC.md "Stat row — Streak
+ * rule", documented in full in copy.ts): if the most recently recorded day
+ * has count 0, the streak counts from the day before it instead. `recorded`
+ * is the right-aligned window's count array (oldest first, per
+ * computeVitalsWindow); `recorded.length === 0` returns 0 immediately (V1).
+ */
+function computeStreak(recorded) {
+    let i = recorded.length - 1;
+    if (i < 0) {
+        return 0;
+    }
+    if (recorded[i] === 0) {
+        i--;
+    }
+    let streak = 0;
+    while (i >= 0 && recorded[i] > 0) {
+        streak++;
+        i--;
+    }
+    return streak;
+}
+/**
+ * Status ladder (06-UI-SPEC.md "Stat row — Status ladder"), driven by
+ * `activeDays` — the count of recorded days with count > 0 — never by `n`
+ * itself, so a brand-new account's short window cannot be pushed into a
+ * higher tier by the thresholds alone.
+ */
+function statusTier(activeDays) {
+    if (activeDays === 0) {
+        return "FLATLINE";
+    }
+    if (activeDays <= 9) {
+        return "FAINT";
+    }
+    if (activeDays <= 20) {
+        return "STEADY";
+    }
+    return "RAPID";
+}
+function statusWordFor(status, language) {
+    const table = {
+        FLATLINE: { en: statusFlatlineEn, zh: statusFlatlineZh },
+        FAINT: { en: statusFaintEn, zh: statusFaintZh },
+        STEADY: { en: statusSteadyEn, zh: statusSteadyZh },
+        RAPID: { en: statusRapidEn, zh: statusRapidZh },
+    };
+    return language === "zh-TW" ? table[status].zh : table[status].en;
+}
+/** Window caption, chosen by `n` (06-UI-SPEC.md "Bottom row" / "Vitals
+ * chrome strings"): full window, partial window, or no recording at all. */
+function windowCaptionFor(n, language) {
+    if (n === WINDOW_DAYS) {
+        return language === "zh-TW" ? windowCaptionFullZh : windowCaptionFullEn;
+    }
+    if (n === 0) {
+        return language === "zh-TW" ? windowCaptionEmptyZh : windowCaptionEmptyEn;
+    }
+    return language === "zh-TW" ? windowCaptionPartialZh(n) : windowCaptionPartialEn(n);
+}
+// ---------------------------------------------------------------------------
+// Widget definition
+// ---------------------------------------------------------------------------
+/** No `widgets.yml`-configurable options exist for this card
+ * (masthead/the-record's `z.object({}).strict()` no-args precedent). */
+const vitalsOptionsSchema = schemas/* object */.Ik({}).strict();
+const vitalsWidget = {
+    name: "vitals",
+    requires: ["calendar"],
+    size: { width: vitals_CARD_WIDTH, height: vitals_CARD_HEIGHT },
+    optionsSchema: {
+        parse(value) {
+            vitalsOptionsSchema.parse(value ?? {});
+            return { now: new Date(), seed: 0, language: "en", timezone: "UTC" };
+        },
+    },
+    describe(_data, opts) {
+        if (opts.language === "zh-TW") {
+            return {
+                title: "生命徵象卡片",
+                desc: "把最近二十八天的每日貢獻畫成心電圖，每一天一個波形，沒有貢獻的日子維持水平線。",
+            };
+        }
+        return {
+            title: "Vitals card",
+            desc: "Draws the last 28 days of daily contributions as an ECG trace, one complex per day, " +
+                "with a flat line on days with no contributions.",
+        };
+    },
+    /**
+     * Composition, z-order (06-UI-SPEC.md "Card Layout 1 — Vitals —
+     * Composition"): header + hairline -> the widget's own <style> -> panel
+     * border -> two horizontal minor grid lines -> three vertical week
+     * separators -> isoelectric line -> unrecorded-segment dashed rule line
+     * (Rule C-1) -> the ECG polyline -> the pulse dot -> stat row -> bottom
+     * row (caption left, page-number footer right).
+     */
+    renderBody(data, theme, opts) {
+        const language = opts.language;
+        const contentFont = language === "zh-TW" ? "noto-tc" : "serif";
+        const { n, recorded } = computeVitalsWindow(data.contributionCalendar);
+        const maxCount = Math.max(0, ...recorded);
+        // V4b guard: the mean is defined over the n RECORDED days, never over
+        // 28 — n === 0 is a 0/0 divide that would otherwise print "NaN".
+        const mean = n === 0 ? 0 : recorded.reduce((sum, c) => sum + c, 0) / n;
+        const activeDays = recorded.filter((c) => c > 0).length;
+        const streak = computeStreak(recorded);
+        const status = statusTier(activeDays);
+        let markup = "";
+        // (1) Header row: title left-aligned; zh-TW-only untranslated Latin
+        // eyebrow, right-aligned; hairline rule.
+        const title = language === "zh-TW" ? titleZh : titleEn;
+        format_assertSlotBudget("card title", title, (0,font/* measureAdvanceWidth */.zN)(contentFont, title, vitals_T3_SIZE), vitals_CARD_TITLE_BUDGET_PX);
+        markup += vitals_contentText(contentFont, title, vitals_PADDING, vitals_HEADER_TITLE_BASELINE_Y, theme.ink, `vitals title (${language})`);
+        if (language === "zh-TW") {
+            const eyebrowWidth = vitals_eyebrowLabelWidth(eyebrowZh);
+            format_assertSlotBudget("zh-TW eyebrow", eyebrowZh, eyebrowWidth, ZH_EYEBROW_BUDGET_PX);
+            markup += vitals_eyebrowLabel(eyebrowZh, vitals_RIGHT_EDGE_X - eyebrowWidth, vitals_HEADER_TITLE_BASELINE_Y, theme.muted);
+        }
+        markup += `<line x1="${vitals_PADDING}" y1="${vitals_HEADER_RULE_Y}" x2="${vitals_RIGHT_EDGE_X}" y2="${vitals_HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
+        // (2) The widget's own <style> — exactly one @keyframes block and one
+        // class rule (the same precedent as the-record/index.ts's spin style).
+        // Emitted unconditionally, the same "same code path, only a
+        // conditional class attribute" discipline the-record uses for its
+        // zero-state — never SMIL, and the animation shorthand sets
+        // non-important longhands, so the chassis REDUCED_MOTION_STYLE block
+        // (emitted before this markup, but carrying !important) is the
+        // complete RENDER-06 mechanism. No change to svg.ts required.
+        markup +=
+            `<style>@keyframes ${PULSE_NAME}{0%{opacity:1}45%{opacity:0.2}100%{opacity:1}}` +
+                `.${PULSE_NAME}{animation:${PULSE_NAME} ${PULSE_DURATION_S}s ease-in-out infinite}</style>`;
+        // (3) Panel border.
+        markup += `<rect x="${PANEL_X}" y="${PANEL_Y}" width="${PANEL_W}" height="${PANEL_H}" fill="none" stroke="${theme.rule}" stroke-width="1"/>`;
+        // (4) Two horizontal minor grid lines.
+        for (const y of GRID_Y) {
+            markup += `<line x1="${vitals_PADDING}" y1="${y}" x2="${vitals_RIGHT_EDGE_X}" y2="${y}" stroke="${theme.rule}" stroke-width="0.5" stroke-opacity="0.6"/>`;
+        }
+        // (5) Three vertical week separators — four week columns.
+        for (const x of GRID_X) {
+            markup += `<line x1="${x.toFixed(2)}" y1="${PANEL_Y}" x2="${x.toFixed(2)}" y2="${PANEL_Y + PANEL_H}" stroke="${theme.rule}" stroke-width="0.5" stroke-opacity="0.6"/>`;
+        }
+        // (6) Isoelectric reference line, drawn under the trace so flat
+        // segments read as sitting ON a baseline rather than floating.
+        markup += `<line x1="${PLOT_X0}" y1="${BASELINE_Y}" x2="${PLOT_X1}" y2="${BASELINE_Y}" stroke="${theme.rule}" stroke-width="0.5" stroke-opacity="0.6"/>`;
+        // (7) Unrecorded-segment dashed rule line (Rule C-1) — drawn ONLY when
+        // n < 28. Slots 0..27-n carry no polyline vertices at all; this single
+        // dashed line is the entire "we have no data here" signal, distinct
+        // from a solid accent flat segment ("we measured zero").
+        if (n < WINDOW_DAYS) {
+            const dashEndX = PLOT_X0 + (WINDOW_DAYS - n) * DAY_W;
+            markup += `<line x1="${PLOT_X0}" y1="${BASELINE_Y}" x2="${dashEndX.toFixed(2)}" y2="${BASELINE_Y}" stroke="${theme.rule}" stroke-width="1" stroke-dasharray="3 3"/>`;
+        }
+        // (8) The ECG trace — a single <polyline>, present only when n > 0.
+        // Consecutive days share their boundary point (each day starts and
+        // ends on BASELINE_Y), so the shared point is emitted once, not
+        // duplicated.
+        if (n > 0) {
+            const points = [];
+            for (let i = 0; i < n; i++) {
+                const slotIndex = WINDOW_DAYS - n + i;
+                const c = recorded[i];
+                const verts = dayVertices(slotIndex, c, maxCount);
+                for (let j = 0; j < verts.length; j++) {
+                    if (i > 0 && j === 0) {
+                        continue; // shared with the previous day's final vertex
+                    }
+                    const [px, py] = verts[j];
+                    points.push(`${px.toFixed(2)},${py.toFixed(2)}`);
+                }
+            }
+            markup += `<polyline points="${points.join(" ")}" fill="none" stroke="${theme.accent}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>`;
+        }
+        // (9) The pulse dot — drawn last (of the trace layer) so it sits above
+        // the polyline. No opacity/fill-opacity/style attribute of its own:
+        // REDUCED_MOTION_STYLE sets no animation-fill-mode, so a collapsed
+        // animation returns this element to its BASE style, not its final
+        // keyframe — the base style must already be its correct resting
+        // appearance (06-UI-SPEC.md "Reduced motion — the resting-state rule").
+        // Animates only when n > 0 AND status !== FLATLINE; a recorded
+        // flatline (n === 28, every count 0) draws a static rule-colored dot
+        // with no class; n === 0 draws no dot at all.
+        if (n > 0) {
+            if (status !== "FLATLINE") {
+                markup += `<circle cx="${PULSE_CX}" cy="${PULSE_CY}" r="${PULSE_R}" fill="${theme.accent}" class="${PULSE_NAME}"/>`;
+            }
+            else {
+                markup += `<circle cx="${PULSE_CX}" cy="${PULSE_CY}" r="${PULSE_R}" fill="${theme.rule}"/>`;
+            }
+        }
+        // (10) Stat row — three columns, T1 label (muted) over T2/T2/T3 value
+        // (ink). Columns 1-2 left-aligned; column 3 right-aligned to
+        // RIGHT_EDGE_X.
+        const stat1Label = language === "zh-TW" ? stat1LabelZh : stat1LabelEn;
+        const stat1LabelWidth = language === "zh-TW" ? vitals_zhLabelWidth(stat1Label) : vitals_eyebrowLabelWidth(stat1Label);
+        format_assertSlotBudget("stat-1 label", stat1Label, stat1LabelWidth, STAT_LABEL_BUDGET_PX);
+        markup +=
+            language === "zh-TW"
+                ? vitals_zhLabel(stat1Label, vitals_COL1_X, STAT_LABEL_Y, theme.muted)
+                : vitals_eyebrowLabel(stat1Label, vitals_COL1_X, STAT_LABEL_Y, theme.muted);
+        const meanStr = formatDailyMean(mean);
+        format_assertSlotBudget("stat-1 value", meanStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", meanStr, vitals_T2_SIZE), STAT_VALUE_BUDGET_PX);
+        markup += renderT2Value(meanStr, vitals_COL1_X, STAT_VALUE_Y, theme.ink, "vitals daily-mean value");
+        const stat2Label = language === "zh-TW" ? stat2LabelZh : stat2LabelEn;
+        const stat2LabelWidth = language === "zh-TW" ? vitals_zhLabelWidth(stat2Label) : vitals_eyebrowLabelWidth(stat2Label);
+        format_assertSlotBudget("stat-2 label", stat2Label, stat2LabelWidth, STAT_LABEL_BUDGET_PX);
+        markup +=
+            language === "zh-TW"
+                ? vitals_zhLabel(stat2Label, vitals_COL2_X, STAT_LABEL_Y, theme.muted)
+                : vitals_eyebrowLabel(stat2Label, vitals_COL2_X, STAT_LABEL_Y, theme.muted);
+        const streakStr = String(streak);
+        format_assertSlotBudget("stat-2 value", streakStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", streakStr, vitals_T2_SIZE), STAT_VALUE_BUDGET_PX);
+        markup += renderT2Value(streakStr, vitals_COL2_X, STAT_VALUE_Y, theme.ink, "vitals current-streak value");
+        const stat3Label = language === "zh-TW" ? stat3LabelZh : stat3LabelEn;
+        const stat3LabelWidth = language === "zh-TW" ? vitals_zhLabelWidth(stat3Label) : vitals_eyebrowLabelWidth(stat3Label);
+        format_assertSlotBudget("stat-3 label", stat3Label, stat3LabelWidth, STAT3_LABEL_BUDGET_PX);
+        markup +=
+            language === "zh-TW"
+                ? vitals_zhLabel(stat3Label, vitals_RIGHT_EDGE_X - stat3LabelWidth, STAT_LABEL_Y, theme.muted)
+                : vitals_eyebrowLabel(stat3Label, vitals_RIGHT_EDGE_X - stat3LabelWidth, STAT_LABEL_Y, theme.muted);
+        const statusWord = statusWordFor(status, language);
+        const statusWidth = (0,font/* measureAdvanceWidth */.zN)(contentFont, statusWord, vitals_T3_SIZE);
+        format_assertSlotBudget("status word", statusWord, statusWidth, STATUS_WORD_BUDGET_PX);
+        markup += vitals_contentText(contentFont, statusWord, vitals_RIGHT_EDGE_X - statusWidth, STAT_VALUE_Y, theme.ink, `vitals status word (${language})`);
+        // (11) Bottom row: window caption (left, T1 accent), page-number
+        // footer (right, T1 muted, absent-means-emit-nothing per Phase 3).
+        const caption = windowCaptionFor(n, language);
+        const captionWidth = language === "zh-TW" ? vitals_zhLabelWidth(caption) : vitals_eyebrowLabelWidth(caption);
+        format_assertSlotBudget("window caption", caption, captionWidth, WINDOW_CAPTION_BUDGET_PX);
+        markup +=
+            language === "zh-TW"
+                ? vitals_zhLabel(caption, vitals_COL1_X, vitals_FOOTER_Y, theme.accent)
+                : vitals_eyebrowLabel(caption, vitals_COL1_X, vitals_FOOTER_Y, theme.accent);
+        if (opts.pageNumber !== undefined && opts.totalPages !== undefined) {
+            const pageText = language === "zh-TW" ? copy_pageFooterZh(opts.pageNumber, opts.totalPages) : copy_pageFooterEn(opts.pageNumber, opts.totalPages);
+            const pageWidth = language === "zh-TW" ? vitals_zhLabelWidth(pageText) : vitals_eyebrowLabelWidth(pageText);
+            markup +=
+                language === "zh-TW"
+                    ? vitals_zhLabel(pageText, vitals_RIGHT_EDGE_X - pageWidth, vitals_FOOTER_Y, theme.muted)
+                    : vitals_eyebrowLabel(pageText, vitals_RIGHT_EDGE_X - pageWidth, vitals_FOOTER_Y, theme.muted);
+        }
+        return markup;
+    },
+};
+
 ;// CONCATENATED MODULE: ./src/widgets/all.ts
+
 
 
 
@@ -111554,6 +112126,7 @@ function registerAllWidgets() {
     (0,registry/* register */.kz)(mastheadWidget);
     (0,registry/* register */.kz)(theGraveyardWidget);
     (0,registry/* register */.kz)(theRecordWidget);
+    (0,registry/* register */.kz)(vitalsWidget);
 }
 
 
