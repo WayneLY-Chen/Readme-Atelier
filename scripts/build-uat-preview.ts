@@ -92,6 +92,69 @@ function syntheticCalendarDays(): { date: string; count: number }[] {
 }
 
 /**
+ * A SECOND fixture: a fifteen-day-old account. This exists for exactly the
+ * reason `SILENT_WEEK_STARTS` above exists — a check the page asks the
+ * reviewer to make is meaningless unless the thing being checked is actually
+ * on the page. The main `octocat` fixture carries a 219-day calendar, so
+ * Vitals' `n` saturates at `WINDOW_DAYS` (28) and the Rule C-1 dashed
+ * "no recording exists" segment is NEVER DRAWN. H-1 asks the reviewer to
+ * distinguish that dashed segment from a solid accent flat segment while only
+ * one of the two is rendered.
+ *
+ * The counts are not arbitrary — they were solved for against the shipped
+ * `computeMonthlyCandles`/`levelToY` so that ONE fixture produces both of the
+ * missing states at once:
+ *
+ * - **H-1 (Vitals, Rule C-1):** `n = 15 < 28`, so slots 0..12 carry the dashed
+ *   `rule` line, and the zeros at indices 2, 4 and 9 are RECORDED zeros that
+ *   draw as solid 1.6px `accent` flat segments on the same baseline. The two
+ *   signals finally sit adjacent, which is the whole comparison.
+ * - **H-2 (Ticker, Rule C-3):** the trailing month closes at 25 against an open
+ *   of 26, giving a hollow body of **1.52px** — 0.02px above the `DOJI_MIN_H`
+ *   floor of 1.5, i.e. the tightest hollow body the card can draw before it
+ *   becomes a doji. The month before it is also hollow at 21.33px, so the
+ *   reviewer gets an easy case and the hard case side by side and can say
+ *   which one stops reading as hollow.
+ *
+ * `2026-08-07` is the last day, matching `PINNED_NOW`, so the account reads as
+ * currently active rather than abandoned (which would route Vitals into its
+ * FLATLINE branch and remove the pulse H-3 needs).
+ */
+const SPARSE_START = Date.UTC(2026, 6, 24); // 2026-07-24
+const SPARSE_COUNTS = [6, 3, 0, 12, 0, 6, 6, 1, 1, 0, 3, 3, 10, 4, 4] as const;
+
+function sparseCalendarDays(): { date: string; count: number }[] {
+  return SPARSE_COUNTS.map((count, i) => ({
+    date: new Date(SPARSE_START + i * MS_PER_DAY).toISOString().slice(0, 10),
+    count,
+  }));
+}
+
+function sparseProfileData(): ProfileData {
+  const contributionCalendar = sparseCalendarDays();
+  return {
+    login: "newcomer",
+    name: "New Comer",
+    avatarUrl: "",
+    followers: 3,
+    fetchedAt: PINNED_NOW.toISOString(),
+    stats: { totalCommits: 41, totalPRs: 2, totalIssues: 1, totalStars: 0 },
+    contributionCalendar,
+    contributionCalendarTotal: contributionCalendar.reduce((sum, d) => sum + d.count, 0),
+    repositories: [
+      {
+        name: "first-repo",
+        nameWithOwner: "newcomer/first-repo",
+        url: "https://github.com/newcomer/first-repo",
+        createdAt: "2026-07-24T00:00:00Z",
+        pushedAt: PINNED_NOW.toISOString(),
+        isFork: false,
+      },
+    ],
+  };
+}
+
+/**
  * A synthetic `ProfileData` covering every declared capability at once
  * (stats, identity, repoList, calendar) — a realistic partial-year
  * contribution calendar, a repository list including a stale entry (so The
@@ -182,53 +245,79 @@ function main(): void {
     timezone: "UTC",
     cards: CARDS,
   });
-  const data = syntheticProfileData();
+    // Render once per THEME NAME (not once per ground) — dracula/nord/
+    // tokyonight would otherwise be rendered (and written to disk) twice for
+    // byte-identical output, since their light and dark pairs are the SAME
+    // object reference (D-07).
+  function renderFixture(
+    data: ProfileData,
+    dirSuffix: string,
+  ): Map<ResolvedConfig["theme"], ReturnType<typeof renderAllCards>> {
+      const byTheme = new Map<ResolvedConfig["theme"], ReturnType<typeof renderAllCards>>();
+    for (const themeConfig of new Set(GROUNDS.map((g) => g.themeConfig))) {
+      const themes = resolveTheme(themeConfig);
+      const rendered = renderAllCards(
+        cards,
+        data,
+        { now: PINNED_NOW, seed: PINNED_SEED, language: "en" },
+        themes,
+      );
+      byTheme.set(themeConfig, rendered);
 
-  // Render once per THEME NAME (not once per ground) — dracula/nord/
-  // tokyonight would otherwise be rendered (and written to disk) twice for
-  // byte-identical output, since their light and dark pairs are the SAME
-  // object reference (D-07).
-  const renderedByTheme = new Map<ResolvedConfig["theme"], ReturnType<typeof renderAllCards>>();
-  for (const themeConfig of new Set(GROUNDS.map((g) => g.themeConfig))) {
-    const themes = resolveTheme(themeConfig);
-    const rendered = renderAllCards(
-      cards,
-      data,
-      { now: PINNED_NOW, seed: PINNED_SEED, language: "en" },
-      themes,
-    );
-    renderedByTheme.set(themeConfig, rendered);
-
-    const themeDir = `${OUTPUT_DIR}/${themeConfig}`;
-    mkdirSync(themeDir, { recursive: true });
-    for (const { id, light, dark } of rendered) {
-      writeFileSync(`${themeDir}/${id}-light.svg`, light, "utf8");
-      writeFileSync(`${themeDir}/${id}-dark.svg`, dark, "utf8");
+      const themeDir = `${OUTPUT_DIR}/${themeConfig}${dirSuffix}`;
+      mkdirSync(themeDir, { recursive: true });
+      for (const { id, light, dark } of rendered) {
+        writeFileSync(`${themeDir}/${id}-light.svg`, light, "utf8");
+        writeFileSync(`${themeDir}/${id}-dark.svg`, dark, "utf8");
+      }
+      console.log(`[build-uat-preview] wrote ${rendered.length} card(s) x2 modes under ${themeDir}/`);
     }
-    console.log(`[build-uat-preview] wrote ${rendered.length} card(s) x2 modes under ${themeDir}/`);
+    return byTheme;
   }
 
-  const sections = GROUNDS.map((ground) => {
-    const rendered = renderedByTheme.get(ground.themeConfig)!;
-    const cells = rendered
-      .map((rc) => {
-        const src = `${OUTPUT_DIR}/${ground.themeConfig}/${rc.id}-${ground.mode}.svg`;
-        const alt = escapeHtml(`${rc.title} — ${ground.label} ground`);
-        return (
-          `      <figure class="card-cell">\n` +
-          `        <img src="${src}" alt="${alt}" width="495">\n` +
-          `        <figcaption>${escapeHtml(rc.id)} — ${escapeHtml(ground.label)}</figcaption>\n` +
-          `      </figure>`
-        );
-      })
-      .join("\n");
-    return (
-      `  <section>\n` +
-      `    <h2>${escapeHtml(ground.label)}</h2>\n` +
-      `    <div class="card-grid">\n${cells}\n    </div>\n` +
-      `  </section>`
-    );
-  }).join("\n\n");
+  const renderedByTheme = renderFixture(syntheticProfileData(), "");
+  const sparseByTheme = renderFixture(sparseProfileData(), "-sparse");
+
+  function buildSections(
+    byTheme: Map<ResolvedConfig["theme"], ReturnType<typeof renderAllCards>>,
+    dirSuffix: string,
+    labelSuffix: string,
+  ): string {
+    return GROUNDS.map((ground) => {
+      const rendered = byTheme.get(ground.themeConfig)!;
+        const label = `${ground.label}${labelSuffix}`;
+      const cells = rendered
+        .map((rc) => {
+          const src = `${OUTPUT_DIR}/${ground.themeConfig}${dirSuffix}/${rc.id}-${ground.mode}.svg`;
+          const alt = escapeHtml(`${rc.title} — ${label} ground`);
+          return (
+            `      <figure class="card-cell">\n` +
+            `        <img src="${src}" alt="${alt}" width="495">\n` +
+            `        <figcaption>${escapeHtml(rc.id)} — ${escapeHtml(label)}</figcaption>\n` +
+            `      </figure>`
+          );
+        })
+        .join("\n");
+      return (
+        `  <section>\n` +
+        `    <h2>${escapeHtml(label)}</h2>\n` +
+        `    <div class="card-grid">\n${cells}\n    </div>\n` +
+        `  </section>`
+      );
+    }).join("\n\n");
+  }
+
+  const sections =
+    buildSections(renderedByTheme, "", "") +
+    `\n\n  <hr>\n  <h1>Sparse account — the fixture H-1 and H-2 are actually judged on</h1>\n` +
+    `  <p class="warning">A fifteen-day-old account. The established-account fixture above cannot\n` +
+    `  answer H-1 at all: its calendar is long enough that Vitals’ window saturates at 28 days,\n` +
+    `  so the dashed &ldquo;no recording exists&rdquo; segment is never drawn and the reviewer is\n` +
+    `  asked to compare it against something that is not on the page. Below, Vitals renders 15\n` +
+    `  recorded days (dashed run on the left, three recorded zeros as solid accent flat segments)\n` +
+    `  and the Ticker renders its tightest legal hollow body — 1.52px against the 1.5px doji\n` +
+    `  floor — directly beside a comfortable 21.33px one.</p>\n\n` +
+    buildSections(sparseByTheme, "-sparse", " — sparse account");
 
   writeDiagnosticSpinSvg();
 
@@ -279,8 +368,8 @@ function main(): void {
     `  <li>No other card on the page should move at all.</li>\n` +
     `  <li><strong>D-03 legibility (the phase's only hard visual constraint):</strong> in EVERY section below, can you tell where the pressed (already-elapsed) grooves stop and the future (not-yet-happened) grooves begin, without being told? If not, note which section and what you see.</li>\n` +
     `  <li><strong>D-03, the harder half.</strong> The fixture contains <strong>two fully-silent elapsed weeks</strong> (SILENT WEEKS in the right column should read 2, not 0 — if it reads 0 the fixture is broken and this check is meaningless). Those two grooves are PAST weeks that happen to have zero contributions, and they must still look different from a FUTURE week. One sits mid-disc among active grooves; the other sits directly against the future band, which is the exact adjacency the constraint is about. Can you tell those two apart from the future grooves, in every theme?</li>\n` +
-    `  <li><strong>H-1 / Rule C-1 (Vitals):</strong> is the solid 1.6px accent flat segment (a recorded day of zero) distinguishable from the dashed 1px rule segment (no recording exists) at the same y, on all five theme grounds below? Look closely at the left edge where the dashed run meets the solid trace.</li>\n` +
-    `  <li><strong>H-2 / Rule C-3 (Ticker):</strong> does an 11px-wide hollow (down) candle body with a 1px stroke actually read as hollow, on all five theme grounds, especially the shortest bodies near the 1.5px doji floor?</li>\n` +
+    `  <li><strong>H-1 / Rule C-1 (Vitals) — judge this on the SPARSE sections, not the ones above.</strong> The established-account fixture saturates Vitals’ 28-day window, so it draws no dashed segment at all and cannot answer this question. In each sparse section the trace should show a dashed 1px <code>rule</code> run across the left ~13 slots (no recording exists) meeting a solid 1.6px <code>accent</code> trace, which itself sits flat on the baseline for three recorded zero days. Are the two flat runs — dashed and solid — tellable apart at README scale, on all five grounds? <em>If you see no dashed run at all, the fixture is broken and this check is meaningless — say so rather than passing it.</em></li>\n` +
+    `  <li><strong>H-2 / Rule C-3 (Ticker) — judge this on the SPARSE sections.</strong> Each sparse Ticker draws exactly two hollow (down) bodies: a comfortable <strong>21.33px</strong> one and a <strong>1.52px</strong> one sitting 0.02px above the 1.5px doji floor — the tightest hollow body the card can legally draw. With an 11px width and a 1px stroke on each edge, the stroke very nearly consumes the fill. Does the 1.52px body still read as hollow rather than solid, on all five grounds? A "no" here is a real finding, not a fixture problem.</li>\n` +
     `  <li><strong>H-3 / reduced motion (Vitals):</strong> confirm the pulse dot actually freezes to a solid accent dot under reduced motion. Use a BROWSER-LEVEL launch flag (e.g. <code>--force-prefers-reduced-motion</code>) or a real OS setting — CDP <code>Emulation.setEmulatedMedia</code> does NOT propagate into &lt;img&gt;-decoded SVG and produces a false negative indistinguishable from a real defect (established in Phase 5).</li>\n` +
     `</ul>\n` +
     `<div class="diag">\n` +
