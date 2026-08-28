@@ -78,6 +78,19 @@ cards:
 
 統計數字來自 GitHub GraphQL API 每個類別最多 100 個 repository 的資料（GitHub 本身的上限）——非常活躍、貢獻遍及超過 100 個 repository 的帳號，commits/issues/PRs 數字可能略低於實際活動量。
 
+### `vitals`
+
+此卡無任何選項。
+
+### `the-forecast`
+
+此卡無任何選項。
+
+### `the-ticker`
+
+此卡無任何選項。卡片右上角的股票代號（例如 `$WAYNE`）由帳號 login 自動導出——取前 5 個英數字元、
+轉大寫、加上 `$` 前綴——不可設定。可設定 symbol 是已記錄的 deferred idea，不在本版。
+
 ## 設定寫錯時
 
 `widgets.yml` 有問題會讓整次執行失敗，**一次列出所有問題**，而不是修好一個才發現下一個：

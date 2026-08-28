@@ -17,7 +17,7 @@ One config file, one Action — no fork, no server, no code.</p>
 
 <p align="center"><sub>Almanac · light and dark follow the reader's system theme</sub></p>
 
-Each card is an independent SVG file, so you can embed just the one you want, or all five. A
+Each card is an independent SVG file, so you can embed just the one you want, or all eight. A
 GitHub Action renders every enabled card on a schedule and publishes the results to your
 repository's `output` branch. Nothing runs at page-load time, so there is no service that can go
 down and take your README with it.
@@ -122,6 +122,9 @@ pushing anything or waiting for a run.
 | `editorial-stat-card` | commits, PRs, issues, stars, followers in magazine-style typography | yes |
 | `the-graveyard` | Repositories gone stale, shown as tombstones with days since their last push | yes |
 | `the-record` | This year's contributions pressed into a vinyl record — one groove per week, thicker for busier weeks, needle on the current week; the only card that animates | yes |
+| `vitals` | Your last 28 days of contributions as an ECG trace with a pulse. No ECG treatment exists in the surveyed catalogue (2026-08-27 survey) — the data itself is the most common in the ecosystem | yes |
+| `the-forecast` | A typical week, projected from the past 12 weeks' rhythm — a projection of past rhythm, not a prediction. Every surveyed calendar card is retrospective; none projects forward (2026-08-27 survey) | yes |
+| `the-ticker` | Twelve months of activity as candlesticks — filled up, hollow down, level = trailing 7-day contributions. No candlestick treatment found in the surveyed catalogue (2026-08-27 survey) | yes |
 | `masthead` | A newspaper-style header row listing the other enabled cards' contents and one cited figure | yes |
 
 The catalog is meant to grow — see [Contributing](#contributing).
@@ -244,7 +247,7 @@ broken run always shows red in the Actions tab and emails the owner — it never
 
 ## Contributing
 
-Want to add a sixth card? See **[CONTRIBUTING.md](CONTRIBUTING.md)** — a new card is one new
+Want to add a new card? See **[CONTRIBUTING.md](CONTRIBUTING.md)** — a new card is one new
 directory plus one line in `src/widgets/all.ts`, no changes to the rendering engine.
 
 ## Development
