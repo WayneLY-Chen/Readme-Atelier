@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { hasGlyph } from "../../core/font.js";
 import type { ProfileData, RenderOptions } from "../../core/model.js";
 import { renderPair } from "../../core/svg.js";
-import { draculaTheme, editorialDark, editorialLight, tokyonightTheme } from "../../core/theme.js";
+import { draculaTheme, editorialDark, editorialLight, nordTheme, tokyonightTheme } from "../../core/theme.js";
 import { loadAllFonts } from "../../node/fonts.js";
 import { numeralFillFor } from "./contrast.js";
 import {
@@ -317,6 +317,25 @@ describe("Rule C-2 wiring — the numeral <g fill> matches numeralFillFor(theme)
     const markup = theForecastWidget.renderBody(data, editorialLight, optsFor("en"));
     expect(numeralFillFor(editorialLight).source).toBe("muted");
     expect(markup).toContain(`<g fill="${editorialLight.muted}">`);
+  });
+
+  it("editorialDark -> muted", () => {
+    const markup = theForecastWidget.renderBody(data, editorialDark, optsFor("en"));
+    expect(numeralFillFor(editorialDark).source).toBe("muted");
+    expect(markup).toContain(`<g fill="${editorialDark.muted}">`);
+  });
+
+  // WR-02 (06-REVIEW.md): nord is the theme the branch's own doc comment
+  // calls out as the interesting case — it keeps `muted` at a 9.25:1 ratio
+  // (contrast.test.ts's V-05 suite) despite `mode: "dark"`, unlike
+  // dracula/tokyonight, which are also dark-mode but fall back to `ink`.
+  // Before this test, nord's render-level `<g fill>` wiring was proven only
+  // as a pure-function assertion (contrast.test.ts), never against the
+  // actual SVG markup the way editorialLight/dracula/tokyonight already are.
+  it("nordTheme -> muted (mode is dark, but the branch reads theme VALUES, not theme.mode)", () => {
+    const markup = theForecastWidget.renderBody(data, nordTheme, optsFor("en"));
+    expect(numeralFillFor(nordTheme).source).toBe("muted");
+    expect(markup).toContain(`<g fill="${nordTheme.muted}">`);
   });
 
   it("draculaTheme -> ink (the AA fallback)", () => {
