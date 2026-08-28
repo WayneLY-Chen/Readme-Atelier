@@ -113636,9 +113636,10 @@ const vitalsWidget = {
  * into three separate composition roots (`src/action-entry.ts`,
  * `src/cli.ts`, `scripts/build-uat-preview.ts`) — a fourth copy was about to
  * be added for the Phase 5 playground entry point. Adding a new card now
- * costs exactly two changes: a new `src/widgets/<name>/` directory, and one
- * new line here. No entry point, and no file under `src/core/`, needs to
- * change.
+ * costs a new `src/widgets/<name>/` directory plus exactly two lines here
+ * (one `import`, one `register(...)`) — Phase 6's own measured number
+ * (06-FINDINGS.md F-03), not the "one line" CONTRIBUTING.md still claims.
+ * No entry point, and no file under `src/core/`, needs to change.
  *
  * `register()` throws `DuplicateWidgetError` (src/core/registry.ts) if a name
  * is already registered — it never silently overwrites. Because of that,
