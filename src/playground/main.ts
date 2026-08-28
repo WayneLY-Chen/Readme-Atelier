@@ -21,7 +21,16 @@ import { copyArtifact, setActiveButton, setGroupDisabled } from "./ui.js";
  */
 
 /** D-05's fixed card checklist/config order — Almanac ... Masthead LAST. */
-const CARD_ORDER = ["almanac", "editorial-stat-card", "the-graveyard", "the-record", "masthead"] as const;
+const CARD_ORDER = [
+  "almanac",
+  "editorial-stat-card",
+  "the-graveyard",
+  "the-record",
+  "vitals",
+  "the-forecast",
+  "the-ticker",
+  "masthead",
+] as const;
 type CardId = (typeof CARD_ORDER)[number];
 
 const THEME_ORDER = ["editorial", "dracula", "nord", "tokyonight"] as const;

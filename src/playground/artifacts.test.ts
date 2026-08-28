@@ -15,7 +15,16 @@ import { buildAdopterWorkflowYaml, buildEmbedSnippetsArtifact, buildWidgetsYamlA
 // per test file, so this runs exactly once for this file.
 registerAllWidgets();
 
-const ALL_CARD_TYPES = ["almanac", "editorial-stat-card", "the-graveyard", "the-record", "masthead"];
+const ALL_CARD_TYPES = [
+  "almanac",
+  "editorial-stat-card",
+  "the-graveyard",
+  "the-record",
+  "vitals",
+  "the-forecast",
+  "the-ticker",
+  "masthead",
+];
 
 function fakeCard(id: string): RenderedCard {
   return {

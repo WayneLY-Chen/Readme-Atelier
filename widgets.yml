@@ -12,3 +12,6 @@ cards:
   - type: editorial-stat-card
   - type: the-graveyard
   - type: the-record
+  - type: vitals
+  - type: the-forecast
+  - type: the-ticker

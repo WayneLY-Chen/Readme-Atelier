@@ -138,6 +138,9 @@ const CARDS: ResolvedConfig["cards"] = [
   { type: "editorial-stat-card" },
   { type: "the-graveyard" },
   { type: "the-record" },
+  { type: "vitals" },
+  { type: "the-forecast" },
+  { type: "the-ticker" },
 ];
 
 /**
@@ -276,6 +279,9 @@ function main(): void {
     `  <li>No other card on the page should move at all.</li>\n` +
     `  <li><strong>D-03 legibility (the phase's only hard visual constraint):</strong> in EVERY section below, can you tell where the pressed (already-elapsed) grooves stop and the future (not-yet-happened) grooves begin, without being told? If not, note which section and what you see.</li>\n` +
     `  <li><strong>D-03, the harder half.</strong> The fixture contains <strong>two fully-silent elapsed weeks</strong> (SILENT WEEKS in the right column should read 2, not 0 — if it reads 0 the fixture is broken and this check is meaningless). Those two grooves are PAST weeks that happen to have zero contributions, and they must still look different from a FUTURE week. One sits mid-disc among active grooves; the other sits directly against the future band, which is the exact adjacency the constraint is about. Can you tell those two apart from the future grooves, in every theme?</li>\n` +
+    `  <li><strong>H-1 / Rule C-1 (Vitals):</strong> is the solid 1.6px accent flat segment (a recorded day of zero) distinguishable from the dashed 1px rule segment (no recording exists) at the same y, on all five theme grounds below? Look closely at the left edge where the dashed run meets the solid trace.</li>\n` +
+    `  <li><strong>H-2 / Rule C-3 (Ticker):</strong> does an 11px-wide hollow (down) candle body with a 1px stroke actually read as hollow, on all five theme grounds, especially the shortest bodies near the 1.5px doji floor?</li>\n` +
+    `  <li><strong>H-3 / reduced motion (Vitals):</strong> confirm the pulse dot actually freezes to a solid accent dot under reduced motion. Use a BROWSER-LEVEL launch flag (e.g. <code>--force-prefers-reduced-motion</code>) or a real OS setting — CDP <code>Emulation.setEmulatedMedia</code> does NOT propagate into &lt;img&gt;-decoded SVG and produces a false negative indistinguishable from a real defect (established in Phase 5).</li>\n` +
     `</ul>\n` +
     `<div class="diag">\n` +
     `  <strong>If the record does not appear to spin, read this before filing a bug.</strong>\n` +

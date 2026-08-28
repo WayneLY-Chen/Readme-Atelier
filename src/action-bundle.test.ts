@@ -65,7 +65,16 @@ describe("dist/index.js — the artifact a real runner executes", () => {
 
   it("contains every registered widget id, so a card named in widgets.yml cannot be unknown to the shipped Action", () => {
     const bundle = readFileSync(bundlePath, "utf8");
-    for (const id of ["almanac", "editorial-stat-card", "the-graveyard", "masthead", "the-record"]) {
+    for (const id of [
+      "almanac",
+      "editorial-stat-card",
+      "the-graveyard",
+      "masthead",
+      "the-record",
+      "vitals",
+      "the-forecast",
+      "the-ticker",
+    ]) {
       expect(bundle, `widget "${id}" is missing from the bundle — run \`npm run build\``).toContain(`"${id}"`);
     }
   });

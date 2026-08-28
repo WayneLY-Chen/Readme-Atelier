@@ -48311,7 +48311,7 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony import */ var _node_fonts_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(514);
 /* harmony import */ var _node_point_cost_js__WEBPACK_IMPORTED_MODULE_10__ = __nccwpck_require__(9162);
 /* harmony import */ var _node_step_summary_js__WEBPACK_IMPORTED_MODULE_11__ = __nccwpck_require__(9917);
-/* harmony import */ var _widgets_all_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(454);
+/* harmony import */ var _widgets_all_js__WEBPACK_IMPORTED_MODULE_12__ = __nccwpck_require__(639);
 
 
 
@@ -97353,7 +97353,7 @@ function writeStepSummary(content) {
 
 /***/ }),
 
-/***/ 454:
+/***/ 639:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
 
@@ -110351,6 +110351,789 @@ const mastheadWidget = {
     },
 };
 
+;// CONCATENATED MODULE: ./src/widgets/the-forecast/contrast.ts
+/**
+ * WCAG 2.x relative-luminance contrast arithmetic (06-UI-SPEC.md "Rule C-2 —
+ * the numeral fill is decided by contrast, not by symbolism"). Self-contained
+ * (~15 lines of real arithmetic): hex -> sRGB channel -> linearize -> relative
+ * luminance `L = 0.2126R + 0.7152G + 0.0722B` -> ratio `(L1+0.05)/(L2+0.05)`
+ * with the lighter luminance always in the numerator.
+ *
+ * This is the project's FIRST widget-side contrast computation
+ * (06-PATTERNS.md "No Analog Found" — nothing in `src/core/` or any shipped
+ * widget computes contrast; `src/core/theme.ts` only records in a comment
+ * that its palettes were "WCAG-contrast-verified", with the conclusion
+ * hardcoded, never computed). Deliberately kept in `src/widgets/the-forecast/`
+ * and NOT extracted to `src/core/` — 06-UI-SPEC.md Watch Item B names this
+ * "the strongest future core-primitive candidate in the batch" and instructs:
+ * count it as copy #1, do not extract it. A SECOND card needing this
+ * arithmetic is the signal to propose `core/contrast.ts`; that signal has not
+ * happened yet.
+ */
+/** sRGB gamma decode of a single 0-255 channel value to its linear-light
+ * equivalent, per the WCAG 2.x relative-luminance formula. */
+function srgbChannelToLinear(channel) {
+    const c = channel / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+function hexToRgb(hex) {
+    const clean = hex.replace("#", "");
+    const r = Number.parseInt(clean.slice(0, 2), 16);
+    const g = Number.parseInt(clean.slice(2, 4), 16);
+    const b = Number.parseInt(clean.slice(4, 6), 16);
+    return [r, g, b];
+}
+/** WCAG 2.x relative luminance of a `#RRGGBB` hex color. */
+function relativeLuminance(hex) {
+    const [r, g, b] = hexToRgb(hex);
+    const rLin = srgbChannelToLinear(r);
+    const gLin = srgbChannelToLinear(g);
+    const bLin = srgbChannelToLinear(b);
+    return 0.2126 * rLin + 0.7152 * gLin + 0.0722 * bLin;
+}
+/**
+ * WCAG 2.x contrast ratio between two `#RRGGBB` colors, symmetric in its two
+ * arguments (the lighter of the pair's relative luminance always ends up in
+ * the numerator, regardless of argument order). `contrastRatio("#FFFFFF",
+ * "#000000") === 21` (the WCAG-defined maximum).
+ */
+function contrastRatio(hexA, hexB) {
+    const lumA = relativeLuminance(hexA);
+    const lumB = relativeLuminance(hexB);
+    const lighter = Math.max(lumA, lumB);
+    const darker = Math.min(lumA, lumB);
+    return (lighter + 0.05) / (darker + 0.05);
+}
+/**
+ * Rule C-2's contrast fallback: `numeralFill = contrastRatio(theme.muted,
+ * theme.paper) >= 4.5 ? theme.muted : theme.ink`. Reads the theme's own hex
+ * VALUES, never `theme.mode` — this is what keeps the light/dark structural
+ * invariant intact (`renderPair` still calls `renderBody` twice with only
+ * `Theme` differing, and the widget still cannot ask which of the two calls
+ * it is in) and keeps the result byte-stable per theme (QA-02 snapshot
+ * safety), while still answering a real, deterministic question about the
+ * palette it was handed. Measured 2026-08-28 against all five shipped theme
+ * entries (V-05, pinned by a named unit test in `contrast.test.ts`):
+ * editorial light 5.80, editorial dark 5.55, nord 9.25 -> `muted`; dracula
+ * 3.03, tokyonight 2.76 -> falls back to `ink`.
+ */
+function numeralFillFor(theme) {
+    const ratio = contrastRatio(theme.muted, theme.paper);
+    if (ratio >= 4.5) {
+        return { fill: theme.muted, source: "muted", ratio };
+    }
+    return { fill: theme.ink, source: "ink", ratio };
+}
+
+;// CONCATENATED MODULE: ./src/widgets/the-forecast/copy.ts
+/**
+ * The Forecast copy — 06-UI-SPEC.md "Forecast chrome strings — and the
+ * framing contract" table + "The framing vocabulary, pinned in both
+ * languages".
+ *
+ * THIS IS THE CARD WHERE SLOPPY WORDING MAKES AN ETHICAL CLAIM THE DATA
+ * CANNOT SUPPORT. Every string in this file is either (a) drawn from the
+ * "permitted" vocabulary (`projection`/`projected`, `median`, `rhythm`,
+ * past-tense/stative phrasing, `a typical week` as an archetype — never a
+ * dated week), or (b) one of exactly four exempt literals (X1-X4) that state
+ * the disclaimer's own negation ("NOT A PREDICTION" / "不是預測"). See the
+ * B1-B9 / X1-X4 tables below — they are DATA, consumed by copy.test.ts's
+ * V-03 four-step test, not decoration.
+ *
+ * Tie-break rule (documented here per 06-UI-SPEC.md's explicit instruction,
+ * "The projection method — Tie for busiest weekday"): when two or more
+ * weekdays share the maximum median, the EARLIEST weekday in Monday-first
+ * order wins. Deterministic, unit-tested in index.test.ts (F5) — an
+ * unspecified tie-break would be a byte-instability risk for QA-02.
+ *
+ * The card never names a date. The seven columns are weekday ARCHETYPES —
+ * "a typical Monday" — never "next Monday". See index.ts's weekday-of-date
+ * computation for the corresponding rule on the geometry side.
+ */
+const titleEn = "THE FORECAST";
+const titleZh = "開發預報";
+// ---------------------------------------------------------------------------
+// Disclosure eyebrow — mandatory in EVERY state, both languages. Prints the
+// REAL k (never a hardcoded 12) — this is F4, the card's single most
+// important honesty mechanic (06-UI-SPEC.md F4).
+// ---------------------------------------------------------------------------
+/** `k >= 2` state — `k` is a PRE-COMPUTED integer, never formatted by this
+ * function beyond template interpolation (same convention as Vitals'
+ * `windowCaptionPartialEn`). */
+function disclosureEyebrowEn(k) {
+    return `A TYPICAL WEEK, PROJECTED FROM THE PAST ${k} WEEKS`;
+}
+function disclosureEyebrowZh(k) {
+    return `典型的一週，依過去 ${k} 週的節奏推算`;
+}
+/** `k < 2` state (F1) — the card refuses to project rather than projecting
+ * from fewer than 2 weeks of basis. */
+const disclosureEyebrowInsufficientEn = "NOT ENOUGH RECORDED WEEKS TO PROJECT";
+const disclosureEyebrowInsufficientZh = "紀錄的週數不足，無法推算";
+// ---------------------------------------------------------------------------
+// Weekday headers — the seven day-column labels (Monday-first).
+// ---------------------------------------------------------------------------
+const weekdayHeadersEn = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+const weekdayHeadersZh = ["一", "二", "三", "四", "五", "六", "日"];
+/** Weekday full names, used in the headline sentence (Monday-first, index 0
+ * = Monday .. index 6 = Sunday). */
+const weekdayFullNamesEn = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+const weekdayFullNamesZh = ["週一", "週二", "週三", "週四", "週五", "週六", "週日"];
+// ---------------------------------------------------------------------------
+// Headline — three states, one per weekday-column code path (normal /
+// all-medians-zero / insufficient-data).
+// ---------------------------------------------------------------------------
+/** Normal state — `weekdayName` and `m` are PRE-COMPUTED (weekday full name
+ * string, integer median); this function only assembles the template. */
+function headlineNormalEn(weekdayName, m) {
+    return `${weekdayName} has been busiest - median ${m}.`;
+}
+function headlineNormalZh(weekdayNameZh, m) {
+    return `過去最忙的是${weekdayNameZh}，中位數 ${m}。`;
+}
+/** F2 — all seven medians are 0 (basis exists, account dormant). A CORRECT
+ * projection, not a failure — must look deliberate. */
+const headlineAllZeroEn = "No weekday shows a rhythm yet.";
+const headlineAllZeroZh = "還看不出任何一天的節奏。";
+/** F1 — `k < 2`, fewer than 14 recorded days. */
+const headlineInsufficientEn = "Not enough recorded weeks to project a rhythm.";
+const headlineInsufficientZh = "紀錄的週數不足，無法推算節奏。";
+// ---------------------------------------------------------------------------
+// Caveat line — X1/X2. MANDATORY in every state, both languages, never
+// truncated. The one exempt pair naming what the OTHER exempt pair
+// (describe()'s desc strings, X3/X4) also names — the disclaimer that cannot
+// name what it disclaims is not a disclaimer.
+// ---------------------------------------------------------------------------
+const caveatEn = "A PROJECTION OF PAST RHYTHM, NOT A PREDICTION"; // X1
+const caveatZh = "這是過去節奏的投影，不是預測"; // X2
+// ---------------------------------------------------------------------------
+// describe() strings — the alt-text deliverable (06-UI-SPEC.md "<title>/
+// <desc> — which is also the alt text"). desc carries the caveat verbatim —
+// this is the ONLY channel where the dashed panel, the eyebrow and the
+// numeral fill convey nothing at all (an <img src> exposes only `alt`).
+// X3/X4 are the desc strings, exempt literals 3 and 4.
+// ---------------------------------------------------------------------------
+const describeTitleEn = "The Forecast card";
+/** X3 — exempt literal, byte-exact, matched whole-string only. */
+const describeDescEn = "Projects a typical week from the median of each weekday over the past 12 weeks. " +
+    "A projection of past rhythm, not a prediction.";
+const describeTitleZh = "開發預報卡片";
+/** X4 — exempt literal, byte-exact, matched whole-string only. Corrected
+ * 2026-08-28: previously named a future window ("推算未來七天的節奏"); now
+ * archetype phrasing carrying no future window, a faithful translation of
+ * the en string rather than a looser paraphrase. */
+const describeDescZh = "依過去十二週每個星期幾的中位數，推算出典型的一週，這是投影不是預測。";
+// ---------------------------------------------------------------------------
+// Page footer — inherited verbatim from the shipped contract (same literal
+// format, same absent-means-emit-nothing rule, applied independently by
+// index.ts — RENDER-02, no widget imports another widget's copy).
+// ---------------------------------------------------------------------------
+function pageFooterEn(n, m) {
+    return `PAGE ${n}/${m}`;
+}
+function pageFooterZh(n, m) {
+    return `頁 ${n} / ${m}`;
+}
+// ---------------------------------------------------------------------------
+// The B1-B9 / X1-X4 contract (06-UI-SPEC.md "Banned" / "The exemption set")
+// — exported as DATA so copy.test.ts's V-03 four-step test can consume it
+// mechanically rather than re-deriving it.
+// ---------------------------------------------------------------------------
+/**
+ * B1-B9, English side, in table order. B2 covers BOTH `you'll` and `you
+ * will` (a whole-word/phrase match, case-insensitive) since `you will`'s
+ * `will` half is already covered by B1's `/\bwill\b/i`, but the row is kept
+ * as its own pattern to mirror the UI-SPEC table 1:1. B7 is a WHOLE-WORD
+ * match only (`/\bsure\b/i`) so `measure`/`ensure`/`pressure` never
+ * false-positive (the exact bug B9's predecessor rule caused). B9 matches
+ * all five second-person forms as one alternation.
+ */
+const bannedPatternsEn = (/* unused pure expression or super */ null && ([
+    /\bwill\b/i, // B1
+    /\byou'll\b|\byou\s+will\b/i, // B2
+    /\bpredict/i, // B3 — prefix: predict, prediction, predicted
+    /\bexpect/i, // B4 — prefix: expect, expected, expecting
+    /\blikely\b/i, // B5
+    /\bguarantee/i, // B6 — prefix: guarantee, guaranteed
+    /\bsure\b/i, // B7 — whole word only
+    /\bdefinitely\b/i, // B8
+    /\b(you|your|yours|you're|yourself)\b/i, // B9 — second person
+]));
+/**
+ * B1-B9, zh-TW side, as substrings (zh has no word-boundary concept in the
+ * same sense as en, so every check here is a plain substring match). B9 has
+ * three entries (你/妳/您) for the three second-person forms named in the
+ * UI-SPEC table; every other row has exactly one.
+ */
+const bannedSubstringsZh = (/* unused pure expression or super */ null && ([
+    "你會", // B1
+    "將會", // B2
+    "預測", // B3
+    "應該會", // B4
+    "可能會", // B5
+    "保證", // B6
+    "一定", // B7
+    "肯定", // B8
+    "你", // B9
+    "妳", // B9
+    "您", // B9
+]));
+/**
+ * The exactly-four exempt literals (X1-X4), matched whole-string and
+ * byte-exact ONLY — never as a substring rule, never as a pattern. Every
+ * exempt literal states the disclaimer's own negation ("NOT A PREDICTION" /
+ * "不是預測"); there is no exempt string in which a banned token appears as
+ * an assertion.
+ */
+const exemptLiterals = [caveatEn, caveatZh, describeDescEn, describeDescZh];
+/**
+ * Builds the card's COMPLETE bilingual copy set (every chrome string, every
+ * state variant of the eyebrow and headline expanded with a representative
+ * value, the caveat, both describe() strings) — the single source both
+ * V-03's four-step banned-vocabulary test and the glyph/budget sweeps in
+ * copy.test.ts consume. Almanac's `copy.test.ts` totality precedent: leaving
+ * an export out of this list is exactly the kind of hole V-03 exists to
+ * catch, so every new string this card can ever render must be added here.
+ */
+function buildFullCopySet() {
+    return [
+        // Title.
+        titleEn,
+        titleZh,
+        // Disclosure eyebrow — both states, both languages. k=12 is the
+        // UI-SPEC's own documented worst-case width for the k>=2 state; k=2 and
+        // k=11 are also swept so every reachable digit width is covered.
+        disclosureEyebrowEn(12),
+        disclosureEyebrowEn(2),
+        disclosureEyebrowEn(11),
+        disclosureEyebrowZh(12),
+        disclosureEyebrowZh(2),
+        disclosureEyebrowZh(11),
+        disclosureEyebrowInsufficientEn,
+        disclosureEyebrowInsufficientZh,
+        // Weekday headers.
+        ...weekdayHeadersEn,
+        ...weekdayHeadersZh,
+        // Weekday full names.
+        ...weekdayFullNamesEn,
+        ...weekdayFullNamesZh,
+        // Headline — all three states, both languages. Wednesday/median 288 is
+        // the UI-SPEC's own documented worst-case example.
+        headlineNormalEn("Wednesday", 288),
+        headlineNormalZh("週三", 288),
+        headlineAllZeroEn,
+        headlineAllZeroZh,
+        headlineInsufficientEn,
+        headlineInsufficientZh,
+        // Caveat (X1/X2).
+        caveatEn,
+        caveatZh,
+        // Page footer — representative values.
+        pageFooterEn(1, 1),
+        pageFooterEn(10, 12),
+        pageFooterZh(1, 1),
+        pageFooterZh(10, 12),
+        // describe() — both languages, title + desc (X3/X4 are the desc pair).
+        describeTitleEn,
+        describeDescEn,
+        describeTitleZh,
+        describeDescZh,
+    ];
+}
+
+;// CONCATENATED MODULE: ./src/widgets/the-forecast/index.ts
+
+
+
+
+/**
+ * Plan 06-02: The Forecast / 開發預報 (CARD-06) — the catalogue's first
+ * "non-measured-data" card. Seven projected weekday numerals are NOT
+ * measurements; they are a rhythm projection derived from the trailing basis
+ * window (06-UI-SPEC.md "Card Layout 2 — The Forecast", "The projection
+ * method — defined before it is drawn"). This is the one card in the batch
+ * where sloppy wording makes an ethical claim the data cannot support — see
+ * copy.ts's header comment and the B1-B9/X1-X4 tables it exports.
+ */
+// ---------------------------------------------------------------------------
+// Geometry constants — each cites the UI-SPEC section that fixed the value
+// (06-UI-SPEC.md "Card Layout 2 — The Forecast — Canvas and geometry
+// constants").
+// ---------------------------------------------------------------------------
+const the_forecast_CARD_WIDTH = 495;
+const the_forecast_CARD_HEIGHT = 248;
+const the_forecast_PADDING = 24;
+const the_forecast_RIGHT_EDGE_X = the_forecast_CARD_WIDTH - the_forecast_PADDING; // 471
+const the_forecast_T1_SIZE = 8;
+const the_forecast_T3_SIZE = 17;
+const the_forecast_T1_LETTER_SPACING = 1.6;
+const TITLE_Y = 44;
+const EYEBROW_Y = 58;
+const RULE_Y = 68;
+/**
+ * Declared chrome deviation (06-UI-SPEC.md "Declared chrome deviation"):
+ * Forecast is the only card in the catalogue whose eyebrow sits on its own
+ * line (y=58) with the hairline pushed to y=68, instead of sharing the
+ * title's y=44 baseline with the rule at y=58. Reason: the disclosure
+ * eyebrow is 305.6px in en, the title is 128.3px, and a shared baseline
+ * would leave a 13px gutter — a layout in which the honest thing is the
+ * thing under pressure. Given a free choice between squeezing the
+ * disclosure and moving one rule 10px down, the rule moves. Every OTHER
+ * card keeps 44/58 unchanged.
+ */
+const PANEL_X = 24;
+const PANEL_Y = 80;
+const PANEL_W = 447;
+const PANEL_H = 96; // panel spans y 80..176
+const COL_W = PANEL_W / 7; // 63.857142...
+const WEEKDAY_LABEL_Y = 96;
+const GLYPH_CENTER_Y = 128;
+const NUMERAL_Y = 168;
+const HEADLINE_Y = 200;
+const CAVEAT_Y = 216;
+function colCenter(i) {
+    return PANEL_X + COL_W * (i + 0.5);
+}
+// ---------------------------------------------------------------------------
+// Text slot budgets (06-UI-SPEC.md "Text slot budgets" — Forecast table) —
+// every one is a regression tripwire, checked before its corresponding path
+// data is built. Every string on this card is engine-authored, so
+// RENDER-05's fail-loud policy applies in full.
+// ---------------------------------------------------------------------------
+const CARD_TITLE_BUDGET_PX = 200;
+const DISCLOSURE_EYEBROW_BUDGET_PX = 380; // never truncate — mandatory string
+const WEEKDAY_HEADER_BUDGET_PX = 48; // COL_W (63.86) minus 16
+const NUMERAL_BUDGET_PX = 48; // 3-digit worst case ("288") measures 30.6px
+const HEADLINE_BUDGET_PX = 400;
+const CAVEAT_BUDGET_PX = 340; // never truncate — mandatory string
+/**
+ * Thrown by assertSlotBudget when a formatted string's measured render width
+ * exceeds its slot's budget. No `format.ts` exists for this card (its
+ * numerals are plain integers with no compaction path — 06-PATTERNS.md
+ * "Concrete file sets to plan"), so this lives here instead, same shape as
+ * the-record/format.ts's RecordSlotOverflowError / vitals/format.ts's
+ * VitalsSlotOverflowError (RENDER-02: no widget imports another widget's
+ * private helper).
+ */
+class ForecastSlotOverflowError extends Error {
+    constructor(field, formatted, widthPx, budgetPx) {
+        super(`ForecastSlotOverflowError: field "${field}" formatted as "${formatted}" measures ` +
+            `${widthPx}px, exceeding the ${budgetPx}px slot budget.`);
+        this.name = "ForecastSlotOverflowError";
+    }
+}
+function assertSlotBudget(field, formatted, widthPx, budgetPx) {
+    if (widthPx > budgetPx) {
+        throw new ForecastSlotOverflowError(field, formatted, widthPx, budgetPx);
+    }
+}
+// ---------------------------------------------------------------------------
+// Module-scope invariant throws (same convention as vitals/index.ts's
+// R-wave headroom check) — a bad geometry constant fails at IMPORT time,
+// never silently at render time.
+// ---------------------------------------------------------------------------
+const SUN_RAY_OUTER_R = 19; // UI-SPEC "Weather glyphs — geometry", SUN's outer ray radius
+const NUMERAL_BOTTOM_CLEARANCE = 8; // UI-SPEC "Extent check": sm (8)
+if (!(GLYPH_CENTER_Y - SUN_RAY_OUTER_R > PANEL_Y)) {
+    throw new Error(`the-forecast: weather-glyph top clearance invariant violated — GLYPH_CENTER_Y=${GLYPH_CENTER_Y}, SUN_RAY_OUTER_R=${SUN_RAY_OUTER_R}, PANEL_Y=${PANEL_Y}`);
+}
+if (!(NUMERAL_Y + NUMERAL_BOTTOM_CLEARANCE <= PANEL_Y + PANEL_H)) {
+    throw new Error(`the-forecast: numeral bottom clearance invariant violated — NUMERAL_Y=${NUMERAL_Y}, PANEL_Y=${PANEL_Y}, PANEL_H=${PANEL_H}`);
+}
+// ---------------------------------------------------------------------------
+// Chassis helpers — own copy, not imported (RENDER-02: adding/modifying a
+// card must not require touching another card's private functions).
+// Structurally identical to vitals/index.ts's and the-graveyard/index.ts's
+// own sets.
+// ---------------------------------------------------------------------------
+function the_forecast_pathElement(d, fill) {
+    if (d === "") {
+        return "";
+    }
+    return `<path d="${d}" fill="${fill}"/>`;
+}
+function the_forecast_letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
+    let cursorX = x;
+    let d = "";
+    const chars = Array.from(text);
+    chars.forEach((ch, i) => {
+        d += (0,font/* textToPathData */.wD)(fontName, ch, cursorX, y, fontSize);
+        cursorX += (0,font/* measureAdvanceWidth */.zN)(fontName, ch, fontSize) + (i < chars.length - 1 ? letterSpacing : 0);
+    });
+    return d;
+}
+function the_forecast_letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
+    const chars = Array.from(text);
+    let width = 0;
+    chars.forEach((ch, i) => {
+        width += (0,font/* measureAdvanceWidth */.zN)(fontName, ch, fontSize) + (i < chars.length - 1 ? letterSpacing : 0);
+    });
+    return width;
+}
+/** T1 eyebrow/label style for English text: IBM Plex Mono Semibold,
+ * uppercase, letter-spaced, 8px. Left-aligned at (x, y). */
+function the_forecast_eyebrowLabel(text, x, y, fill) {
+    const upper = text.toUpperCase();
+    (0,font/* assertCoverage */.tE)("mono-semibold", upper, `the-forecast T1 eyebrow/label: "${text}"`);
+    const d = the_forecast_letterSpacedPath("mono-semibold", upper, x, y, the_forecast_T1_SIZE, the_forecast_T1_LETTER_SPACING);
+    return the_forecast_pathElement(d, fill);
+}
+function the_forecast_eyebrowLabelWidth(text) {
+    return the_forecast_letterSpacedWidth("mono-semibold", text.toUpperCase(), the_forecast_T1_SIZE, the_forecast_T1_LETTER_SPACING);
+}
+/** T1 label style for zh-TW text: Noto Serif TC, 8px, no uppercase
+ * transform, no manual letter-spacing. */
+function the_forecast_zhLabel(text, x, y, fill) {
+    (0,font/* assertCoverage */.tE)("noto-tc", text, `the-forecast T1 label (zh-TW): "${text}"`);
+    return the_forecast_pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, the_forecast_T1_SIZE), fill);
+}
+function the_forecast_zhLabelWidth(text) {
+    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, the_forecast_T1_SIZE);
+}
+/** Renders a T1 label horizontally centred at `centerX` — mirrors
+ * the-graveyard's own `centeredLabel`, used here for the seven weekday
+ * headers. */
+function the_forecast_centeredLabel(text, language, centerX, y, fill) {
+    if (language === "zh-TW") {
+        const width = the_forecast_zhLabelWidth(text);
+        return the_forecast_zhLabel(text, centerX - width / 2, y, fill);
+    }
+    const width = the_forecast_eyebrowLabelWidth(text);
+    return the_forecast_eyebrowLabel(text, centerX - width / 2, y, fill);
+}
+/** T3 primary-content style: Source Serif 4 (en) / Noto Serif TC (zh-TW). */
+function the_forecast_contentText(fontName, text, x, y, fill, context) {
+    (0,font/* assertCoverage */.tE)(fontName, text, context);
+    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, the_forecast_T3_SIZE);
+    return the_forecast_pathElement(d, fill);
+}
+/** T3-mono numeral path (NO fill attribute of its own) — used ONLY for the
+ * seven projected weekday numerals (D-02: every numeral routes through IBM
+ * Plex Mono). Returns bare `<path d="...">` markup, intended to be wrapped
+ * in a single `<g fill="...">` group by the caller — Rule C-2's fill is a
+ * single per-render decision (`numeralFillFor(theme)`), not a per-numeral
+ * one, so wrapping all seven in one group both states that fact structurally
+ * and is the natural place a test asserts "the seven numerals' fill". */
+function centeredMonoNumeralPath(text, centerX, y, context) {
+    (0,font/* assertCoverage */.tE)("mono-semibold", text, context);
+    const width = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", text, the_forecast_T3_SIZE);
+    const x = centerX - width / 2;
+    const d = (0,font/* textToPathData */.wD)("mono-semibold", text, x, y, the_forecast_T3_SIZE);
+    return d === "" ? "" : `<path d="${d}"/>`;
+}
+// ---------------------------------------------------------------------------
+// The projection method — pure functions, exported for unit testing
+// (06-UI-SPEC.md "The projection method — defined before it is drawn").
+// ---------------------------------------------------------------------------
+/** `k = min(12, floor(available / 7))` — the basis window is always a whole
+ * number of weeks, so every weekday appears exactly `k` times with no
+ * calendar-week alignment question. */
+function computeK(availableDays) {
+    return Math.min(12, Math.floor(availableDays / 7));
+}
+/**
+ * Weekday of an ISO `YYYY-MM-DD` date, Monday-first (0=Mon .. 6=Sun).
+ * `new Date(Date.UTC(y, m-1, d)).getUTCDay()` returns 0=Sunday..6=Saturday;
+ * remapped via `(dow + 6) % 7`. `opts.timezone` is DELIBERATELY not applied
+ * here — GitHub's `contributionCalendar` buckets are already localised to
+ * the account's own day boundaries, and re-bucketing them by a second
+ * timezone would double-shift the data (06-UI-SPEC.md "Weekday of a date").
+ * The next reader will assume the opposite; this comment is the guard.
+ */
+function weekdayIndexOf(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    return (dow + 6) % 7;
+}
+/**
+ * Per-weekday statistic: the LOWER median, not the mean (06-UI-SPEC.md "Per-
+ * weekday statistic"). For weekday `d`, collect its `k` counts from the
+ * trailing `7k`-day basis, sort ascending, take the element at index
+ * `floor((k-1)/2)`. Lower median because it keeps the result an integer and
+ * makes the tie-break deterministic for even `k` — a mean would introduce a
+ * rounding decision and a byte-instability risk for QA-02. `k < 2` returns
+ * an empty medians array (F1).
+ */
+function computeWeekdayMedians(calendar) {
+    const cal = calendar ?? [];
+    const k = computeK(cal.length);
+    if (k < 2) {
+        return { k, medians: [] };
+    }
+    const basis = cal.slice(cal.length - 7 * k);
+    const buckets = [[], [], [], [], [], [], []];
+    for (const entry of basis) {
+        buckets[weekdayIndexOf(entry.date)].push(entry.count);
+    }
+    const medians = buckets.map((counts) => {
+        const sorted = [...counts].sort((a, b) => a - b);
+        return sorted[Math.floor((sorted.length - 1) / 2)] ?? 0;
+    });
+    return { k, medians };
+}
+/**
+ * Weather tier for a single weekday median `m`, given `M` = the maximum of
+ * all seven medians. `M === 0` is an explicit division guard (F3) — every
+ * tier resolves to CALM without ever computing `m / M`. Tiers are
+ * SELF-RELATIVE, never absolute counts (06-UI-SPEC.md "Weather tiers"): five
+ * commits a day is a storm for one person and a drizzle for another, and an
+ * absolute scale would make the card a comparison between people, which it
+ * must not be.
+ */
+function tierFor(m, M) {
+    if (M === 0) {
+        return "CALM"; // F3 guard — never divides
+    }
+    if (m === 0) {
+        return "CALM";
+    }
+    if (m <= 0.25 * M) {
+        return "CLOUD";
+    }
+    if (m <= 0.5 * M) {
+        return "PARTIAL";
+    }
+    if (m <= 0.8 * M) {
+        return "SUN";
+    }
+    return "STORM";
+}
+/**
+ * The busiest weekday's index, Monday-first tie-break (documented in
+ * copy.ts's header comment per the UI-SPEC's explicit instruction): the
+ * EARLIEST weekday in Monday-first order wins a tie. Deterministic — the
+ * left-to-right scan below only updates on a STRICTLY greater value, so the
+ * first-seen (earliest) index among equal maxima is kept automatically.
+ */
+function busiestWeekdayIndex(medians) {
+    let bestIndex = 0;
+    let bestValue = medians[0] ?? 0;
+    for (let i = 1; i < medians.length; i++) {
+        if (medians[i] > bestValue) {
+            bestValue = medians[i];
+            bestIndex = i;
+        }
+    }
+    return bestIndex;
+}
+/**
+ * Disclosure-eyebrow text selection — exported for DIRECT unit testing (same
+ * convention as vitals' `windowCaptionFor`/`statusWordFor`: the rendered
+ * eyebrow is emitted as opaque path data, so this exported selector is the
+ * only way to assert the exact copy string — and the exact `k` — chosen for
+ * a given input, without OCR-ing the render output). This is F4, the card's
+ * single most important honesty mechanic: `k` must be the REAL computed
+ * value, never a hardcoded 12, and `renderBody` below calls this same
+ * function rather than re-deriving the choice inline.
+ */
+function eyebrowTextFor(k, hasProjection, language) {
+    if (!hasProjection) {
+        return language === "zh-TW" ? disclosureEyebrowInsufficientZh : disclosureEyebrowInsufficientEn;
+    }
+    return language === "zh-TW" ? disclosureEyebrowZh(k) : disclosureEyebrowEn(k);
+}
+/**
+ * Headline text selection — one of three states (insufficient / all-zero /
+ * normal), exported for the same direct-testability reason as
+ * `eyebrowTextFor` above.
+ */
+function headlineTextFor(hasProjection, allZero, busiestWeekdayName, busiestMedian, language) {
+    if (!hasProjection) {
+        return language === "zh-TW" ? headlineInsufficientZh : headlineInsufficientEn;
+    }
+    if (allZero) {
+        return language === "zh-TW" ? headlineAllZeroZh : headlineAllZeroEn;
+    }
+    return language === "zh-TW"
+        ? headlineNormalZh(busiestWeekdayName, busiestMedian)
+        : headlineNormalEn(busiestWeekdayName, busiestMedian);
+}
+// ---------------------------------------------------------------------------
+// Weather glyph rendering — geometry copied verbatim from 06-UI-SPEC.md
+// "Weather glyphs — geometry" (all centred on `(cx, GLYPH_CENTER_Y=128)`).
+// ---------------------------------------------------------------------------
+function renderWeatherGlyph(tier, cx, theme) {
+    const cxs = cx.toFixed(2);
+    switch (tier) {
+        case "CALM": {
+            const x1 = (cx - 9).toFixed(2);
+            const x2 = (cx + 9).toFixed(2);
+            return `<line x1="${x1}" y1="128" x2="${x2}" y2="128" stroke="${theme.rule}" stroke-width="1.6" stroke-linecap="round"/>`;
+        }
+        case "CLOUD": {
+            return (`<circle cx="${(cx - 5).toFixed(2)}" cy="126" r="8" fill="${theme.rule}"/>` +
+                `<circle cx="${(cx + 5).toFixed(2)}" cy="128" r="10" fill="${theme.rule}"/>` +
+                `<circle cx="${(cx - 3).toFixed(2)}" cy="131" r="7" fill="${theme.rule}"/>`);
+        }
+        case "PARTIAL": {
+            // Sun ring drawn first, the two clouds after so they occlude it.
+            return (`<circle cx="${(cx - 3).toFixed(2)}" cy="122" r="9" fill="none" stroke="${theme.accent}" stroke-width="1.6"/>` +
+                `<circle cx="${(cx + 3).toFixed(2)}" cy="130" r="8" fill="${theme.rule}"/>` +
+                `<circle cx="${(cx - 4).toFixed(2)}" cy="132" r="6" fill="${theme.rule}"/>`);
+        }
+        case "SUN": {
+            let markup = `<circle cx="${cxs}" cy="128" r="11" fill="none" stroke="${theme.accent}" stroke-width="1.6"/>`;
+            // Four rays, N/S/E/W, from radius 16 to 19.
+            markup += `<line x1="${cxs}" y1="112" x2="${cxs}" y2="109" stroke="${theme.accent}" stroke-width="1.4" stroke-linecap="round"/>`; // N
+            markup += `<line x1="${cxs}" y1="144" x2="${cxs}" y2="147" stroke="${theme.accent}" stroke-width="1.4" stroke-linecap="round"/>`; // S
+            markup += `<line x1="${(cx + 16).toFixed(2)}" y1="128" x2="${(cx + 19).toFixed(2)}" y2="128" stroke="${theme.accent}" stroke-width="1.4" stroke-linecap="round"/>`; // E
+            markup += `<line x1="${(cx - 16).toFixed(2)}" y1="128" x2="${(cx - 19).toFixed(2)}" y2="128" stroke="${theme.accent}" stroke-width="1.4" stroke-linecap="round"/>`; // W
+            return markup;
+        }
+        case "STORM": {
+            const bolt = `M${(cx + 2).toFixed(2)},130 L${(cx - 4).toFixed(2)},140 L${(cx + 1).toFixed(2)},140 ` +
+                `L${(cx - 3).toFixed(2)},148 L${(cx + 7).toFixed(2)},136 L${(cx + 2).toFixed(2)},136 Z`;
+            return (`<circle cx="${(cx - 5).toFixed(2)}" cy="124" r="8" fill="${theme.muted}"/>` +
+                `<circle cx="${(cx + 5).toFixed(2)}" cy="126" r="10" fill="${theme.muted}"/>` +
+                `<path d="${bolt}" fill="${theme.accent}"/>`);
+        }
+    }
+}
+// ---------------------------------------------------------------------------
+// Widget definition
+// ---------------------------------------------------------------------------
+/** No `widgets.yml`-configurable options exist for this card (masthead/the-
+ * record/vitals's `z.object({}).strict()` no-args precedent). */
+const theForecastOptionsSchema = schemas/* object */.Ik({}).strict();
+const theForecastWidget = {
+    name: "the-forecast",
+    requires: ["calendar"],
+    size: { width: the_forecast_CARD_WIDTH, height: the_forecast_CARD_HEIGHT },
+    optionsSchema: {
+        parse(value) {
+            theForecastOptionsSchema.parse(value ?? {});
+            return { now: new Date(), seed: 0, language: "en", timezone: "UTC" };
+        },
+    },
+    describe(_data, opts) {
+        if (opts.language === "zh-TW") {
+            return { title: describeTitleZh, desc: describeDescZh };
+        }
+        return { title: describeTitleEn, desc: describeDescEn };
+    },
+    /**
+     * Composition, z-order (06-UI-SPEC.md "Card Layout 2 — Composition"):
+     * (1) title + disclosure eyebrow (every state, real k) + hairline ->
+     * (2) dashed panel border + six dashed interior column separators
+     * (Rule C-2 — no solid rule anywhere inside) ->
+     * (3) seven weekday headers, centred ->
+     * (4)+(5) seven weather glyphs + seven projected numerals (SKIPPED
+     * entirely when `k < 2` — F1 renders headers only) ->
+     * (6) headline sentence (one of three states) ->
+     * (7) caveat line (mandatory, every state) + page-number footer.
+     *
+     * F1 (k<2) and F2 (all seven medians 0) share this SAME code path — F1
+     * skips step (4)+(5) via `hasProjection`, F2 renders seven real CALM bars
+     * and seven real `0` numerals through the ordinary tier/numeral path
+     * (F3's `M===0` guard inside `tierFor` handles the geometry; the headline
+     * branch below handles the copy). Neither is a separate branch of the
+     * renderer — both are "the correct projection", not a fallback.
+     */
+    renderBody(data, theme, opts) {
+        const language = opts.language;
+        const contentFont = language === "zh-TW" ? "noto-tc" : "serif";
+        const { k, medians } = computeWeekdayMedians(data.contributionCalendar);
+        const hasProjection = k >= 2;
+        const M = hasProjection ? Math.max(0, ...medians) : 0;
+        const busiestIndex = hasProjection ? busiestWeekdayIndex(medians) : 0;
+        const busiestMedian = hasProjection ? (medians[busiestIndex] ?? 0) : 0;
+        const allZero = hasProjection && M === 0;
+        const numeralFill = numeralFillFor(theme).fill;
+        let markup = "";
+        // (1) Title, disclosure eyebrow (mandatory, every state — F4: prints
+        // the REAL k, never a hardcoded 12), hairline.
+        const title = language === "zh-TW" ? titleZh : titleEn;
+        assertSlotBudget("card title", title, (0,font/* measureAdvanceWidth */.zN)(contentFont, title, the_forecast_T3_SIZE), CARD_TITLE_BUDGET_PX);
+        markup += the_forecast_contentText(contentFont, title, the_forecast_PADDING, TITLE_Y, theme.ink, `the-forecast title (${language})`);
+        const eyebrowText = eyebrowTextFor(k, hasProjection, language);
+        const eyebrowWidth = language === "zh-TW" ? the_forecast_zhLabelWidth(eyebrowText) : the_forecast_eyebrowLabelWidth(eyebrowText);
+        assertSlotBudget("disclosure eyebrow", eyebrowText, eyebrowWidth, DISCLOSURE_EYEBROW_BUDGET_PX);
+        markup +=
+            language === "zh-TW"
+                ? the_forecast_zhLabel(eyebrowText, the_forecast_PADDING, EYEBROW_Y, theme.muted)
+                : the_forecast_eyebrowLabel(eyebrowText, the_forecast_PADDING, EYEBROW_Y, theme.muted);
+        markup += `<line x1="${the_forecast_PADDING}" y1="${RULE_Y}" x2="${the_forecast_RIGHT_EDGE_X}" y2="${RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
+        // (2) The dashed panel (Rule C-2): border + six interior column
+        // separators. No solid rule appears anywhere inside the panel — the
+        // card's only solid line is the header hairline above (chrome, not
+        // data). Always renders, in every state.
+        markup += `<rect x="${PANEL_X}" y="${PANEL_Y}" width="${PANEL_W}" height="${PANEL_H}" fill="none" stroke="${theme.rule}" stroke-width="1" stroke-dasharray="3 3"/>`;
+        for (let i = 1; i <= 6; i++) {
+            const x = (PANEL_X + COL_W * i).toFixed(2);
+            markup += `<line x1="${x}" y1="${PANEL_Y}" x2="${x}" y2="${PANEL_Y + PANEL_H}" stroke="${theme.rule}" stroke-width="0.5" stroke-dasharray="2 3"/>`;
+        }
+        // (3) Seven weekday headers, centred. Always renders, in every state
+        // (F1 renders headers with no glyph and no numeral below them).
+        for (let i = 0; i < 7; i++) {
+            const cx = colCenter(i);
+            const label = language === "zh-TW" ? weekdayHeadersZh[i] : weekdayHeadersEn[i];
+            const labelWidth = language === "zh-TW" ? the_forecast_zhLabelWidth(label) : the_forecast_eyebrowLabelWidth(label);
+            assertSlotBudget(`weekday header ${i}`, label, labelWidth, WEEKDAY_HEADER_BUDGET_PX);
+            markup += the_forecast_centeredLabel(label, language, cx, WEEKDAY_LABEL_Y, theme.muted);
+        }
+        // (4) Weather glyphs — SKIPPED ENTIRELY when k < 2 (F1: "no glyphs, no
+        // numerals"). When a projection exists (F2 included), every column
+        // renders a real glyph.
+        if (hasProjection) {
+            for (let i = 0; i < 7; i++) {
+                const cx = colCenter(i);
+                const tier = tierFor(medians[i], M);
+                markup += renderWeatherGlyph(tier, cx, theme);
+            }
+            // (5) Seven projected numerals, wrapped in a SINGLE <g fill="...">
+            // group — Rule C-2's fill is one per-render decision
+            // (numeralFillFor(theme)), not seven independent ones, so the group
+            // wrapper states that structurally and is what a test asserts against
+            // (the g's fill === the theme's decided numeralFillFor result).
+            let numeralGroup = "";
+            for (let i = 0; i < 7; i++) {
+                const cx = colCenter(i);
+                const m = medians[i];
+                const numeralText = String(m);
+                const numeralWidth = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", numeralText, the_forecast_T3_SIZE);
+                assertSlotBudget(`projected numeral ${i}`, numeralText, numeralWidth, NUMERAL_BUDGET_PX);
+                numeralGroup += centeredMonoNumeralPath(numeralText, cx, NUMERAL_Y, `the-forecast numeral ${i}`);
+            }
+            markup += `<g fill="${numeralFill}">${numeralGroup}</g>`;
+        }
+        // (6) Headline — one of three states, decided by the same hasProjection
+        // / allZero flags used above (never a fourth branch).
+        const busiestWeekdayName = language === "zh-TW" ? weekdayFullNamesZh[busiestIndex] : weekdayFullNamesEn[busiestIndex];
+        const headline = headlineTextFor(hasProjection, allZero, busiestWeekdayName, busiestMedian, language);
+        assertSlotBudget("headline", headline, (0,font/* measureAdvanceWidth */.zN)(contentFont, headline, the_forecast_T3_SIZE), HEADLINE_BUDGET_PX);
+        markup += the_forecast_contentText(contentFont, headline, the_forecast_PADDING, HEADLINE_Y, theme.ink, `the-forecast headline (${language})`);
+        // (7) Caveat line (mandatory, EVERY state, both languages, never
+        // truncated) + page-number footer, right-aligned on the same baseline
+        // (absent-means-emit-nothing — inherited Phase 3 contract, F7).
+        const caveat = language === "zh-TW" ? caveatZh : caveatEn;
+        const caveatWidth = language === "zh-TW" ? the_forecast_zhLabelWidth(caveat) : the_forecast_eyebrowLabelWidth(caveat);
+        assertSlotBudget("caveat", caveat, caveatWidth, CAVEAT_BUDGET_PX);
+        markup +=
+            language === "zh-TW"
+                ? the_forecast_zhLabel(caveat, the_forecast_PADDING, CAVEAT_Y, theme.muted)
+                : the_forecast_eyebrowLabel(caveat, the_forecast_PADDING, CAVEAT_Y, theme.muted);
+        if (opts.pageNumber !== undefined && opts.totalPages !== undefined) {
+            const pageText = language === "zh-TW"
+                ? pageFooterZh(opts.pageNumber, opts.totalPages)
+                : pageFooterEn(opts.pageNumber, opts.totalPages);
+            const pageWidth = language === "zh-TW" ? the_forecast_zhLabelWidth(pageText) : the_forecast_eyebrowLabelWidth(pageText);
+            markup +=
+                language === "zh-TW"
+                    ? the_forecast_zhLabel(pageText, the_forecast_RIGHT_EDGE_X - pageWidth, CAVEAT_Y, theme.muted)
+                    : the_forecast_eyebrowLabel(pageText, the_forecast_RIGHT_EDGE_X - pageWidth, CAVEAT_Y, theme.muted);
+        }
+        return markup;
+    },
+};
+
 ;// CONCATENATED MODULE: ./src/widgets/the-graveyard/copy.ts
 /**
  * The Graveyard copy — 03-UI-SPEC.md "Graveyard chrome strings" table.
@@ -110785,10 +111568,10 @@ function silentWeeksValue(n) {
 /** Page-number footer — inherited verbatim from Phase 3's masthead/
  * editorial-stat-card/the-graveyard convention (same literal format, same
  * absent-means-emit-nothing contract, applied independently by index.ts). */
-function pageFooterEn(n, m) {
+function copy_pageFooterEn(n, m) {
     return `PAGE ${n}/${m}`;
 }
-function pageFooterZh(n, m) {
+function copy_pageFooterZh(n, m) {
     return `頁 ${n} / ${m}`;
 }
 
@@ -110882,7 +111665,7 @@ function measureRecordNumeralWidth(formatted, language) {
  * the corresponding path data is built, so an out-of-budget string fails
  * the build loudly instead of silently overflowing the rendered card.
  */
-function assertSlotBudget(field, formatted, widthPx, budgetPx) {
+function format_assertSlotBudget(field, formatted, widthPx, budgetPx) {
     if (widthPx > budgetPx) {
         throw new RecordSlotOverflowError(field, formatted, widthPx, budgetPx);
     }
@@ -110943,7 +111726,7 @@ const FOOTER_Y = 240;
 // string on this card is engine-authored, so RENDER-05's fail-loud policy
 // applies in full (Phase 3's truncation policy does not apply here).
 // ---------------------------------------------------------------------------
-const CARD_TITLE_BUDGET_PX = 200;
+const the_record_CARD_TITLE_BUDGET_PX = 200;
 const CENTRE_LABEL_YEAR_BUDGET_PX = 46;
 const TOTAL_NUMERAL_BUDGET_PX = 200;
 const DATA_ROW_LABEL_BUDGET_PX = 130;
@@ -111108,9 +111891,9 @@ function the_record_renderNumeral(formatted, language, x, y, fill) {
  */
 function renderDataRow(label, value, y, language, theme) {
     const labelWidth = language === "zh-TW" ? the_record_zhLabelWidth(label) : the_record_eyebrowLabelWidth(label);
-    assertSlotBudget("data-row label", label, labelWidth, DATA_ROW_LABEL_BUDGET_PX);
+    format_assertSlotBudget("data-row label", label, labelWidth, DATA_ROW_LABEL_BUDGET_PX);
     const valueWidth = language === "zh-TW" ? the_record_zhLabelWidth(value) : the_record_eyebrowLabelWidth(value);
-    assertSlotBudget("data-row value", value, valueWidth, DATA_ROW_VALUE_BUDGET_PX);
+    format_assertSlotBudget("data-row value", value, valueWidth, DATA_ROW_VALUE_BUDGET_PX);
     const labelMarkup = language === "zh-TW" ? the_record_zhLabel(label, COLUMN_X, y, theme.muted) : the_record_eyebrowLabel(label, COLUMN_X, y, theme.muted);
     const valueMarkup = language === "zh-TW"
         ? the_record_zhLabel(value, the_record_RIGHT_EDGE_X - valueWidth, y, theme.ink)
@@ -111373,7 +112156,7 @@ const theRecordWidget = {
         // no header-scale fact that needs to appear in both languages, unlike
         // Graveyard's functional-data deviation); hairline rule.
         const title = language === "zh-TW" ? the_record_copy_chromeZh.title : the_record_copy_chromeEn.title;
-        assertSlotBudget("card title", title, (0,font/* measureAdvanceWidth */.zN)(contentFont, title, the_record_T3_SIZE), CARD_TITLE_BUDGET_PX);
+        format_assertSlotBudget("card title", title, (0,font/* measureAdvanceWidth */.zN)(contentFont, title, the_record_T3_SIZE), the_record_CARD_TITLE_BUDGET_PX);
         markup += the_record_contentText(contentFont, title, the_record_PADDING, the_record_HEADER_TITLE_BASELINE_Y, theme.ink, `the-record title (${language})`);
         if (language === "zh-TW") {
             const eyebrowWidth = the_record_eyebrowLabelWidth(mastheadEyebrowZh);
@@ -111432,7 +112215,7 @@ const theRecordWidget = {
         markup += `<circle cx="${CX}" cy="${CY}" r="${R_LABEL}" fill="${theme.accent}"/>`;
         markup += `<line x1="102" y1="172" x2="128" y2="172" stroke="${theme.paper}" stroke-width="0.80" stroke-opacity="0.5"/>`;
         const yearStr = String(year);
-        assertSlotBudget("centre-label year", yearStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", yearStr, the_record_T3_SIZE), CENTRE_LABEL_YEAR_BUDGET_PX);
+        format_assertSlotBudget("centre-label year", yearStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", yearStr, the_record_T3_SIZE), CENTRE_LABEL_YEAR_BUDGET_PX);
         markup += centeredMonoText(yearStr, CX, CY - 6, theme.paper, `the-record centre-label year`);
         markup += `<circle cx="${CX}" cy="${CY}" r="${SPINDLE_R}" fill="${theme.paper}"/>`;
         // (8) Tonearm (D-05) — drawn outside the spinning group; its position
@@ -111459,14 +112242,14 @@ const theRecordWidget = {
         // mirrors the groove/busiest-week/silent-week guard above).
         const totalLabel = language === "zh-TW" ? totalLabelZh : totalLabelEn;
         const totalLabelWidth = language === "zh-TW" ? the_record_zhLabelWidth(totalLabel) : the_record_eyebrowLabelWidth(totalLabel);
-        assertSlotBudget("total label", totalLabel, totalLabelWidth, DATA_ROW_LABEL_BUDGET_PX);
+        format_assertSlotBudget("total label", totalLabel, totalLabelWidth, DATA_ROW_LABEL_BUDGET_PX);
         markup +=
             language === "zh-TW"
                 ? the_record_zhLabel(totalLabel, COLUMN_X, TOTAL_LABEL_Y, theme.muted)
                 : the_record_eyebrowLabel(totalLabel, COLUMN_X, TOTAL_LABEL_Y, theme.muted);
         const total = data.contributionCalendarTotal ?? elapsedWeeks.reduce((sum, w) => sum + w.count, 0);
         const formattedTotal = formatRecordNumber(total, language);
-        assertSlotBudget("total numeral", formattedTotal, measureRecordNumeralWidth(formattedTotal, language), TOTAL_NUMERAL_BUDGET_PX);
+        format_assertSlotBudget("total numeral", formattedTotal, measureRecordNumeralWidth(formattedTotal, language), TOTAL_NUMERAL_BUDGET_PX);
         markup += the_record_renderNumeral(formattedTotal, language, COLUMN_X, TOTAL_NUMERAL_Y, theme.ink);
         markup += `<line x1="${COLUMN_X}" y1="${COLUMN_RULE_Y}" x2="${the_record_RIGHT_EDGE_X}" y2="${COLUMN_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
         // Row 1: WEEKS PRESSED — {elapsed} / {G}.
@@ -111499,13 +112282,13 @@ const theRecordWidget = {
         // Same scene, same code path, still rotating; only this one conditional.
         if (maxWeekly === 0) {
             const zeroCaption = language === "zh-TW" ? zeroCaptionZh : zeroCaptionEn;
-            assertSlotBudget("zero-state caption", zeroCaption, (0,font/* measureAdvanceWidth */.zN)(contentFont, zeroCaption, the_record_T3_SIZE), ZERO_CAPTION_BUDGET_PX);
+            format_assertSlotBudget("zero-state caption", zeroCaption, (0,font/* measureAdvanceWidth */.zN)(contentFont, zeroCaption, the_record_T3_SIZE), ZERO_CAPTION_BUDGET_PX);
             markup += the_record_contentText(contentFont, zeroCaption, COLUMN_X, ZERO_CAPTION_Y, theme.ink, `the-record zero-state caption (${language})`);
         }
         // (11) Needle caption — always present, T1 accent.
         const needleCaption = language === "zh-TW" ? needleCaptionZh : needleCaptionEn;
         const needleCaptionWidth = language === "zh-TW" ? the_record_zhLabelWidth(needleCaption) : the_record_eyebrowLabelWidth(needleCaption);
-        assertSlotBudget("needle caption", needleCaption, needleCaptionWidth, NEEDLE_CAPTION_BUDGET_PX);
+        format_assertSlotBudget("needle caption", needleCaption, needleCaptionWidth, NEEDLE_CAPTION_BUDGET_PX);
         markup +=
             language === "zh-TW"
                 ? the_record_zhLabel(needleCaption, COLUMN_X, FOOTER_Y, theme.accent)
@@ -111514,12 +112297,747 @@ const theRecordWidget = {
         // disabled masthead leaves literally zero additional markup here
         // (inherited Phase 3 contract, unchanged).
         if (opts.pageNumber !== undefined && opts.totalPages !== undefined) {
-            const pageText = language === "zh-TW" ? pageFooterZh(opts.pageNumber, opts.totalPages) : pageFooterEn(opts.pageNumber, opts.totalPages);
+            const pageText = language === "zh-TW" ? copy_pageFooterZh(opts.pageNumber, opts.totalPages) : copy_pageFooterEn(opts.pageNumber, opts.totalPages);
             const pageWidth = language === "zh-TW" ? the_record_zhLabelWidth(pageText) : the_record_eyebrowLabelWidth(pageText);
             markup +=
                 language === "zh-TW"
                     ? the_record_zhLabel(pageText, the_record_RIGHT_EDGE_X - pageWidth, FOOTER_Y, theme.muted)
                     : the_record_eyebrowLabel(pageText, the_record_RIGHT_EDGE_X - pageWidth, FOOTER_Y, theme.muted);
+        }
+        return markup;
+    },
+};
+
+;// CONCATENATED MODULE: ./src/widgets/the-ticker/copy.ts
+/**
+ * The Ticker copy — 06-UI-SPEC.md "Ticker chrome strings" table (Card Layout
+ * 3 — The Ticker / 行情, CARD-07).
+ *
+ * The title slot is NOT a static chrome string on this card — it holds the
+ * data-derived ticker symbol (see index.ts's `deriveSymbol`), so there is no
+ * `chromeEn`/`chromeZh` title pair here the way The Record/Vitals have one.
+ * The eyebrow carries the card's identity in both languages instead
+ * (06-UI-SPEC.md "Declared chrome deviation" — same category as The
+ * Graveyard's functional-data deviation).
+ *
+ * Separators are ASCII `" - "`, `" / "`, and `" = "` only, in both
+ * languages. Banned glyphs, a standing constraint for future edits to this
+ * file (06-UI-SPEC.md "Glyph coverage" — extends the four glyphs Phase 3/4
+ * already banned):
+ *   - `·` (U+00B7 MIDDLE DOT)
+ *   - `．` (U+FF0E FULLWIDTH FULL STOP)
+ *   - `▸` (U+25B8 BLACK RIGHT-POINTING SMALL TRIANGLE)
+ *   - `…` (U+2026 HORIZONTAL ELLIPSIS, or any other truncation marker)
+ *   - `▲` (U+25B2), `▼` (U+25BC), `●` (U+25CF) — absent from all four
+ *     committed font subsets (verified directly with opentype.js) and
+ *     banned project-wide for direction-encoding; this card carries
+ *     direction by fill state (Rule C-3) and by ASCII `+`/`-` only.
+ *   - `—` (U+2014 EM DASH) in en copy — present in noto-tc, absent from the
+ *     ASCII-only mono and Latin-1-only serif subsets.
+ */
+/** Eyebrow, right-aligned, both languages (06-UI-SPEC.md "Header row" —
+ * "Declared chrome deviation"). `n` is the REAL number of monthly candles
+ * rendered (0..12) — never hardcoded to 12 (T3's honesty rule). */
+function eyebrowEn(n) {
+    return `THE TICKER / ${n} MONTHS`;
+}
+function eyebrowZh(n) {
+    return `行情 / ${n} 個月`;
+}
+const bandLabelEn = "THIS MONTH";
+const bandLabelZh = "本月";
+const subLabelEn = "OPEN TO CLOSE";
+const subLabelZh = "開盤到收盤";
+/** Change-figure degenerate branch: open === 0 && close === 0
+ * (06-UI-SPEC.md "The change figure", two defined degenerate branches).
+ * Rendered at T3 `muted`, NOT T2 — a non-value at display size overstates
+ * it (mirrors The Record's NONE/無 treatment). */
+const flatEn = "FLAT";
+const flatZh = "持平";
+const ohlcvLabelEnOpen = "OPEN";
+const ohlcvLabelEnHigh = "HIGH";
+const ohlcvLabelEnLow = "LOW";
+const ohlcvLabelEnVol = "VOL";
+const ohlcvLabelZhOpen = "開";
+const ohlcvLabelZhHigh = "高";
+const ohlcvLabelZhLow = "低";
+const ohlcvLabelZhVol = "量";
+/** Legend + basis line (06-UI-SPEC.md "Bottom row") — states Rule C-3 in
+ * words on every render (not just this card's design intent — a reader
+ * cannot rely on colour to read direction, so the words carry it). */
+const legendEn = "FILLED UP / HOLLOW DOWN / LEVEL = TRAILING 7 DAYS";
+const legendZh = "實心漲 空心跌，水位 = 近 7 天貢獻數";
+/** Empty state (no calendar at all, T1) — replaces the legend line, does
+ * not add to it (06-UI-SPEC.md Degenerate States T1). */
+const emptyStateEn = "No trading history yet.";
+const emptyStateZh = "目前沒有可畫的交易紀錄。";
+/** Page-number footer — inherited verbatim from Phase 3's masthead/
+ * editorial-stat-card/the-record/vitals convention (same literal format,
+ * same absent-means-emit-nothing contract, applied independently by
+ * index.ts). */
+function the_ticker_copy_pageFooterEn(n, m) {
+    return `PAGE ${n}/${m}`;
+}
+function the_ticker_copy_pageFooterZh(n, m) {
+    return `頁 ${n} / ${m}`;
+}
+
+;// CONCATENATED MODULE: ./src/widgets/the-ticker/format.ts
+
+/**
+ * T1 font size (06-UI-SPEC.md Typography: "T1 — eyebrow/label, 8px"). The
+ * OHLCV band values render at T1, NOT T2 — unlike The Record's total
+ * numeral, this card's four quote-band figures sit inline with their labels
+ * in the small chrome row, not as a headline display numeral. Hardcoded
+ * here rather than imported from index.ts: format.ts is a pure-function
+ * module with zero dependencies on any other widget file, to avoid a
+ * circular import between index.ts (which imports this file's exports) and
+ * this module — same reasoning as the-record/format.ts's own T2_SIZE
+ * re-declaration and editorial-stat-card/format.ts's own T2_SIZE
+ * re-declaration.
+ */
+const format_T1_SIZE = 8;
+/** 06-UI-SPEC.md "Number formatting": the zh-TW 萬/億 suffix renders in Noto
+ * Serif TC at 92% of the declared size — applied proportionally to T1 here
+ * (the shipped SUFFIX_SIZE_RATIO convention, carried over from T2 to T1). */
+const the_ticker_format_SUFFIX_SIZE_RATIO = 0.92;
+/**
+ * Thrown by assertSlotBudget when a formatted string's measured render
+ * width exceeds its slot's budget. Names all four load-bearing facts —
+ * field, formatted string, measured width, budget — never just "too long"
+ * (mirrors src/core/svg.ts's SizeBudgetError / the-record's
+ * RecordSlotOverflowError / editorial-stat-card's StatOverflowError
+ * convention).
+ */
+class TickerSlotOverflowError extends Error {
+    constructor(field, formatted, widthPx, budgetPx) {
+        super(`TickerSlotOverflowError: field "${field}" formatted as "${formatted}" measures ` +
+            `${widthPx}px, exceeding the ${budgetPx}px slot budget.`);
+        this.name = "TickerSlotOverflowError";
+    }
+}
+/**
+ * Per-render slot-width backstop (06-UI-SPEC.md "Text slot budgets —
+ * Ticker") — every one of the Ticker's text slots is engine-authored EXCEPT
+ * the ticker symbol, which is transformed into guaranteed ASCII before it
+ * is ever measured (see deriveSymbol below), so RENDER-05's original
+ * fail-loud policy applies in full across this whole card (Phase 3's
+ * truncate-with-ellipsis policy for API-sourced text applies to NO slot on
+ * this card). Called before the corresponding path data is built, so an
+ * out-of-budget string fails the build loudly instead of silently
+ * overflowing the rendered card.
+ */
+function the_ticker_format_assertSlotBudget(field, formatted, widthPx, budgetPx) {
+    if (widthPx > budgetPx) {
+        throw new TickerSlotOverflowError(field, formatted, widthPx, budgetPx);
+    }
+}
+/**
+ * Number Formatting Contract (02-UI-SPEC.md, restated at 04-UI-SPEC.md and
+ * 06-UI-SPEC.md): 0 <= value < 10000 renders as a plain, unadorned integer
+ * in both languages — no thousands separator, no special-casing for zero.
+ * value >= 10000 switches to a language-native compact notation: en uses
+ * Intl.NumberFormat's built-in "compact" notation (K/M); zh-TW has no Intl
+ * support for 萬/億 grouping, so it is computed by hand per the UI-SPEC's
+ * explicit formula.
+ *
+ * Deliberately duplicated a THIRD time from editorial-stat-card/format.ts's
+ * `formatStatNumber` and the-record/format.ts's `formatRecordNumber`
+ * (RENDER-02: no widget imports another widget's private helper — the same
+ * deliberate duplication Phase 3/4 already shipped twice). 06-UI-SPEC.md
+ * Watch Item B counts this as the 3rd copy and explicitly instructs: do NOT
+ * extract it in Phase 6. format.test.ts's duplication-proof block proves
+ * this copy has not silently diverged from EITHER existing copy.
+ */
+function formatTickerNumber(value, language) {
+    if (value < 10000) {
+        return String(value);
+    }
+    if (language === "en") {
+        return new Intl.NumberFormat("en", {
+            notation: "compact",
+            maximumFractionDigits: 1,
+        }).format(value);
+    }
+    if (value < 100_000_000) {
+        return `${(value / 10_000).toFixed(1)}萬`;
+    }
+    return `${(value / 100_000_000).toFixed(1)}億`;
+}
+/**
+ * The T1 OHLCV value's own mixed-font split: the digit run in IBM Plex Mono
+ * Semibold at T1_SIZE, plus (when present) the zh-TW 萬/億 suffix as a
+ * separate Noto Serif TC run at T1_SIZE * SUFFIX_SIZE_RATIO.
+ *
+ * This is the SINGLE function both the slot-budget check
+ * (`measureTickerValueWidth` below) and index.ts's actual glyph placement
+ * call — unlike the-record/vitals's pattern of two independent
+ * implementations (format.ts's measurement math and index.ts's own
+ * `renderNumeral`/`renderT2Value` draw math) that merely AGREE by being
+ * tested against each other, this card shares the literal split
+ * computation so the two paths cannot silently diverge in the first place.
+ * 02-02's own STATE.md-recorded lesson: two independent copies of the same
+ * math have a divergence day; one shared function does not.
+ */
+function splitTickerValue(formatted, language) {
+    if (language === "zh-TW" && (formatted.endsWith("萬") || formatted.endsWith("億"))) {
+        const chars = Array.from(formatted);
+        const suffixChar = chars[chars.length - 1];
+        const digitsPart = chars.slice(0, -1).join("");
+        const digitsWidth = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", digitsPart, format_T1_SIZE);
+        const suffixWidth = (0,font/* measureAdvanceWidth */.zN)("noto-tc", suffixChar, format_T1_SIZE * the_ticker_format_SUFFIX_SIZE_RATIO);
+        return { digitsPart, suffixChar, digitsWidth, suffixWidth, totalWidth: digitsWidth + suffixWidth };
+    }
+    const digitsWidth = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", formatted, format_T1_SIZE);
+    return { digitsPart: formatted, suffixChar: null, digitsWidth, suffixWidth: 0, totalWidth: digitsWidth };
+}
+/** Convenience wrapper over `splitTickerValue` for slot-budget callers that
+ * only need the total measured width, not the split itself. */
+function measureTickerValueWidth(formatted, language) {
+    return splitTickerValue(formatted, language).totalWidth;
+}
+/**
+ * Ticker symbol derivation (06-UI-SPEC.md "Ticker symbol derivation";
+ * prohibition 10's decision, recorded here and in index.ts's rendering
+ * call site):
+ *
+ *   raw    = login.replace(/[^A-Za-z0-9]/g, "").toUpperCase()
+ *   symbol = raw === "" ? "$DEV" : "$" + raw.slice(0, 5)
+ *
+ * The pattern map (06-PATTERNS.md §4) argues API-sourced text should go
+ * through `apiSourcedTextPathData` (the degrade-not-throw path). The
+ * approved UI-SPEC overrules that with a reasoned exception: this
+ * transform's OUTPUT character set is always exactly `[$A-Z0-9]` — a strict
+ * subset of ASCII, guaranteed by construction (strip everything outside
+ * `[A-Za-z0-9]`, uppercase, cap at 5 characters, prefix `$`) — which is
+ * fully covered by every committed font subset. `assertCoverage` therefore
+ * can never legitimately throw for this string, which is exactly what makes
+ * routing it through the fail-loud engine-authored path
+ * (`assertCoverage` + `textToPathData`, in index.ts) SAFE rather than
+ * reckless: the placeholder-glyph degrade path exists for text whose
+ * coverage is genuinely uncertain, and after this transform it is not. Any
+ * of the three new Phase 6 cards calling `apiSourcedTextPathData` is a
+ * review finding (06-UI-SPEC.md, verbatim).
+ *
+ * The transform is ALSO the card's entire injection mitigation (T-06-21):
+ * every character outside `[A-Za-z0-9]` — quotes, angle brackets,
+ * whitespace, CJK, emoji, control characters — is stripped before anything
+ * touches markup, so no character from `data.login` can ever reach the
+ * rendered SVG. format.test.ts pins this against an adversarial input table
+ * (XML special characters, an all-symbol login, CJK, very long logins).
+ */
+function deriveSymbol(login) {
+    const raw = login.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    return raw === "" ? "$DEV" : "$" + raw.slice(0, 5);
+}
+/**
+ * The month-over-month change figure (06-UI-SPEC.md "The change figure").
+ * `change% = (close - open) / open * 100`, one decimal, ASCII sign ALWAYS
+ * printed (`+18.4%`, `-6.2%`, `+0.0%` — never a bare, signless zero).
+ *
+ * Two defined degenerate branches, in the order the UI-SPEC states them:
+ *   - open === 0 && close === 0 -> `{ kind: "flat" }` (percentage is 0/0,
+ *     undefined; a real value at display size would overstate a
+ *     non-reading).
+ *   - open === 0 && close > 0 -> `{ kind: "level", text: "+{close-open}" }`
+ *     — the percentage is mathematically undefined (division by zero), so
+ *     the ABSOLUTE level change is rendered instead, signed, with NO
+ *     percent sign. The absence of `%` is itself the reader's signal that
+ *     the units changed from percent to level.
+ *
+ * Every other (open > 0) case falls through to the normal percent formula.
+ * `open < 0` is not a reachable state — L(d) is derived from non-negative
+ * contribution counts (round() of a non-negative average), so Open/High/
+ * Low/Close are all >= 0 by construction.
+ */
+function formatChange(open, close) {
+    if (open === 0 && close === 0) {
+        return { kind: "flat" };
+    }
+    if (open === 0 && close > 0) {
+        const delta = close - open;
+        const sign = delta >= 0 ? "+" : "-";
+        return { kind: "level", text: `${sign}${Math.abs(delta)}` };
+    }
+    const pct = ((close - open) / open) * 100;
+    const sign = pct >= 0 ? "+" : "-";
+    return { kind: "percent", text: `${sign}${Math.abs(pct).toFixed(1)}%` };
+}
+
+;// CONCATENATED MODULE: ./src/widgets/the-ticker/index.ts
+
+
+
+
+/**
+ * The Ticker / 行情 (CARD-07) — the catalogue's first chart with an axis.
+ * Draws 12 months of development activity as OHLC candlesticks built on the
+ * LEVEL series `L(d)` (a trailing 7-day contribution count), never on raw
+ * single-day counts (06-UI-SPEC.md "The OHLC mapping — defined before it is
+ * drawn"). Direction is carried by fill state (Rule C-3: filled = up,
+ * hollow = down) and by ASCII `+`/`-` — never by hue, never by a triangle
+ * glyph (both `▲`/`▼` are absent from every committed font subset and
+ * banned project-wide for direction-encoding).
+ */
+// ---------------------------------------------------------------------------
+// Geometry constants — each cites the UI-SPEC section that fixed the value
+// (06-UI-SPEC.md "Card Layout 3 — The Ticker" "Canvas and geometry
+// constants").
+// ---------------------------------------------------------------------------
+const the_ticker_CARD_WIDTH = 495;
+const the_ticker_CARD_HEIGHT = 280;
+const the_ticker_PADDING = 24;
+const the_ticker_RIGHT_EDGE_X = the_ticker_CARD_WIDTH - the_ticker_PADDING; // 471
+const the_ticker_T1_SIZE = 8;
+const the_ticker_T2_SIZE = 32;
+/** T3-mono size (04-UI-SPEC.md's "T3-mono" pairing, reused verbatim here for
+ * the ticker symbol — D-02's "all numerals route through IBM Plex Mono"
+ * rule, extended by 04-UI-SPEC.md to this face/size pairing). */
+const the_ticker_T3_SIZE = 17;
+const the_ticker_T1_LETTER_SPACING = 1.6;
+const the_ticker_TITLE_Y = 44;
+const the_ticker_RULE_Y = 58;
+const BAND_LABEL_Y = 88;
+const CHANGE_Y = 92;
+const BAND_VALUE_Y = 104;
+const the_ticker_PANEL_X = 24;
+const the_ticker_PANEL_Y = 120;
+const the_ticker_PANEL_W = 447;
+const the_ticker_PANEL_H = 88; // panel spans y 120..208
+const PLOT_X0 = 32;
+const PLOT_X1 = 463;
+const PLOT_W = PLOT_X1 - PLOT_X0; // 431 (sm = 8 inset each side, x-axis only)
+const PLOT_TOP = 136;
+const PLOT_BOTTOM = 200;
+const PLOT_RANGE = PLOT_BOTTOM - PLOT_TOP; // 64
+const MONTHS = 12;
+const the_ticker_COL_W = PLOT_W / MONTHS; // 35.916666...
+const BODY_W = 11;
+const DOJI_MIN_H = 1.5;
+/** 200 - 64 * {0.25, 0.50, 0.75} = 184, 168, 152 (md = 16 apart, all on
+ * grid) — listed top-to-bottom (drawing order) per the UI-SPEC's
+ * composition diagram. */
+const GRIDLINES_Y = [152, 168, 184];
+const ZERO_LINE_Y = 200;
+const AXIS_Y = 224;
+const the_ticker_FOOTER_Y = 248;
+/** OHLCV column origins (06-UI-SPEC.md "Canvas and geometry constants"). */
+const OHLCV_X = { open: 24, high: 104, low: 184, vol: 256 };
+// ---------------------------------------------------------------------------
+// Text slot budgets (06-UI-SPEC.md "Text slot budgets — Ticker") — every
+// one is a regression tripwire, checked via format.ts's assertSlotBudget
+// before its corresponding path data is built. Not expected to fire for any
+// engine-authored slot; the symbol slot is the one exception, and it is
+// unreachable-by-construction (see deriveSymbol's doc in format.ts).
+// ---------------------------------------------------------------------------
+const SYMBOL_BUDGET_PX = 120;
+const EYEBROW_BUDGET_PX = 200;
+const CHANGE_FIGURE_BUDGET_PX = 150;
+const CHANGE_SUBSTITUTE_BUDGET_PX = 150;
+const BAND_LABEL_BUDGET_PX = 120;
+const SUB_LABEL_BUDGET_PX = 160;
+const OHLCV_VALUE_BUDGET_PX = 44;
+const MONTH_AXIS_BUDGET_PX = 24;
+const LEGEND_BUDGET_PX = 340;
+const EMPTY_STATE_BUDGET_PX = 400;
+// ---------------------------------------------------------------------------
+// Chassis helpers — own copy, not imported (RENDER-02: adding/modifying a
+// card must not require touching another card's private functions).
+// Structurally identical to the-record/index.ts's and vitals/index.ts's own
+// sets. This card deliberately does NOT import apiSourcedTextPathData or
+// truncateToWidth for its chrome/copy strings — those are all
+// engine-authored. The ticker SYMBOL is the one API-sourced text field on
+// this card, and it ALSO goes through assertCoverage + textToPathData, not
+// the placeholder path — see deriveSymbol's doc comment in format.ts and
+// tickerSymbolText below for the full reasoning (prohibition 10's decision).
+// ---------------------------------------------------------------------------
+function the_ticker_pathElement(d, fill) {
+    if (d === "") {
+        return "";
+    }
+    return `<path d="${d}" fill="${fill}"/>`;
+}
+function the_ticker_letterSpacedPath(fontName, text, x, y, fontSize, letterSpacing) {
+    let cursorX = x;
+    let d = "";
+    const chars = Array.from(text);
+    chars.forEach((ch, i) => {
+        d += (0,font/* textToPathData */.wD)(fontName, ch, cursorX, y, fontSize);
+        cursorX += (0,font/* measureAdvanceWidth */.zN)(fontName, ch, fontSize) + (i < chars.length - 1 ? letterSpacing : 0);
+    });
+    return d;
+}
+function the_ticker_letterSpacedWidth(fontName, text, fontSize, letterSpacing) {
+    const chars = Array.from(text);
+    let width = 0;
+    chars.forEach((ch, i) => {
+        width += (0,font/* measureAdvanceWidth */.zN)(fontName, ch, fontSize) + (i < chars.length - 1 ? letterSpacing : 0);
+    });
+    return width;
+}
+/** T1 eyebrow/label style for English text: IBM Plex Mono Semibold,
+ * uppercase, letter-spaced, 8px. Left-aligned at (x, y). */
+function the_ticker_eyebrowLabel(text, x, y, fill) {
+    const upper = text.toUpperCase();
+    (0,font/* assertCoverage */.tE)("mono-semibold", upper, `the-ticker T1 eyebrow/label: "${text}"`);
+    const d = the_ticker_letterSpacedPath("mono-semibold", upper, x, y, the_ticker_T1_SIZE, the_ticker_T1_LETTER_SPACING);
+    return the_ticker_pathElement(d, fill);
+}
+function the_ticker_eyebrowLabelWidth(text) {
+    return the_ticker_letterSpacedWidth("mono-semibold", text.toUpperCase(), the_ticker_T1_SIZE, the_ticker_T1_LETTER_SPACING);
+}
+/** T1 label style for zh-TW text: Noto Serif TC, 8px, no uppercase
+ * transform, no manual letter-spacing. */
+function the_ticker_zhLabel(text, x, y, fill) {
+    (0,font/* assertCoverage */.tE)("noto-tc", text, `the-ticker T1 label (zh-TW): "${text}"`);
+    return the_ticker_pathElement((0,font/* textToPathData */.wD)("noto-tc", text, x, y, the_ticker_T1_SIZE), fill);
+}
+function the_ticker_zhLabelWidth(text) {
+    return (0,font/* measureAdvanceWidth */.zN)("noto-tc", text, the_ticker_T1_SIZE);
+}
+/** T3 primary-content style: Source Serif 4 (en) / Noto Serif TC (zh-TW).
+ * Used for the empty-state sentence and the FLAT/持平 change substitute. */
+function the_ticker_contentText(fontName, text, x, y, fill, context) {
+    (0,font/* assertCoverage */.tE)(fontName, text, context);
+    const d = (0,font/* textToPathData */.wD)(fontName, text, x, y, the_ticker_T3_SIZE);
+    return the_ticker_pathElement(d, fill);
+}
+/** T2 numeral style, left-aligned at (x, y) (D-02: every numeral routes
+ * through IBM Plex Mono). Used for the change figure only — this card's
+ * numeral never reaches the zh-TW 萬/億 magnitude (a percentage or a small
+ * level delta), so no mixed-font split is needed here (unlike the OHLCV
+ * band values, which do need one — see renderTickerValue below). */
+function renderT2Value(text, x, y, fill, context) {
+    (0,font/* assertCoverage */.tE)("mono-semibold", text, context);
+    return the_ticker_pathElement((0,font/* textToPathData */.wD)("mono-semibold", text, x, y, the_ticker_T2_SIZE), fill);
+}
+/**
+ * The ticker symbol: T3-mono, no letter-spacing (letter-spacing at T3 would
+ * need a token that does not exist — T1_LETTER_SPACING is a T1-only
+ * constant, 06-UI-SPEC.md "Header row").
+ *
+ * Prohibition 10's decision, restated at the call site: `deriveSymbol`
+ * (format.ts) transforms `data.login` into a string whose character set is
+ * ALWAYS a subset of `[$A-Z0-9]` — guaranteed ASCII, guaranteed covered by
+ * every committed font subset. That guarantee is what makes routing this
+ * API-sourced field through the engine-authored fail-loud path
+ * (assertCoverage + textToPathData) correct rather than reckless: the
+ * degrade-to-placeholder path (apiSourcedTextPathData) exists for text
+ * whose coverage is genuinely uncertain, and after deriveSymbol's transform
+ * it is not. Calling apiSourcedTextPathData here would be a review finding
+ * per the UI-SPEC.
+ */
+function tickerSymbolText(symbol, x, y, fill) {
+    (0,font/* assertCoverage */.tE)("mono-semibold", symbol, "the-ticker symbol");
+    return the_ticker_pathElement((0,font/* textToPathData */.wD)("mono-semibold", symbol, x, y, the_ticker_T3_SIZE), fill);
+}
+/**
+ * An OHLCV band value: mixed-font draw sharing `splitTickerValue`'s split
+ * with format.ts's own `measureTickerValueWidth` slot-budget check — the
+ * SAME function, not a second independent implementation of the same math
+ * (02-02's documented lesson: two copies of the same math have a
+ * divergence day).
+ */
+function renderTickerValue(formatted, language, x, y, fill) {
+    const split = splitTickerValue(formatted, language);
+    (0,font/* assertCoverage */.tE)("mono-semibold", split.digitsPart, `the-ticker OHLCV value digits: "${formatted}"`);
+    let d = (0,font/* textToPathData */.wD)("mono-semibold", split.digitsPart, x, y, the_ticker_T1_SIZE);
+    if (split.suffixChar !== null) {
+        (0,font/* assertCoverage */.tE)("noto-tc", split.suffixChar, `the-ticker OHLCV value suffix: "${formatted}"`);
+        d += (0,font/* textToPathData */.wD)("noto-tc", split.suffixChar, x + split.digitsWidth, y, the_ticker_T1_SIZE * the_ticker_format_SUFFIX_SIZE_RATIO);
+    }
+    return the_ticker_pathElement(d, fill);
+}
+// ---------------------------------------------------------------------------
+// Data interpretation — pure functions, exported for unit testing (same
+// convention as the-record's exported bucketWeeks/grooveRadius/etc and
+// vitals's exported computeVitalsWindow/dayAmplitude/etc).
+// ---------------------------------------------------------------------------
+/**
+ * `L(d) = round(7 * (sum of count over W(d)) / |W(d)|)`, where `W(d)` is
+ * the set of days in `[d-6, d]` that exist in the calendar (06-UI-SPEC.md
+ * "The OHLC mapping — the mapping (locked)"). Implemented over the
+ * calendar's own array indices — `contributionCalendar` is a contiguous
+ * daily series (core/fetch.ts's normalized shape), so a trailing 7-index
+ * window IS a trailing 7-day window. ONE formula, no special case, no
+ * branch for the first six days: for index `i`, the window is
+ * `[max(0, i-6), i]`, which is naturally narrower than 7 entries only for
+ * `i < 6` — exactly where the normalisation (`7 * sum / windowSize` rather
+ * than a bare running sum) prevents the earliest candle from being
+ * artificially depressed by a missing lead-in.
+ *
+ * REJECTED ALTERNATIVE, recorded per the UI-SPEC's explicit instruction:
+ * Open/Close as raw single-day counts. Rejected because a flow series's
+ * single-day count is zero for most people on most days, so nearly every
+ * candle would have a zero-height body and a full-range wick — noise
+ * wearing a suit, not a chart. The level series above is what makes the
+ * body meaningful.
+ */
+function computeLevelSeries(calendar) {
+    const levels = [];
+    let windowSum = 0;
+    for (let i = 0; i < calendar.length; i++) {
+        windowSum += calendar[i].count;
+        if (i >= 7) {
+            // The window is now full (7 entries) and about to gain an 8th —
+            // drop the oldest entry so it stays exactly [i-6, i].
+            windowSum -= calendar[i - 7].count;
+        }
+        const windowStart = Math.max(0, i - 6);
+        const windowSize = i - windowStart + 1;
+        levels.push(Math.round((7 * windowSum) / windowSize));
+    }
+    return levels;
+}
+/**
+ * Groups the level series into calendar-month buckets and takes AT MOST the
+ * trailing 12 (06-UI-SPEC.md "for each of the 12 months ending with the
+ * month containing the calendar's last day"). Per month: Open = L of the
+ * month's first available day; High/Low = max/min L over the month; Close =
+ * L of the month's last available day; Volume = the RAW count sum over the
+ * month (a true flow-per-period, not a level).
+ *
+ * Fewer than 12 months of calendar history naturally yields fewer than 12
+ * candles (T3) — no special case; the eyebrow (index.ts's renderBody)
+ * prints the real count, never a hardcoded 12.
+ */
+function computeMonthlyCandles(calendar) {
+    if (calendar.length === 0) {
+        return [];
+    }
+    const levels = computeLevelSeries(calendar);
+    const monthOrder = [];
+    const monthMap = new Map();
+    for (let i = 0; i < calendar.length; i++) {
+        const key = calendar[i].date.slice(0, 7); // "YYYY-MM"
+        let entry = monthMap.get(key);
+        if (entry === undefined) {
+            entry = { levels: [], volume: 0 };
+            monthMap.set(key, entry);
+            monthOrder.push(key);
+        }
+        entry.levels.push(levels[i]);
+        entry.volume += calendar[i].count;
+    }
+    const last12Keys = monthOrder.slice(-MONTHS);
+    return last12Keys.map((key) => {
+        const entry = monthMap.get(key);
+        return {
+            monthKey: key,
+            open: entry.levels[0],
+            close: entry.levels[entry.levels.length - 1],
+            high: Math.max(...entry.levels),
+            low: Math.min(...entry.levels),
+            volume: entry.volume,
+        };
+    });
+}
+/**
+ * `y(v) = PLOT_BOTTOM - (maxHigh === 0 ? 0 : v / maxHigh) * PLOT_RANGE`
+ * (06-UI-SPEC.md "Level -> y"). The `maxHigh === 0` guard is the T2 guard —
+ * same defensive shape as The Record's `maxWeekly === 0` / Vitals'
+ * `maxCount === 0`: `v = 0` always lands on `ZERO_LINE_Y` (200) and, when
+ * `maxHigh` itself is 0, EVERY level in the series is 0 too (High is a max
+ * over non-negative levels), so the guard's `0` branch is consistent with
+ * every candle actually being at the zero line — not an arbitrary fallback.
+ */
+function levelToY(v, maxHigh) {
+    return PLOT_BOTTOM - (maxHigh === 0 ? 0 : v / maxHigh) * PLOT_RANGE;
+}
+// ---------------------------------------------------------------------------
+// Widget definition
+// ---------------------------------------------------------------------------
+/** No `widgets.yml`-configurable options exist for this card (masthead/
+ * the-record/vitals's `z.object({}).strict()` no-args precedent). */
+const theTickerOptionsSchema = schemas/* object */.Ik({}).strict();
+const theTickerWidget = {
+    name: "the-ticker",
+    // "identity" costs literally zero (core/fetch.ts already sends `user {
+    // login ... }` unconditionally whenever any capability is requested, and
+    // "calendar" already makes that set non-empty) — declared anyway so
+    // data.login's dependency is legible to the next reader (06-UI-SPEC.md
+    // "Widget registration", honest-declaration decision).
+    requires: ["calendar", "identity"],
+    size: { width: the_ticker_CARD_WIDTH, height: the_ticker_CARD_HEIGHT },
+    optionsSchema: {
+        parse(value) {
+            theTickerOptionsSchema.parse(value ?? {});
+            return { now: new Date(), seed: 0, language: "en", timezone: "UTC" };
+        },
+    },
+    describe(_data, opts) {
+        if (opts.language === "zh-TW") {
+            return {
+                title: "行情卡片",
+                desc: "把每個月的開發活躍度畫成十二根 K 線，水位是近七天的貢獻數，成交量是當月總數。",
+            };
+        }
+        return {
+            title: "The Ticker card",
+            desc: "Draws 12 months of development activity as candlesticks, where the level is a trailing " +
+                "7-day contribution count and volume is the month total.",
+        };
+    },
+    /**
+     * Composition, z-order (06-UI-SPEC.md "Card Layout 3 — Composition"):
+     * (1) header (symbol + eyebrow + hairline) -> (2) quote band (band label,
+     * change figure/substitute, sub-label, four OHLCV label/value pairs) ->
+     * (3) chart (panel border, three dashed gridlines, zero line, per-candle
+     * wick-then-body) -> (4) month axis (omitted entirely in T1) -> (5)
+     * bottom row (legend/basis line OR the T1 empty-state sentence, plus the
+     * page-number footer).
+     */
+    renderBody(data, theme, opts) {
+        const language = opts.language;
+        const contentFont = language === "zh-TW" ? "noto-tc" : "serif";
+        const calendar = data.contributionCalendar ?? [];
+        const candles = computeMonthlyCandles(calendar);
+        const maxHigh = candles.length === 0 ? 0 : Math.max(...candles.map((c) => c.high));
+        const current = candles.length > 0 ? candles[candles.length - 1] : null;
+        const monthCount = candles.length;
+        let markup = "";
+        // (1) Header row: ticker symbol left, eyebrow right (both languages —
+        // "Declared chrome deviation": the title slot holds a data-derived
+        // symbol, not the card's name, so an en reader needs the eyebrow to
+        // learn what the card is).
+        const symbol = deriveSymbol(data.login);
+        the_ticker_format_assertSlotBudget("ticker symbol", symbol, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", symbol, the_ticker_T3_SIZE), SYMBOL_BUDGET_PX);
+        markup += tickerSymbolText(symbol, the_ticker_PADDING, the_ticker_TITLE_Y, theme.ink);
+        const eyebrow = language === "zh-TW" ? eyebrowZh(monthCount) : eyebrowEn(monthCount);
+        const eyebrowWidth = language === "zh-TW" ? the_ticker_zhLabelWidth(eyebrow) : the_ticker_eyebrowLabelWidth(eyebrow);
+        the_ticker_format_assertSlotBudget("eyebrow", eyebrow, eyebrowWidth, EYEBROW_BUDGET_PX);
+        markup +=
+            language === "zh-TW"
+                ? the_ticker_zhLabel(eyebrow, the_ticker_RIGHT_EDGE_X - eyebrowWidth, the_ticker_TITLE_Y, theme.muted)
+                : the_ticker_eyebrowLabel(eyebrow, the_ticker_RIGHT_EDGE_X - eyebrowWidth, the_ticker_TITLE_Y, theme.muted);
+        markup += `<line x1="${the_ticker_PADDING}" y1="${the_ticker_RULE_Y}" x2="${the_ticker_RIGHT_EDGE_X}" y2="${the_ticker_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
+        // (2) Quote band.
+        const bandLabel = language === "zh-TW" ? bandLabelZh : bandLabelEn;
+        const bandLabelWidth = language === "zh-TW" ? the_ticker_zhLabelWidth(bandLabel) : the_ticker_eyebrowLabelWidth(bandLabel);
+        the_ticker_format_assertSlotBudget("band label", bandLabel, bandLabelWidth, BAND_LABEL_BUDGET_PX);
+        markup +=
+            language === "zh-TW"
+                ? the_ticker_zhLabel(bandLabel, the_ticker_PADDING, BAND_LABEL_Y, theme.muted)
+                : the_ticker_eyebrowLabel(bandLabel, the_ticker_PADDING, BAND_LABEL_Y, theme.muted);
+        // T1 (no calendar at all) reads open=0/close=0 -> formatChange's own
+        // FLAT branch fires with no special case here; T2 (all-zero, but a
+        // real candle exists) is the SAME "open===0 && close===0" branch,
+        // reached naturally by the formula rather than by a distinct check.
+        const change = formatChange(current?.open ?? 0, current?.close ?? 0);
+        if (change.kind === "flat") {
+            const flatText = language === "zh-TW" ? flatZh : flatEn;
+            const flatWidth = (0,font/* measureAdvanceWidth */.zN)(contentFont, flatText, the_ticker_T3_SIZE);
+            the_ticker_format_assertSlotBudget("change substitute", flatText, flatWidth, CHANGE_SUBSTITUTE_BUDGET_PX);
+            markup += the_ticker_contentText(contentFont, flatText, the_ticker_RIGHT_EDGE_X - flatWidth, CHANGE_Y, theme.muted, `the-ticker change substitute (${language})`);
+        }
+        else {
+            const changeWidth = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", change.text, the_ticker_T2_SIZE);
+            the_ticker_format_assertSlotBudget("change figure", change.text, changeWidth, CHANGE_FIGURE_BUDGET_PX);
+            markup += renderT2Value(change.text, the_ticker_RIGHT_EDGE_X - changeWidth, CHANGE_Y, theme.accent, "the-ticker change figure");
+        }
+        const subLabel = language === "zh-TW" ? subLabelZh : subLabelEn;
+        const subLabelWidth = language === "zh-TW" ? the_ticker_zhLabelWidth(subLabel) : the_ticker_eyebrowLabelWidth(subLabel);
+        the_ticker_format_assertSlotBudget("sub-label", subLabel, subLabelWidth, SUB_LABEL_BUDGET_PX);
+        markup +=
+            language === "zh-TW"
+                ? the_ticker_zhLabel(subLabel, the_ticker_RIGHT_EDGE_X - subLabelWidth, BAND_VALUE_Y, theme.muted)
+                : the_ticker_eyebrowLabel(subLabel, the_ticker_RIGHT_EDGE_X - subLabelWidth, BAND_VALUE_Y, theme.muted);
+        // Four OHLCV label/value pairs: label muted, then sm (8px) gap, then
+        // value ink. T1 (no candle) reads all four as 0.
+        const ohlcv = [
+            { x: OHLCV_X.open, labelEn: ohlcvLabelEnOpen, labelZh: ohlcvLabelZhOpen, value: current?.open ?? 0 },
+            { x: OHLCV_X.high, labelEn: ohlcvLabelEnHigh, labelZh: ohlcvLabelZhHigh, value: current?.high ?? 0 },
+            { x: OHLCV_X.low, labelEn: ohlcvLabelEnLow, labelZh: ohlcvLabelZhLow, value: current?.low ?? 0 },
+            { x: OHLCV_X.vol, labelEn: ohlcvLabelEnVol, labelZh: ohlcvLabelZhVol, value: current?.volume ?? 0 },
+        ];
+        for (const field of ohlcv) {
+            const label = language === "zh-TW" ? field.labelZh : field.labelEn;
+            const labelWidth = language === "zh-TW" ? the_ticker_zhLabelWidth(label) : the_ticker_eyebrowLabelWidth(label);
+            markup +=
+                language === "zh-TW"
+                    ? the_ticker_zhLabel(label, field.x, BAND_VALUE_Y, theme.muted)
+                    : the_ticker_eyebrowLabel(label, field.x, BAND_VALUE_Y, theme.muted);
+            const formattedValue = formatTickerNumber(field.value, language);
+            const valueWidth = splitTickerValue(formattedValue, language).totalWidth;
+            the_ticker_format_assertSlotBudget("OHLCV value", formattedValue, valueWidth, OHLCV_VALUE_BUDGET_PX);
+            markup += renderTickerValue(formattedValue, language, field.x + labelWidth + 8, BAND_VALUE_Y, theme.ink);
+        }
+        // (3) The chart.
+        markup += `<rect x="${the_ticker_PANEL_X}" y="${the_ticker_PANEL_Y}" width="${the_ticker_PANEL_W}" height="${the_ticker_PANEL_H}" fill="none" stroke="${theme.rule}" stroke-width="1"/>`;
+        for (const y of GRIDLINES_Y) {
+            markup += `<line x1="${PLOT_X0}" y1="${y}" x2="${PLOT_X1}" y2="${y}" stroke="${theme.rule}" stroke-width="0.5" stroke-dasharray="2 3"/>`;
+        }
+        markup += `<line x1="${PLOT_X0}" y1="${ZERO_LINE_Y}" x2="${PLOT_X1}" y2="${ZERO_LINE_Y}" stroke="${theme.rule}" stroke-width="0.5"/>`;
+        candles.forEach((candle, i) => {
+            // Right-aligned into the newest columns when monthCount < 12 (T3) —
+            // COL_W is always computed over the fixed 12, so column geometry
+            // never shifts; only the starting column index does.
+            const colIndex = MONTHS - monthCount + i;
+            const cx = PLOT_X0 + the_ticker_COL_W * (colIndex + 0.5);
+            const highY = levelToY(candle.high, maxHigh);
+            const lowY = levelToY(candle.low, maxHigh);
+            markup += `<line x1="${cx.toFixed(2)}" y1="${highY.toFixed(2)}" x2="${cx.toFixed(2)}" y2="${lowY.toFixed(2)}" stroke="${theme.ink}" stroke-width="1"/>`;
+            const openY = levelToY(candle.open, maxHigh);
+            const closeY = levelToY(candle.close, maxHigh);
+            const bodyHeightPx = Math.abs(openY - closeY);
+            const bodyX = (cx - BODY_W / 2).toFixed(2);
+            if (bodyHeightPx < DOJI_MIN_H) {
+                // Doji: body too thin to meaningfully encode direction — a solid
+                // bar, direction deliberately NOT encoded (matches real
+                // candlestick practice; documented in 06-UI-SPEC.md and pinned by
+                // T5's boundary test).
+                markup += `<rect x="${bodyX}" y="${(openY - 0.75).toFixed(2)}" width="${BODY_W}" height="${DOJI_MIN_H}" fill="${theme.ink}"/>`;
+            }
+            else if (candle.close > candle.open) {
+                // Rule C-3: up -> filled ink body, no stroke.
+                markup += `<rect x="${bodyX}" y="${closeY.toFixed(2)}" width="${BODY_W}" height="${(openY - closeY).toFixed(2)}" fill="${theme.ink}"/>`;
+            }
+            else {
+                // Rule C-3: down -> hollow paper body, ink stroke.
+                markup += `<rect x="${bodyX}" y="${openY.toFixed(2)}" width="${BODY_W}" height="${(closeY - openY).toFixed(2)}" fill="${theme.paper}" stroke="${theme.ink}" stroke-width="1"/>`;
+            }
+        });
+        // (4) Month axis — omitted entirely in T1 (no calendar at all). Twelve
+        // generic column-position numerals 1..12 (NOT literal calendar month
+        // numbers — 06-UI-SPEC.md "deliberate simplification of the sketch"),
+        // eleven muted, the rightmost (the current, still-forming month's
+        // column, which candles always right-align into) accent.
+        if (monthCount > 0) {
+            for (let i = 0; i < MONTHS; i++) {
+                const numeral = String(i + 1);
+                const cx = PLOT_X0 + the_ticker_COL_W * (i + 0.5);
+                const width = (0,font/* measureAdvanceWidth */.zN)("mono-semibold", numeral, the_ticker_T1_SIZE);
+                the_ticker_format_assertSlotBudget("month-axis numeral", numeral, width, MONTH_AXIS_BUDGET_PX);
+                const fill = i === MONTHS - 1 ? theme.accent : theme.muted;
+                (0,font/* assertCoverage */.tE)("mono-semibold", numeral, "the-ticker month-axis numeral");
+                markup += the_ticker_pathElement((0,font/* textToPathData */.wD)("mono-semibold", numeral, cx - width / 2, AXIS_Y, the_ticker_T1_SIZE), fill);
+            }
+        }
+        // (5) Bottom row: legend + basis line (T1's empty-state sentence
+        // REPLACES it, never adds to it — 06-UI-SPEC.md Degenerate States T1),
+        // page-number footer (absent-means-emit-nothing, Phase 3 contract).
+        if (monthCount === 0) {
+            const emptyText = language === "zh-TW" ? emptyStateZh : emptyStateEn;
+            const emptyWidth = (0,font/* measureAdvanceWidth */.zN)(contentFont, emptyText, the_ticker_T3_SIZE);
+            the_ticker_format_assertSlotBudget("empty-state sentence", emptyText, emptyWidth, EMPTY_STATE_BUDGET_PX);
+            markup += the_ticker_contentText(contentFont, emptyText, the_ticker_PADDING, the_ticker_FOOTER_Y, theme.ink, `the-ticker empty-state sentence (${language})`);
+        }
+        else {
+            const legend = language === "zh-TW" ? legendZh : legendEn;
+            const legendWidth = language === "zh-TW" ? the_ticker_zhLabelWidth(legend) : the_ticker_eyebrowLabelWidth(legend);
+            the_ticker_format_assertSlotBudget("legend", legend, legendWidth, LEGEND_BUDGET_PX);
+            markup +=
+                language === "zh-TW"
+                    ? the_ticker_zhLabel(legend, the_ticker_PADDING, the_ticker_FOOTER_Y, theme.muted)
+                    : the_ticker_eyebrowLabel(legend, the_ticker_PADDING, the_ticker_FOOTER_Y, theme.muted);
+        }
+        if (opts.pageNumber !== undefined && opts.totalPages !== undefined) {
+            const pageText = language === "zh-TW" ? the_ticker_copy_pageFooterZh(opts.pageNumber, opts.totalPages) : the_ticker_copy_pageFooterEn(opts.pageNumber, opts.totalPages);
+            const pageWidth = language === "zh-TW" ? the_ticker_zhLabelWidth(pageText) : the_ticker_eyebrowLabelWidth(pageText);
+            markup +=
+                language === "zh-TW"
+                    ? the_ticker_zhLabel(pageText, the_ticker_RIGHT_EDGE_X - pageWidth, the_ticker_FOOTER_Y, theme.muted)
+                    : the_ticker_eyebrowLabel(pageText, the_ticker_RIGHT_EDGE_X - pageWidth, the_ticker_FOOTER_Y, theme.muted);
         }
         return markup;
     },
@@ -111557,12 +113075,12 @@ const theRecordWidget = {
  *     absent from the ASCII-only mono / Latin-1-only serif subsets
  * Do not reintroduce any of these in this file.
  */
-const titleEn = "VITALS";
-const titleZh = "生命徵象";
+const copy_titleEn = "VITALS";
+const copy_titleZh = "生命徵象";
 /** zh-TW-only decorative Latin eyebrow — never translated, absent in en mode
  * (Almanac/Editorial Stat Card/The Record convention: en mode's own title
  * already names the card, so no header-scale fact needs both languages). */
-const eyebrowZh = "VITALS";
+const copy_eyebrowZh = "VITALS";
 const stat1LabelEn = "DAILY MEAN";
 const stat1LabelZh = "每日均值";
 const stat2LabelEn = "CURRENT STREAK";
@@ -111593,10 +113111,10 @@ function windowCaptionPartialZh(n) {
 /** Page-number footer — inherited verbatim from Phase 3's shipped contract
  * (same literal format, same absent-means-emit-nothing rule, applied
  * independently by index.ts). */
-function copy_pageFooterEn(n, m) {
+function vitals_copy_pageFooterEn(n, m) {
     return `PAGE ${n}/${m}`;
 }
-function copy_pageFooterZh(n, m) {
+function vitals_copy_pageFooterZh(n, m) {
     return `頁 ${n} / ${m}`;
 }
 
@@ -111626,7 +113144,7 @@ class VitalsSlotOverflowError extends Error {
  * assertSlotBudget (RENDER-02: no widget imports another widget's private
  * helper).
  */
-function format_assertSlotBudget(field, formatted, widthPx, budgetPx) {
+function vitals_format_assertSlotBudget(field, formatted, widthPx, budgetPx) {
     if (widthPx > budgetPx) {
         throw new VitalsSlotOverflowError(field, formatted, widthPx, budgetPx);
     }
@@ -111671,15 +113189,15 @@ const vitals_T3_SIZE = 17;
 const vitals_T1_LETTER_SPACING = 1.6;
 const vitals_HEADER_TITLE_BASELINE_Y = 44;
 const vitals_HEADER_RULE_Y = 58;
-const PANEL_X = 24;
-const PANEL_Y = 72;
-const PANEL_W = 447;
-const PANEL_H = 88; // panel spans y 72..160
-const PLOT_X0 = 32;
-const PLOT_X1 = 463;
-const PLOT_W = PLOT_X1 - PLOT_X0; // 431 (sm = 8 inset each side)
+const vitals_PANEL_X = 24;
+const vitals_PANEL_Y = 72;
+const vitals_PANEL_W = 447;
+const vitals_PANEL_H = 88; // panel spans y 72..160
+const vitals_PLOT_X0 = 32;
+const vitals_PLOT_X1 = 463;
+const vitals_PLOT_W = vitals_PLOT_X1 - vitals_PLOT_X0; // 431 (sm = 8 inset each side)
 const WINDOW_DAYS = 28;
-const DAY_W = PLOT_W / WINDOW_DAYS; // 15.392857...
+const DAY_W = vitals_PLOT_W / WINDOW_DAYS; // 15.392857...
 const BASELINE_Y = 116; // isoelectric line, the panel's vertical midpoint
 const R_MAX = 36; // maximum upward R-wave deflection
 const R_MIN = 6; // minimum upward deflection for any day with count > 0
@@ -111688,9 +113206,9 @@ const S_RATIO = 0.45; // downward deflection, as a fraction of the day's R heigh
 const GRID_Y = [96, 136]; // BASELINE_Y +/- 20; each is lg (24) inside a panel edge
 /** GRID_X = PLOT_X0 + DAY_W * {7, 14, 21} — the three interior week
  * separators produce four week columns. */
-const GRID_X = [7, 14, 21].map((weeks) => PLOT_X0 + DAY_W * weeks);
+const GRID_X = [7, 14, 21].map((weeks) => vitals_PLOT_X0 + DAY_W * weeks);
 const PULSE_R = 3.5;
-const PULSE_CX = PLOT_X1;
+const PULSE_CX = vitals_PLOT_X1;
 const PULSE_CY = BASELINE_Y;
 const STAT_LABEL_Y = 184;
 const STAT_VALUE_Y = 216;
@@ -111721,12 +113239,12 @@ const PULSE_DURATION_S = 1.6;
 // geometry constant fails at IMPORT time, never silently at render time
 // (same convention as the-record/index.ts's tonearm-reachability check).
 // ---------------------------------------------------------------------------
-if (!(BASELINE_Y - R_MAX >= PANEL_Y + 8)) {
-    throw new Error(`vitals: R-wave headroom invariant violated — BASELINE_Y=${BASELINE_Y}, R_MAX=${R_MAX}, PANEL_Y=${PANEL_Y}`);
+if (!(BASELINE_Y - R_MAX >= vitals_PANEL_Y + 8)) {
+    throw new Error(`vitals: R-wave headroom invariant violated — BASELINE_Y=${BASELINE_Y}, R_MAX=${R_MAX}, PANEL_Y=${vitals_PANEL_Y}`);
 }
-if (!(BASELINE_Y + S_RATIO * R_MAX <= PANEL_Y + PANEL_H)) {
+if (!(BASELINE_Y + S_RATIO * R_MAX <= vitals_PANEL_Y + vitals_PANEL_H)) {
     throw new Error(`vitals: S-wave clearance invariant violated — BASELINE_Y=${BASELINE_Y}, S_RATIO=${S_RATIO}, R_MAX=${R_MAX}, ` +
-        `PANEL_Y=${PANEL_Y}, PANEL_H=${PANEL_H}`);
+        `PANEL_Y=${vitals_PANEL_Y}, PANEL_H=${vitals_PANEL_H}`);
 }
 // ---------------------------------------------------------------------------
 // Chassis helpers — own copy, not imported (RENDER-02: adding/modifying a
@@ -111791,7 +113309,7 @@ function vitals_contentText(fontName, text, x, y, fill, context) {
  * through IBM Plex Mono). Unlike The Record's `renderNumeral`, this card
  * never needs the zh-TW 萬/億 mixed-font split — `DAILY MEAN` and `CURRENT
  * STREAK` never reach that magnitude over a 28-day window. */
-function renderT2Value(text, x, y, fill, context) {
+function vitals_renderT2Value(text, x, y, fill, context) {
     (0,font/* assertCoverage */.tE)("mono-semibold", text, context);
     return vitals_pathElement((0,font/* textToPathData */.wD)("mono-semibold", text, x, y, vitals_T2_SIZE), fill);
 }
@@ -111832,7 +113350,7 @@ function dayAmplitude(c, maxCount) {
  * consecutive days concatenate into one continuous, seamless polyline.
  */
 function dayVertices(i, c, maxCount) {
-    const x0 = PLOT_X0 + i * DAY_W;
+    const x0 = vitals_PLOT_X0 + i * DAY_W;
     const w = DAY_W;
     const b = BASELINE_Y;
     if (c === 0) {
@@ -111892,6 +113410,10 @@ function statusTier(activeDays) {
     }
     return "RAPID";
 }
+/** Exported for direct unit testing (index.test.ts) — the rendered SVG's
+ * status word is emitted as path data, so this is the only way to assert
+ * the exact copy string chosen for a given status/language pair without
+ * OCR-ing the render output. */
 function statusWordFor(status, language) {
     const table = {
         FLATLINE: { en: statusFlatlineEn, zh: statusFlatlineZh },
@@ -111902,7 +113424,9 @@ function statusWordFor(status, language) {
     return language === "zh-TW" ? table[status].zh : table[status].en;
 }
 /** Window caption, chosen by `n` (06-UI-SPEC.md "Bottom row" / "Vitals
- * chrome strings"): full window, partial window, or no recording at all. */
+ * chrome strings"): full window, partial window, or no recording at all.
+ * Exported for direct unit testing — see statusWordFor's comment above for
+ * why (the rendered caption is path data, not inspectable text). */
 function windowCaptionFor(n, language) {
     if (n === WINDOW_DAYS) {
         return language === "zh-TW" ? windowCaptionFullZh : windowCaptionFullEn;
@@ -111963,13 +113487,13 @@ const vitalsWidget = {
         let markup = "";
         // (1) Header row: title left-aligned; zh-TW-only untranslated Latin
         // eyebrow, right-aligned; hairline rule.
-        const title = language === "zh-TW" ? titleZh : titleEn;
-        format_assertSlotBudget("card title", title, (0,font/* measureAdvanceWidth */.zN)(contentFont, title, vitals_T3_SIZE), vitals_CARD_TITLE_BUDGET_PX);
+        const title = language === "zh-TW" ? copy_titleZh : copy_titleEn;
+        vitals_format_assertSlotBudget("card title", title, (0,font/* measureAdvanceWidth */.zN)(contentFont, title, vitals_T3_SIZE), vitals_CARD_TITLE_BUDGET_PX);
         markup += vitals_contentText(contentFont, title, vitals_PADDING, vitals_HEADER_TITLE_BASELINE_Y, theme.ink, `vitals title (${language})`);
         if (language === "zh-TW") {
-            const eyebrowWidth = vitals_eyebrowLabelWidth(eyebrowZh);
-            format_assertSlotBudget("zh-TW eyebrow", eyebrowZh, eyebrowWidth, ZH_EYEBROW_BUDGET_PX);
-            markup += vitals_eyebrowLabel(eyebrowZh, vitals_RIGHT_EDGE_X - eyebrowWidth, vitals_HEADER_TITLE_BASELINE_Y, theme.muted);
+            const eyebrowWidth = vitals_eyebrowLabelWidth(copy_eyebrowZh);
+            vitals_format_assertSlotBudget("zh-TW eyebrow", copy_eyebrowZh, eyebrowWidth, ZH_EYEBROW_BUDGET_PX);
+            markup += vitals_eyebrowLabel(copy_eyebrowZh, vitals_RIGHT_EDGE_X - eyebrowWidth, vitals_HEADER_TITLE_BASELINE_Y, theme.muted);
         }
         markup += `<line x1="${vitals_PADDING}" y1="${vitals_HEADER_RULE_Y}" x2="${vitals_RIGHT_EDGE_X}" y2="${vitals_HEADER_RULE_Y}" stroke="${theme.rule}" stroke-width="1"/>`;
         // (2) The widget's own <style> — exactly one @keyframes block and one
@@ -111984,25 +113508,25 @@ const vitalsWidget = {
             `<style>@keyframes ${PULSE_NAME}{0%{opacity:1}45%{opacity:0.2}100%{opacity:1}}` +
                 `.${PULSE_NAME}{animation:${PULSE_NAME} ${PULSE_DURATION_S}s ease-in-out infinite}</style>`;
         // (3) Panel border.
-        markup += `<rect x="${PANEL_X}" y="${PANEL_Y}" width="${PANEL_W}" height="${PANEL_H}" fill="none" stroke="${theme.rule}" stroke-width="1"/>`;
+        markup += `<rect x="${vitals_PANEL_X}" y="${vitals_PANEL_Y}" width="${vitals_PANEL_W}" height="${vitals_PANEL_H}" fill="none" stroke="${theme.rule}" stroke-width="1"/>`;
         // (4) Two horizontal minor grid lines.
         for (const y of GRID_Y) {
             markup += `<line x1="${vitals_PADDING}" y1="${y}" x2="${vitals_RIGHT_EDGE_X}" y2="${y}" stroke="${theme.rule}" stroke-width="0.5" stroke-opacity="0.6"/>`;
         }
         // (5) Three vertical week separators — four week columns.
         for (const x of GRID_X) {
-            markup += `<line x1="${x.toFixed(2)}" y1="${PANEL_Y}" x2="${x.toFixed(2)}" y2="${PANEL_Y + PANEL_H}" stroke="${theme.rule}" stroke-width="0.5" stroke-opacity="0.6"/>`;
+            markup += `<line x1="${x.toFixed(2)}" y1="${vitals_PANEL_Y}" x2="${x.toFixed(2)}" y2="${vitals_PANEL_Y + vitals_PANEL_H}" stroke="${theme.rule}" stroke-width="0.5" stroke-opacity="0.6"/>`;
         }
         // (6) Isoelectric reference line, drawn under the trace so flat
         // segments read as sitting ON a baseline rather than floating.
-        markup += `<line x1="${PLOT_X0}" y1="${BASELINE_Y}" x2="${PLOT_X1}" y2="${BASELINE_Y}" stroke="${theme.rule}" stroke-width="0.5" stroke-opacity="0.6"/>`;
+        markup += `<line x1="${vitals_PLOT_X0}" y1="${BASELINE_Y}" x2="${vitals_PLOT_X1}" y2="${BASELINE_Y}" stroke="${theme.rule}" stroke-width="0.5" stroke-opacity="0.6"/>`;
         // (7) Unrecorded-segment dashed rule line (Rule C-1) — drawn ONLY when
         // n < 28. Slots 0..27-n carry no polyline vertices at all; this single
         // dashed line is the entire "we have no data here" signal, distinct
         // from a solid accent flat segment ("we measured zero").
         if (n < WINDOW_DAYS) {
-            const dashEndX = PLOT_X0 + (WINDOW_DAYS - n) * DAY_W;
-            markup += `<line x1="${PLOT_X0}" y1="${BASELINE_Y}" x2="${dashEndX.toFixed(2)}" y2="${BASELINE_Y}" stroke="${theme.rule}" stroke-width="1" stroke-dasharray="3 3"/>`;
+            const dashEndX = vitals_PLOT_X0 + (WINDOW_DAYS - n) * DAY_W;
+            markup += `<line x1="${vitals_PLOT_X0}" y1="${BASELINE_Y}" x2="${dashEndX.toFixed(2)}" y2="${BASELINE_Y}" stroke="${theme.rule}" stroke-width="1" stroke-dasharray="3 3"/>`;
         }
         // (8) The ECG trace — a single <polyline>, present only when n > 0.
         // Consecutive days share their boundary point (each day starts and
@@ -112046,46 +113570,46 @@ const vitalsWidget = {
         // RIGHT_EDGE_X.
         const stat1Label = language === "zh-TW" ? stat1LabelZh : stat1LabelEn;
         const stat1LabelWidth = language === "zh-TW" ? vitals_zhLabelWidth(stat1Label) : vitals_eyebrowLabelWidth(stat1Label);
-        format_assertSlotBudget("stat-1 label", stat1Label, stat1LabelWidth, STAT_LABEL_BUDGET_PX);
+        vitals_format_assertSlotBudget("stat-1 label", stat1Label, stat1LabelWidth, STAT_LABEL_BUDGET_PX);
         markup +=
             language === "zh-TW"
                 ? vitals_zhLabel(stat1Label, vitals_COL1_X, STAT_LABEL_Y, theme.muted)
                 : vitals_eyebrowLabel(stat1Label, vitals_COL1_X, STAT_LABEL_Y, theme.muted);
         const meanStr = formatDailyMean(mean);
-        format_assertSlotBudget("stat-1 value", meanStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", meanStr, vitals_T2_SIZE), STAT_VALUE_BUDGET_PX);
-        markup += renderT2Value(meanStr, vitals_COL1_X, STAT_VALUE_Y, theme.ink, "vitals daily-mean value");
+        vitals_format_assertSlotBudget("stat-1 value", meanStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", meanStr, vitals_T2_SIZE), STAT_VALUE_BUDGET_PX);
+        markup += vitals_renderT2Value(meanStr, vitals_COL1_X, STAT_VALUE_Y, theme.ink, "vitals daily-mean value");
         const stat2Label = language === "zh-TW" ? stat2LabelZh : stat2LabelEn;
         const stat2LabelWidth = language === "zh-TW" ? vitals_zhLabelWidth(stat2Label) : vitals_eyebrowLabelWidth(stat2Label);
-        format_assertSlotBudget("stat-2 label", stat2Label, stat2LabelWidth, STAT_LABEL_BUDGET_PX);
+        vitals_format_assertSlotBudget("stat-2 label", stat2Label, stat2LabelWidth, STAT_LABEL_BUDGET_PX);
         markup +=
             language === "zh-TW"
                 ? vitals_zhLabel(stat2Label, vitals_COL2_X, STAT_LABEL_Y, theme.muted)
                 : vitals_eyebrowLabel(stat2Label, vitals_COL2_X, STAT_LABEL_Y, theme.muted);
         const streakStr = String(streak);
-        format_assertSlotBudget("stat-2 value", streakStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", streakStr, vitals_T2_SIZE), STAT_VALUE_BUDGET_PX);
-        markup += renderT2Value(streakStr, vitals_COL2_X, STAT_VALUE_Y, theme.ink, "vitals current-streak value");
+        vitals_format_assertSlotBudget("stat-2 value", streakStr, (0,font/* measureAdvanceWidth */.zN)("mono-semibold", streakStr, vitals_T2_SIZE), STAT_VALUE_BUDGET_PX);
+        markup += vitals_renderT2Value(streakStr, vitals_COL2_X, STAT_VALUE_Y, theme.ink, "vitals current-streak value");
         const stat3Label = language === "zh-TW" ? stat3LabelZh : stat3LabelEn;
         const stat3LabelWidth = language === "zh-TW" ? vitals_zhLabelWidth(stat3Label) : vitals_eyebrowLabelWidth(stat3Label);
-        format_assertSlotBudget("stat-3 label", stat3Label, stat3LabelWidth, STAT3_LABEL_BUDGET_PX);
+        vitals_format_assertSlotBudget("stat-3 label", stat3Label, stat3LabelWidth, STAT3_LABEL_BUDGET_PX);
         markup +=
             language === "zh-TW"
                 ? vitals_zhLabel(stat3Label, vitals_RIGHT_EDGE_X - stat3LabelWidth, STAT_LABEL_Y, theme.muted)
                 : vitals_eyebrowLabel(stat3Label, vitals_RIGHT_EDGE_X - stat3LabelWidth, STAT_LABEL_Y, theme.muted);
         const statusWord = statusWordFor(status, language);
         const statusWidth = (0,font/* measureAdvanceWidth */.zN)(contentFont, statusWord, vitals_T3_SIZE);
-        format_assertSlotBudget("status word", statusWord, statusWidth, STATUS_WORD_BUDGET_PX);
+        vitals_format_assertSlotBudget("status word", statusWord, statusWidth, STATUS_WORD_BUDGET_PX);
         markup += vitals_contentText(contentFont, statusWord, vitals_RIGHT_EDGE_X - statusWidth, STAT_VALUE_Y, theme.ink, `vitals status word (${language})`);
         // (11) Bottom row: window caption (left, T1 accent), page-number
         // footer (right, T1 muted, absent-means-emit-nothing per Phase 3).
         const caption = windowCaptionFor(n, language);
         const captionWidth = language === "zh-TW" ? vitals_zhLabelWidth(caption) : vitals_eyebrowLabelWidth(caption);
-        format_assertSlotBudget("window caption", caption, captionWidth, WINDOW_CAPTION_BUDGET_PX);
+        vitals_format_assertSlotBudget("window caption", caption, captionWidth, WINDOW_CAPTION_BUDGET_PX);
         markup +=
             language === "zh-TW"
                 ? vitals_zhLabel(caption, vitals_COL1_X, vitals_FOOTER_Y, theme.accent)
                 : vitals_eyebrowLabel(caption, vitals_COL1_X, vitals_FOOTER_Y, theme.accent);
         if (opts.pageNumber !== undefined && opts.totalPages !== undefined) {
-            const pageText = language === "zh-TW" ? copy_pageFooterZh(opts.pageNumber, opts.totalPages) : copy_pageFooterEn(opts.pageNumber, opts.totalPages);
+            const pageText = language === "zh-TW" ? vitals_copy_pageFooterZh(opts.pageNumber, opts.totalPages) : vitals_copy_pageFooterEn(opts.pageNumber, opts.totalPages);
             const pageWidth = language === "zh-TW" ? vitals_zhLabelWidth(pageText) : vitals_eyebrowLabelWidth(pageText);
             markup +=
                 language === "zh-TW"
@@ -112104,12 +113628,14 @@ const vitalsWidget = {
 
 
 
+
+
 /**
  * The ONE registration list for every built-in widget (QA-03 / D-12). Before
  * this file existed, the same five `register(...)` calls were hand-copied
  * into three separate composition roots (`src/action-entry.ts`,
  * `src/cli.ts`, `scripts/build-uat-preview.ts`) — a fourth copy was about to
- * be added for the Phase 5 playground entry point. Adding a sixth card now
+ * be added for the Phase 5 playground entry point. Adding a new card now
  * costs exactly two changes: a new `src/widgets/<name>/` directory, and one
  * new line here. No entry point, and no file under `src/core/`, needs to
  * change.
@@ -112124,8 +113650,10 @@ function registerAllWidgets() {
     (0,registry/* register */.kz)(almanacWidget);
     (0,registry/* register */.kz)(editorialStatCardWidget);
     (0,registry/* register */.kz)(mastheadWidget);
+    (0,registry/* register */.kz)(theForecastWidget);
     (0,registry/* register */.kz)(theGraveyardWidget);
     (0,registry/* register */.kz)(theRecordWidget);
+    (0,registry/* register */.kz)(theTickerWidget);
     (0,registry/* register */.kz)(vitalsWidget);
 }
 

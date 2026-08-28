@@ -123,6 +123,18 @@ describe("action-entry.ts — Plan 02-03 pipeline wiring (DATA-01/02/07)", () =>
     expect(allWidgetsSource).toContain("register(theRecordWidget)");
   });
 
+  it("src/widgets/all.ts registers the vitals widget (Phase 6, CARD-05)", () => {
+    expect(allWidgetsSource).toContain("register(vitalsWidget)");
+  });
+
+  it("src/widgets/all.ts registers the-forecast widget (Phase 6, CARD-06)", () => {
+    expect(allWidgetsSource).toContain("register(theForecastWidget)");
+  });
+
+  it("src/widgets/all.ts registers the-ticker widget (Phase 6, CARD-07)", () => {
+    expect(allWidgetsSource).toContain("register(theTickerWidget)");
+  });
+
   it("calls resolveCards(), fetchSharedData(), and logPointCost() — not the old single-call renderAllCards(config, ...) shape", () => {
     expect(entrySource).toContain("resolveCards(");
     expect(entrySource).toContain("fetchSharedData(");
