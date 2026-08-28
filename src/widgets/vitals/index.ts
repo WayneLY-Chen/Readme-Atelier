@@ -321,7 +321,11 @@ export function statusTier(activeDays: number): VitalsStatus {
   return "RAPID";
 }
 
-function statusWordFor(status: VitalsStatus, language: "en" | "zh-TW"): string {
+/** Exported for direct unit testing (index.test.ts) — the rendered SVG's
+ * status word is emitted as path data, so this is the only way to assert
+ * the exact copy string chosen for a given status/language pair without
+ * OCR-ing the render output. */
+export function statusWordFor(status: VitalsStatus, language: "en" | "zh-TW"): string {
   const table: Record<VitalsStatus, { en: string; zh: string }> = {
     FLATLINE: { en: statusFlatlineEn, zh: statusFlatlineZh },
     FAINT: { en: statusFaintEn, zh: statusFaintZh },
@@ -332,8 +336,10 @@ function statusWordFor(status: VitalsStatus, language: "en" | "zh-TW"): string {
 }
 
 /** Window caption, chosen by `n` (06-UI-SPEC.md "Bottom row" / "Vitals
- * chrome strings"): full window, partial window, or no recording at all. */
-function windowCaptionFor(n: number, language: "en" | "zh-TW"): string {
+ * chrome strings"): full window, partial window, or no recording at all.
+ * Exported for direct unit testing — see statusWordFor's comment above for
+ * why (the rendered caption is path data, not inspectable text). */
+export function windowCaptionFor(n: number, language: "en" | "zh-TW"): string {
   if (n === WINDOW_DAYS) {
     return language === "zh-TW" ? windowCaptionFullZh : windowCaptionFullEn;
   }
