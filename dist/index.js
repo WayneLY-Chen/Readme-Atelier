@@ -112531,11 +112531,50 @@ function deriveSymbol(login) {
     return raw === "" ? "$DEV" : "$" + raw.slice(0, 5);
 }
 /**
+ * CR-01/WR-01 fix (06-REVIEW.md): the change figure renders at T2 32px in
+ * `mono-semibold` against `CHANGE_FIGURE_BUDGET_PX = 150` (index.ts). Every
+ * character in this exact font/size pairing measures an identical 19.2px
+ * advance width (confirmed empirically — see format.test.ts's boundary
+ * tests), so 150px / 19.2px = 7.8125: **7 ASCII characters is the largest
+ * count that still fits**; an 8-character string always measures 153.6px,
+ * over budget. This is a plain arithmetic constant, not a font-measurement
+ * call — format.ts stays free of any `core/font.ts` import, so it remains a
+ * pure function module (index.ts is still the only place that calls
+ * `measureAdvanceWidth`/`assertSlotBudget`). `MAX_PERCENT_MAGNITUDE` and
+ * `MAX_LEVEL_MAGNITUDE` below are both derived from this same 7-character
+ * ceiling, applied to the two branches that can grow unboundedly:
+ *   - percent: `sign + digits + "." + digit + "%"` stays <= 7 chars only
+ *     while the integer part has <= 3 digits, i.e. magnitude < 1000.
+ *   - level (bare signed integer, no `%`): `sign + digits` stays <= 7
+ *     chars only while the integer has <= 6 digits, i.e. magnitude <=
+ *     999999.
+ */
+const MAX_PERCENT_MAGNITUDE = 999.9; // "+999.9%" = 7 chars, 134.4px (fits)
+const MAX_LEVEL_MAGNITUDE = 999_999; // "+999999" = 7 chars, 134.4px (fits)
+/**
+ * Shared math for the bare signed-integer "level" presentation (06-UI-SPEC.md
+ * "the absence of `%` is itself the reader's signal that the units changed
+ * from percent to level"). Extracted so `formatChange`'s own `open === 0`
+ * branch and its CR-01 percent-overflow fallback branch (below) compute the
+ * SAME text from the SAME formula rather than two independent copies that
+ * could silently diverge (02-02's documented lesson). WR-01: the magnitude
+ * is capped at `MAX_LEVEL_MAGNITUDE` so this presentation is bounded for
+ * every input too, not just the percent form — an implausibly large `L(d)`
+ * value (an 8-digit trailing-7-day contribution count) still renders a
+ * safe, in-budget string instead of throwing.
+ */
+function formatLevelDelta(open, close) {
+    const delta = close - open;
+    const sign = delta >= 0 ? "+" : "-";
+    const magnitude = Math.min(Math.abs(delta), MAX_LEVEL_MAGNITUDE);
+    return `${sign}${magnitude}`;
+}
+/**
  * The month-over-month change figure (06-UI-SPEC.md "The change figure").
  * `change% = (close - open) / open * 100`, one decimal, ASCII sign ALWAYS
  * printed (`+18.4%`, `-6.2%`, `+0.0%` — never a bare, signless zero).
  *
- * Two defined degenerate branches, in the order the UI-SPEC states them:
+ * Three defined degenerate branches, in the order they are checked:
  *   - open === 0 && close === 0 -> `{ kind: "flat" }` (percentage is 0/0,
  *     undefined; a real value at display size would overstate a
  *     non-reading).
@@ -112544,24 +112583,35 @@ function deriveSymbol(login) {
  *     the ABSOLUTE level change is rendered instead, signed, with NO
  *     percent sign. The absence of `%` is itself the reader's signal that
  *     the units changed from percent to level.
+ *   - open > 0 && |percent| > MAX_PERCENT_MAGNITUDE -> CR-01: the percent
+ *     string would overflow the change-figure slot (measured: any
+ *     month-over-month increase of roughly +1000% or more, which is
+ *     ordinary data — "a quiet week followed by an active week" — not an
+ *     adversarial input). A percentage this large has already lost most of
+ *     its meaning as a percentage, so this reroutes to the SAME
+ *     signed-absolute-level presentation the open===0 branch already
+ *     defines, rather than truncating or inventing a new glyph.
  *
- * Every other (open > 0) case falls through to the normal percent formula.
- * `open < 0` is not a reachable state — L(d) is derived from non-negative
- * contribution counts (round() of a non-negative average), so Open/High/
- * Low/Close are all >= 0 by construction.
+ * Every other (open > 0, |percent| <= MAX_PERCENT_MAGNITUDE) case falls
+ * through to the normal percent formula. `open < 0` is not a reachable
+ * state — L(d) is derived from non-negative contribution counts (round() of
+ * a non-negative average), so Open/High/Low/Close are all >= 0 by
+ * construction.
  */
 function formatChange(open, close) {
     if (open === 0 && close === 0) {
         return { kind: "flat" };
     }
     if (open === 0 && close > 0) {
-        const delta = close - open;
-        const sign = delta >= 0 ? "+" : "-";
-        return { kind: "level", text: `${sign}${Math.abs(delta)}` };
+        return { kind: "level", text: formatLevelDelta(open, close) };
     }
     const pct = ((close - open) / open) * 100;
+    const magnitude = Math.abs(pct);
+    if (magnitude > MAX_PERCENT_MAGNITUDE) {
+        return { kind: "level", text: formatLevelDelta(open, close) };
+    }
     const sign = pct >= 0 ? "+" : "-";
-    return { kind: "percent", text: `${sign}${Math.abs(pct).toFixed(1)}%` };
+    return { kind: "percent", text: `${sign}${magnitude.toFixed(1)}%` };
 }
 
 ;// CONCATENATED MODULE: ./src/widgets/the-ticker/index.ts
