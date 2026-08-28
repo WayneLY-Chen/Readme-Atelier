@@ -229,15 +229,19 @@ function contentText(fontName: string, text: string, x: number, y: number, fill:
   return pathElement(d, fill);
 }
 
-/** T3-mono numeral style, horizontally centred at `centerX` — used ONLY for
- * the seven projected weekday numerals (D-02: every numeral routes through
- * IBM Plex Mono). Fill is Rule C-2's contrast-decided fallback, passed in by
- * the caller. */
-function centeredMonoNumeral(text: string, centerX: number, y: number, fill: string, context: string): string {
+/** T3-mono numeral path (NO fill attribute of its own) — used ONLY for the
+ * seven projected weekday numerals (D-02: every numeral routes through IBM
+ * Plex Mono). Returns bare `<path d="...">` markup, intended to be wrapped
+ * in a single `<g fill="...">` group by the caller — Rule C-2's fill is a
+ * single per-render decision (`numeralFillFor(theme)`), not a per-numeral
+ * one, so wrapping all seven in one group both states that fact structurally
+ * and is the natural place a test asserts "the seven numerals' fill". */
+function centeredMonoNumeralPath(text: string, centerX: number, y: number, context: string): string {
   assertCoverage("mono-semibold", text, context);
   const width = measureAdvanceWidth("mono-semibold", text, T3_SIZE);
   const x = centerX - width / 2;
-  return pathElement(textToPathData("mono-semibold", text, x, y, T3_SIZE), fill);
+  const d = textToPathData("mono-semibold", text, x, y, T3_SIZE);
+  return d === "" ? "" : `<path d="${d}"/>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -350,6 +354,46 @@ export function busiestWeekdayIndex(medians: number[]): number {
     }
   }
   return bestIndex;
+}
+
+/**
+ * Disclosure-eyebrow text selection — exported for DIRECT unit testing (same
+ * convention as vitals' `windowCaptionFor`/`statusWordFor`: the rendered
+ * eyebrow is emitted as opaque path data, so this exported selector is the
+ * only way to assert the exact copy string — and the exact `k` — chosen for
+ * a given input, without OCR-ing the render output). This is F4, the card's
+ * single most important honesty mechanic: `k` must be the REAL computed
+ * value, never a hardcoded 12, and `renderBody` below calls this same
+ * function rather than re-deriving the choice inline.
+ */
+export function eyebrowTextFor(k: number, hasProjection: boolean, language: "en" | "zh-TW"): string {
+  if (!hasProjection) {
+    return language === "zh-TW" ? disclosureEyebrowInsufficientZh : disclosureEyebrowInsufficientEn;
+  }
+  return language === "zh-TW" ? disclosureEyebrowZh(k) : disclosureEyebrowEn(k);
+}
+
+/**
+ * Headline text selection — one of three states (insufficient / all-zero /
+ * normal), exported for the same direct-testability reason as
+ * `eyebrowTextFor` above.
+ */
+export function headlineTextFor(
+  hasProjection: boolean,
+  allZero: boolean,
+  busiestWeekdayName: string,
+  busiestMedian: number,
+  language: "en" | "zh-TW",
+): string {
+  if (!hasProjection) {
+    return language === "zh-TW" ? headlineInsufficientZh : headlineInsufficientEn;
+  }
+  if (allZero) {
+    return language === "zh-TW" ? headlineAllZeroZh : headlineAllZeroEn;
+  }
+  return language === "zh-TW"
+    ? headlineNormalZh(busiestWeekdayName, busiestMedian)
+    : headlineNormalEn(busiestWeekdayName, busiestMedian);
 }
 
 // ---------------------------------------------------------------------------
@@ -467,13 +511,7 @@ export const theForecastWidget: WidgetDefinition<RenderOptions> = {
     assertSlotBudget("card title", title, measureAdvanceWidth(contentFont, title, T3_SIZE), CARD_TITLE_BUDGET_PX);
     markup += contentText(contentFont, title, PADDING, TITLE_Y, theme.ink, `the-forecast title (${language})`);
 
-    const eyebrowText = hasProjection
-      ? language === "zh-TW"
-        ? disclosureEyebrowZh(k)
-        : disclosureEyebrowEn(k)
-      : language === "zh-TW"
-        ? disclosureEyebrowInsufficientZh
-        : disclosureEyebrowInsufficientEn;
+    const eyebrowText = eyebrowTextFor(k, hasProjection, language);
     const eyebrowWidth = language === "zh-TW" ? zhLabelWidth(eyebrowText) : eyebrowLabelWidth(eyebrowText);
     assertSlotBudget("disclosure eyebrow", eyebrowText, eyebrowWidth, DISCLOSURE_EYEBROW_BUDGET_PX);
     markup +=
@@ -503,39 +541,38 @@ export const theForecastWidget: WidgetDefinition<RenderOptions> = {
       markup += centeredLabel(label, language, cx, WEEKDAY_LABEL_Y, theme.muted);
     }
 
-    // (4)+(5) Weather glyphs + projected numerals — SKIPPED ENTIRELY when
-    // k < 2 (F1: "no glyphs, no numerals"). When a projection exists (F2
-    // included), every column renders a real glyph and a real numeral,
-    // fill = Rule C-2's contrast-decided fallback.
+    // (4) Weather glyphs — SKIPPED ENTIRELY when k < 2 (F1: "no glyphs, no
+    // numerals"). When a projection exists (F2 included), every column
+    // renders a real glyph.
     if (hasProjection) {
       for (let i = 0; i < 7; i++) {
         const cx = colCenter(i);
-        const m = medians[i]!;
-        const tier = tierFor(m, M);
+        const tier = tierFor(medians[i]!, M);
         markup += renderWeatherGlyph(tier, cx, theme);
+      }
 
+      // (5) Seven projected numerals, wrapped in a SINGLE <g fill="...">
+      // group — Rule C-2's fill is one per-render decision
+      // (numeralFillFor(theme)), not seven independent ones, so the group
+      // wrapper states that structurally and is what a test asserts against
+      // (the g's fill === the theme's decided numeralFillFor result).
+      let numeralGroup = "";
+      for (let i = 0; i < 7; i++) {
+        const cx = colCenter(i);
+        const m = medians[i]!;
         const numeralText = String(m);
         const numeralWidth = measureAdvanceWidth("mono-semibold", numeralText, T3_SIZE);
         assertSlotBudget(`projected numeral ${i}`, numeralText, numeralWidth, NUMERAL_BUDGET_PX);
-        markup += centeredMonoNumeral(numeralText, cx, NUMERAL_Y, numeralFill, `the-forecast numeral ${i}`);
+        numeralGroup += centeredMonoNumeralPath(numeralText, cx, NUMERAL_Y, `the-forecast numeral ${i}`);
       }
+      markup += `<g fill="${numeralFill}">${numeralGroup}</g>`;
     }
 
     // (6) Headline — one of three states, decided by the same hasProjection
     // / allZero flags used above (never a fourth branch).
-    let headline: string;
-    if (!hasProjection) {
-      headline = language === "zh-TW" ? headlineInsufficientZh : headlineInsufficientEn;
-    } else if (allZero) {
-      headline = language === "zh-TW" ? headlineAllZeroZh : headlineAllZeroEn;
-    } else {
-      const weekdayName =
-        language === "zh-TW" ? weekdayFullNamesZh[busiestIndex]! : weekdayFullNamesEn[busiestIndex]!;
-      headline =
-        language === "zh-TW"
-          ? headlineNormalZh(weekdayName, busiestMedian)
-          : headlineNormalEn(weekdayName, busiestMedian);
-    }
+    const busiestWeekdayName =
+      language === "zh-TW" ? weekdayFullNamesZh[busiestIndex]! : weekdayFullNamesEn[busiestIndex]!;
+    const headline = headlineTextFor(hasProjection, allZero, busiestWeekdayName, busiestMedian, language);
     assertSlotBudget("headline", headline, measureAdvanceWidth(contentFont, headline, T3_SIZE), HEADLINE_BUDGET_PX);
     markup += contentText(contentFont, headline, PADDING, HEADLINE_Y, theme.ink, `the-forecast headline (${language})`);
 
