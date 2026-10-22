@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v5 # release event: GITHUB_REF = refs/tags/<tag_name>
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 24.22.1
           cache: npm
       - run: npm ci
       # Must be the FULL build script (ncc + postbuild vendoring), not just

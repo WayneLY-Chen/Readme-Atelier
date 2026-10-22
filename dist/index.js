@@ -15,662 +15,6 @@ module.exports = {
 
 /***/ }),
 
-/***/ 5667:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __exportStar = (this && this.__exportStar) || function(m, exports) {
-    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.stringify = exports.parse = exports.isTraversal = void 0;
-__exportStar(__nccwpck_require__(4738), exports);
-var parse_1 = __nccwpck_require__(748);
-Object.defineProperty(exports, "isTraversal", ({ enumerable: true, get: function () { return parse_1.isTraversal; } }));
-Object.defineProperty(exports, "parse", ({ enumerable: true, get: function () { return parse_1.parse; } }));
-var stringify_1 = __nccwpck_require__(9154);
-Object.defineProperty(exports, "stringify", ({ enumerable: true, get: function () { return stringify_1.stringify; } }));
-
-
-/***/ }),
-
-/***/ 748:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.parse = exports.isTraversal = void 0;
-var types_1 = __nccwpck_require__(4738);
-var reName = /^[^\\#]?(?:\\(?:[\da-f]{1,6}\s?|.)|[\w\-\u00b0-\uFFFF])+/;
-var reEscape = /\\([\da-f]{1,6}\s?|(\s)|.)/gi;
-var actionTypes = new Map([
-    [126 /* Tilde */, types_1.AttributeAction.Element],
-    [94 /* Circumflex */, types_1.AttributeAction.Start],
-    [36 /* Dollar */, types_1.AttributeAction.End],
-    [42 /* Asterisk */, types_1.AttributeAction.Any],
-    [33 /* ExclamationMark */, types_1.AttributeAction.Not],
-    [124 /* Pipe */, types_1.AttributeAction.Hyphen],
-]);
-// Pseudos, whose data property is parsed as well.
-var unpackPseudos = new Set([
-    "has",
-    "not",
-    "matches",
-    "is",
-    "where",
-    "host",
-    "host-context",
-]);
-/**
- * Checks whether a specific selector is a traversal.
- * This is useful eg. in swapping the order of elements that
- * are not traversals.
- *
- * @param selector Selector to check.
- */
-function isTraversal(selector) {
-    switch (selector.type) {
-        case types_1.SelectorType.Adjacent:
-        case types_1.SelectorType.Child:
-        case types_1.SelectorType.Descendant:
-        case types_1.SelectorType.Parent:
-        case types_1.SelectorType.Sibling:
-        case types_1.SelectorType.ColumnCombinator:
-            return true;
-        default:
-            return false;
-    }
-}
-exports.isTraversal = isTraversal;
-var stripQuotesFromPseudos = new Set(["contains", "icontains"]);
-// Unescape function taken from https://github.com/jquery/sizzle/blob/master/src/sizzle.js#L152
-function funescape(_, escaped, escapedWhitespace) {
-    var high = parseInt(escaped, 16) - 0x10000;
-    // NaN means non-codepoint
-    return high !== high || escapedWhitespace
-        ? escaped
-        : high < 0
-            ? // BMP codepoint
-                String.fromCharCode(high + 0x10000)
-            : // Supplemental Plane codepoint (surrogate pair)
-                String.fromCharCode((high >> 10) | 0xd800, (high & 0x3ff) | 0xdc00);
-}
-function unescapeCSS(str) {
-    return str.replace(reEscape, funescape);
-}
-function isQuote(c) {
-    return c === 39 /* SingleQuote */ || c === 34 /* DoubleQuote */;
-}
-function isWhitespace(c) {
-    return (c === 32 /* Space */ ||
-        c === 9 /* Tab */ ||
-        c === 10 /* NewLine */ ||
-        c === 12 /* FormFeed */ ||
-        c === 13 /* CarriageReturn */);
-}
-/**
- * Parses `selector`, optionally with the passed `options`.
- *
- * @param selector Selector to parse.
- * @param options Options for parsing.
- * @returns Returns a two-dimensional array.
- * The first dimension represents selectors separated by commas (eg. `sub1, sub2`),
- * the second contains the relevant tokens for that selector.
- */
-function parse(selector) {
-    var subselects = [];
-    var endIndex = parseSelector(subselects, "".concat(selector), 0);
-    if (endIndex < selector.length) {
-        throw new Error("Unmatched selector: ".concat(selector.slice(endIndex)));
-    }
-    return subselects;
-}
-exports.parse = parse;
-function parseSelector(subselects, selector, selectorIndex) {
-    var tokens = [];
-    function getName(offset) {
-        var match = selector.slice(selectorIndex + offset).match(reName);
-        if (!match) {
-            throw new Error("Expected name, found ".concat(selector.slice(selectorIndex)));
-        }
-        var name = match[0];
-        selectorIndex += offset + name.length;
-        return unescapeCSS(name);
-    }
-    function stripWhitespace(offset) {
-        selectorIndex += offset;
-        while (selectorIndex < selector.length &&
-            isWhitespace(selector.charCodeAt(selectorIndex))) {
-            selectorIndex++;
-        }
-    }
-    function readValueWithParenthesis() {
-        selectorIndex += 1;
-        var start = selectorIndex;
-        var counter = 1;
-        for (; counter > 0 && selectorIndex < selector.length; selectorIndex++) {
-            if (selector.charCodeAt(selectorIndex) ===
-                40 /* LeftParenthesis */ &&
-                !isEscaped(selectorIndex)) {
-                counter++;
-            }
-            else if (selector.charCodeAt(selectorIndex) ===
-                41 /* RightParenthesis */ &&
-                !isEscaped(selectorIndex)) {
-                counter--;
-            }
-        }
-        if (counter) {
-            throw new Error("Parenthesis not matched");
-        }
-        return unescapeCSS(selector.slice(start, selectorIndex - 1));
-    }
-    function isEscaped(pos) {
-        var slashCount = 0;
-        while (selector.charCodeAt(--pos) === 92 /* BackSlash */)
-            slashCount++;
-        return (slashCount & 1) === 1;
-    }
-    function ensureNotTraversal() {
-        if (tokens.length > 0 && isTraversal(tokens[tokens.length - 1])) {
-            throw new Error("Did not expect successive traversals.");
-        }
-    }
-    function addTraversal(type) {
-        if (tokens.length > 0 &&
-            tokens[tokens.length - 1].type === types_1.SelectorType.Descendant) {
-            tokens[tokens.length - 1].type = type;
-            return;
-        }
-        ensureNotTraversal();
-        tokens.push({ type: type });
-    }
-    function addSpecialAttribute(name, action) {
-        tokens.push({
-            type: types_1.SelectorType.Attribute,
-            name: name,
-            action: action,
-            value: getName(1),
-            namespace: null,
-            ignoreCase: "quirks",
-        });
-    }
-    /**
-     * We have finished parsing the current part of the selector.
-     *
-     * Remove descendant tokens at the end if they exist,
-     * and return the last index, so that parsing can be
-     * picked up from here.
-     */
-    function finalizeSubselector() {
-        if (tokens.length &&
-            tokens[tokens.length - 1].type === types_1.SelectorType.Descendant) {
-            tokens.pop();
-        }
-        if (tokens.length === 0) {
-            throw new Error("Empty sub-selector");
-        }
-        subselects.push(tokens);
-    }
-    stripWhitespace(0);
-    if (selector.length === selectorIndex) {
-        return selectorIndex;
-    }
-    loop: while (selectorIndex < selector.length) {
-        var firstChar = selector.charCodeAt(selectorIndex);
-        switch (firstChar) {
-            // Whitespace
-            case 32 /* Space */:
-            case 9 /* Tab */:
-            case 10 /* NewLine */:
-            case 12 /* FormFeed */:
-            case 13 /* CarriageReturn */: {
-                if (tokens.length === 0 ||
-                    tokens[0].type !== types_1.SelectorType.Descendant) {
-                    ensureNotTraversal();
-                    tokens.push({ type: types_1.SelectorType.Descendant });
-                }
-                stripWhitespace(1);
-                break;
-            }
-            // Traversals
-            case 62 /* GreaterThan */: {
-                addTraversal(types_1.SelectorType.Child);
-                stripWhitespace(1);
-                break;
-            }
-            case 60 /* LessThan */: {
-                addTraversal(types_1.SelectorType.Parent);
-                stripWhitespace(1);
-                break;
-            }
-            case 126 /* Tilde */: {
-                addTraversal(types_1.SelectorType.Sibling);
-                stripWhitespace(1);
-                break;
-            }
-            case 43 /* Plus */: {
-                addTraversal(types_1.SelectorType.Adjacent);
-                stripWhitespace(1);
-                break;
-            }
-            // Special attribute selectors: .class, #id
-            case 46 /* Period */: {
-                addSpecialAttribute("class", types_1.AttributeAction.Element);
-                break;
-            }
-            case 35 /* Hash */: {
-                addSpecialAttribute("id", types_1.AttributeAction.Equals);
-                break;
-            }
-            case 91 /* LeftSquareBracket */: {
-                stripWhitespace(1);
-                // Determine attribute name and namespace
-                var name_1 = void 0;
-                var namespace = null;
-                if (selector.charCodeAt(selectorIndex) === 124 /* Pipe */) {
-                    // Equivalent to no namespace
-                    name_1 = getName(1);
-                }
-                else if (selector.startsWith("*|", selectorIndex)) {
-                    namespace = "*";
-                    name_1 = getName(2);
-                }
-                else {
-                    name_1 = getName(0);
-                    if (selector.charCodeAt(selectorIndex) === 124 /* Pipe */ &&
-                        selector.charCodeAt(selectorIndex + 1) !==
-                            61 /* Equal */) {
-                        namespace = name_1;
-                        name_1 = getName(1);
-                    }
-                }
-                stripWhitespace(0);
-                // Determine comparison operation
-                var action = types_1.AttributeAction.Exists;
-                var possibleAction = actionTypes.get(selector.charCodeAt(selectorIndex));
-                if (possibleAction) {
-                    action = possibleAction;
-                    if (selector.charCodeAt(selectorIndex + 1) !==
-                        61 /* Equal */) {
-                        throw new Error("Expected `=`");
-                    }
-                    stripWhitespace(2);
-                }
-                else if (selector.charCodeAt(selectorIndex) === 61 /* Equal */) {
-                    action = types_1.AttributeAction.Equals;
-                    stripWhitespace(1);
-                }
-                // Determine value
-                var value = "";
-                var ignoreCase = null;
-                if (action !== "exists") {
-                    if (isQuote(selector.charCodeAt(selectorIndex))) {
-                        var quote = selector.charCodeAt(selectorIndex);
-                        var sectionEnd = selectorIndex + 1;
-                        while (sectionEnd < selector.length &&
-                            (selector.charCodeAt(sectionEnd) !== quote ||
-                                isEscaped(sectionEnd))) {
-                            sectionEnd += 1;
-                        }
-                        if (selector.charCodeAt(sectionEnd) !== quote) {
-                            throw new Error("Attribute value didn't end");
-                        }
-                        value = unescapeCSS(selector.slice(selectorIndex + 1, sectionEnd));
-                        selectorIndex = sectionEnd + 1;
-                    }
-                    else {
-                        var valueStart = selectorIndex;
-                        while (selectorIndex < selector.length &&
-                            ((!isWhitespace(selector.charCodeAt(selectorIndex)) &&
-                                selector.charCodeAt(selectorIndex) !==
-                                    93 /* RightSquareBracket */) ||
-                                isEscaped(selectorIndex))) {
-                            selectorIndex += 1;
-                        }
-                        value = unescapeCSS(selector.slice(valueStart, selectorIndex));
-                    }
-                    stripWhitespace(0);
-                    // See if we have a force ignore flag
-                    var forceIgnore = selector.charCodeAt(selectorIndex) | 0x20;
-                    // If the forceIgnore flag is set (either `i` or `s`), use that value
-                    if (forceIgnore === 115 /* LowerS */) {
-                        ignoreCase = false;
-                        stripWhitespace(1);
-                    }
-                    else if (forceIgnore === 105 /* LowerI */) {
-                        ignoreCase = true;
-                        stripWhitespace(1);
-                    }
-                }
-                if (selector.charCodeAt(selectorIndex) !==
-                    93 /* RightSquareBracket */) {
-                    throw new Error("Attribute selector didn't terminate");
-                }
-                selectorIndex += 1;
-                var attributeSelector = {
-                    type: types_1.SelectorType.Attribute,
-                    name: name_1,
-                    action: action,
-                    value: value,
-                    namespace: namespace,
-                    ignoreCase: ignoreCase,
-                };
-                tokens.push(attributeSelector);
-                break;
-            }
-            case 58 /* Colon */: {
-                if (selector.charCodeAt(selectorIndex + 1) === 58 /* Colon */) {
-                    tokens.push({
-                        type: types_1.SelectorType.PseudoElement,
-                        name: getName(2).toLowerCase(),
-                        data: selector.charCodeAt(selectorIndex) ===
-                            40 /* LeftParenthesis */
-                            ? readValueWithParenthesis()
-                            : null,
-                    });
-                    continue;
-                }
-                var name_2 = getName(1).toLowerCase();
-                var data = null;
-                if (selector.charCodeAt(selectorIndex) ===
-                    40 /* LeftParenthesis */) {
-                    if (unpackPseudos.has(name_2)) {
-                        if (isQuote(selector.charCodeAt(selectorIndex + 1))) {
-                            throw new Error("Pseudo-selector ".concat(name_2, " cannot be quoted"));
-                        }
-                        data = [];
-                        selectorIndex = parseSelector(data, selector, selectorIndex + 1);
-                        if (selector.charCodeAt(selectorIndex) !==
-                            41 /* RightParenthesis */) {
-                            throw new Error("Missing closing parenthesis in :".concat(name_2, " (").concat(selector, ")"));
-                        }
-                        selectorIndex += 1;
-                    }
-                    else {
-                        data = readValueWithParenthesis();
-                        if (stripQuotesFromPseudos.has(name_2)) {
-                            var quot = data.charCodeAt(0);
-                            if (quot === data.charCodeAt(data.length - 1) &&
-                                isQuote(quot)) {
-                                data = data.slice(1, -1);
-                            }
-                        }
-                        data = unescapeCSS(data);
-                    }
-                }
-                tokens.push({ type: types_1.SelectorType.Pseudo, name: name_2, data: data });
-                break;
-            }
-            case 44 /* Comma */: {
-                finalizeSubselector();
-                tokens = [];
-                stripWhitespace(1);
-                break;
-            }
-            default: {
-                if (selector.startsWith("/*", selectorIndex)) {
-                    var endIndex = selector.indexOf("*/", selectorIndex + 2);
-                    if (endIndex < 0) {
-                        throw new Error("Comment was not terminated");
-                    }
-                    selectorIndex = endIndex + 2;
-                    // Remove leading whitespace
-                    if (tokens.length === 0) {
-                        stripWhitespace(0);
-                    }
-                    break;
-                }
-                var namespace = null;
-                var name_3 = void 0;
-                if (firstChar === 42 /* Asterisk */) {
-                    selectorIndex += 1;
-                    name_3 = "*";
-                }
-                else if (firstChar === 124 /* Pipe */) {
-                    name_3 = "";
-                    if (selector.charCodeAt(selectorIndex + 1) === 124 /* Pipe */) {
-                        addTraversal(types_1.SelectorType.ColumnCombinator);
-                        stripWhitespace(2);
-                        break;
-                    }
-                }
-                else if (reName.test(selector.slice(selectorIndex))) {
-                    name_3 = getName(0);
-                }
-                else {
-                    break loop;
-                }
-                if (selector.charCodeAt(selectorIndex) === 124 /* Pipe */ &&
-                    selector.charCodeAt(selectorIndex + 1) !== 124 /* Pipe */) {
-                    namespace = name_3;
-                    if (selector.charCodeAt(selectorIndex + 1) ===
-                        42 /* Asterisk */) {
-                        name_3 = "*";
-                        selectorIndex += 2;
-                    }
-                    else {
-                        name_3 = getName(1);
-                    }
-                }
-                tokens.push(name_3 === "*"
-                    ? { type: types_1.SelectorType.Universal, namespace: namespace }
-                    : { type: types_1.SelectorType.Tag, name: name_3, namespace: namespace });
-            }
-        }
-    }
-    finalizeSubselector();
-    return selectorIndex;
-}
-
-
-/***/ }),
-
-/***/ 9154:
-/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
-
-
-var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
-    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
-        if (ar || !(i in from)) {
-            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
-            ar[i] = from[i];
-        }
-    }
-    return to.concat(ar || Array.prototype.slice.call(from));
-};
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.stringify = void 0;
-var types_1 = __nccwpck_require__(4738);
-var attribValChars = ["\\", '"'];
-var pseudoValChars = __spreadArray(__spreadArray([], attribValChars, true), ["(", ")"], false);
-var charsToEscapeInAttributeValue = new Set(attribValChars.map(function (c) { return c.charCodeAt(0); }));
-var charsToEscapeInPseudoValue = new Set(pseudoValChars.map(function (c) { return c.charCodeAt(0); }));
-var charsToEscapeInName = new Set(__spreadArray(__spreadArray([], pseudoValChars, true), [
-    "~",
-    "^",
-    "$",
-    "*",
-    "+",
-    "!",
-    "|",
-    ":",
-    "[",
-    "]",
-    " ",
-    ".",
-], false).map(function (c) { return c.charCodeAt(0); }));
-/**
- * Turns `selector` back into a string.
- *
- * @param selector Selector to stringify.
- */
-function stringify(selector) {
-    return selector
-        .map(function (token) { return token.map(stringifyToken).join(""); })
-        .join(", ");
-}
-exports.stringify = stringify;
-function stringifyToken(token, index, arr) {
-    switch (token.type) {
-        // Simple types
-        case types_1.SelectorType.Child:
-            return index === 0 ? "> " : " > ";
-        case types_1.SelectorType.Parent:
-            return index === 0 ? "< " : " < ";
-        case types_1.SelectorType.Sibling:
-            return index === 0 ? "~ " : " ~ ";
-        case types_1.SelectorType.Adjacent:
-            return index === 0 ? "+ " : " + ";
-        case types_1.SelectorType.Descendant:
-            return " ";
-        case types_1.SelectorType.ColumnCombinator:
-            return index === 0 ? "|| " : " || ";
-        case types_1.SelectorType.Universal:
-            // Return an empty string if the selector isn't needed.
-            return token.namespace === "*" &&
-                index + 1 < arr.length &&
-                "name" in arr[index + 1]
-                ? ""
-                : "".concat(getNamespace(token.namespace), "*");
-        case types_1.SelectorType.Tag:
-            return getNamespacedName(token);
-        case types_1.SelectorType.PseudoElement:
-            return "::".concat(escapeName(token.name, charsToEscapeInName)).concat(token.data === null
-                ? ""
-                : "(".concat(escapeName(token.data, charsToEscapeInPseudoValue), ")"));
-        case types_1.SelectorType.Pseudo:
-            return ":".concat(escapeName(token.name, charsToEscapeInName)).concat(token.data === null
-                ? ""
-                : "(".concat(typeof token.data === "string"
-                    ? escapeName(token.data, charsToEscapeInPseudoValue)
-                    : stringify(token.data), ")"));
-        case types_1.SelectorType.Attribute: {
-            if (token.name === "id" &&
-                token.action === types_1.AttributeAction.Equals &&
-                token.ignoreCase === "quirks" &&
-                !token.namespace) {
-                return "#".concat(escapeName(token.value, charsToEscapeInName));
-            }
-            if (token.name === "class" &&
-                token.action === types_1.AttributeAction.Element &&
-                token.ignoreCase === "quirks" &&
-                !token.namespace) {
-                return ".".concat(escapeName(token.value, charsToEscapeInName));
-            }
-            var name_1 = getNamespacedName(token);
-            if (token.action === types_1.AttributeAction.Exists) {
-                return "[".concat(name_1, "]");
-            }
-            return "[".concat(name_1).concat(getActionValue(token.action), "=\"").concat(escapeName(token.value, charsToEscapeInAttributeValue), "\"").concat(token.ignoreCase === null ? "" : token.ignoreCase ? " i" : " s", "]");
-        }
-    }
-}
-function getActionValue(action) {
-    switch (action) {
-        case types_1.AttributeAction.Equals:
-            return "";
-        case types_1.AttributeAction.Element:
-            return "~";
-        case types_1.AttributeAction.Start:
-            return "^";
-        case types_1.AttributeAction.End:
-            return "$";
-        case types_1.AttributeAction.Any:
-            return "*";
-        case types_1.AttributeAction.Not:
-            return "!";
-        case types_1.AttributeAction.Hyphen:
-            return "|";
-        case types_1.AttributeAction.Exists:
-            throw new Error("Shouldn't be here");
-    }
-}
-function getNamespacedName(token) {
-    return "".concat(getNamespace(token.namespace)).concat(escapeName(token.name, charsToEscapeInName));
-}
-function getNamespace(namespace) {
-    return namespace !== null
-        ? "".concat(namespace === "*"
-            ? "*"
-            : escapeName(namespace, charsToEscapeInName), "|")
-        : "";
-}
-function escapeName(str, charsToEscape) {
-    var lastIdx = 0;
-    var ret = "";
-    for (var i = 0; i < str.length; i++) {
-        if (charsToEscape.has(str.charCodeAt(i))) {
-            ret += "".concat(str.slice(lastIdx, i), "\\").concat(str.charAt(i));
-            lastIdx = i + 1;
-        }
-    }
-    return ret.length > 0 ? ret + str.slice(lastIdx) : str;
-}
-
-
-/***/ }),
-
-/***/ 4738:
-/***/ ((__unused_webpack_module, exports) => {
-
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.AttributeAction = exports.IgnoreCaseMode = exports.SelectorType = void 0;
-var SelectorType;
-(function (SelectorType) {
-    SelectorType["Attribute"] = "attribute";
-    SelectorType["Pseudo"] = "pseudo";
-    SelectorType["PseudoElement"] = "pseudo-element";
-    SelectorType["Tag"] = "tag";
-    SelectorType["Universal"] = "universal";
-    // Traversals
-    SelectorType["Adjacent"] = "adjacent";
-    SelectorType["Child"] = "child";
-    SelectorType["Descendant"] = "descendant";
-    SelectorType["Parent"] = "parent";
-    SelectorType["Sibling"] = "sibling";
-    SelectorType["ColumnCombinator"] = "column-combinator";
-})(SelectorType = exports.SelectorType || (exports.SelectorType = {}));
-/**
- * Modes for ignore case.
- *
- * This could be updated to an enum, and the object is
- * the current stand-in that will allow code to be updated
- * without big changes.
- */
-exports.IgnoreCaseMode = {
-    Unknown: null,
-    QuirksMode: "quirks",
-    IgnoreCase: true,
-    CaseSensitive: false,
-};
-var AttributeAction;
-(function (AttributeAction) {
-    AttributeAction["Any"] = "any";
-    AttributeAction["Element"] = "element";
-    AttributeAction["End"] = "end";
-    AttributeAction["Equals"] = "equals";
-    AttributeAction["Exists"] = "exists";
-    AttributeAction["Hyphen"] = "hyphen";
-    AttributeAction["Not"] = "not";
-    AttributeAction["Start"] = "start";
-})(AttributeAction = exports.AttributeAction || (exports.AttributeAction = {}));
-
-
-/***/ }),
-
 /***/ 2328:
 /***/ (function(module) {
 
@@ -19593,10 +18937,12 @@ SourceMapGenerator.prototype._serializeMappings =
 
       if (mapping.generatedLine !== previousGeneratedLine) {
         previousGeneratedColumn = 0;
-        while (mapping.generatedLine !== previousGeneratedLine) {
-          next += ';';
-          previousGeneratedLine++;
-        }
+        // One ';' per skipped line. Build large gaps with a single flat
+        // string: appending ';' one by one creates a rope node per line, which
+        // can exhaust the heap for a big gap (CVE-2026-93749).
+        var lineDelta = mapping.generatedLine - previousGeneratedLine;
+        next += lineDelta === 1 ? ';' : ';'.repeat(lineDelta);
+        previousGeneratedLine = mapping.generatedLine;
       }
       else {
         if (i > 0) {
@@ -23536,11 +22882,77 @@ class Request {
     }
   }
 
-  onUpgrade (statusCode, headers, socket) {
+  /**
+   * @param {number|null} statusCode
+   * @param {Buffer[]|null} headers
+   * @param {import('node:stream').Duplex} socket
+   * @param {string} [statusText]
+   */
+  onUpgrade (statusCode, headers, socket, statusText = '') {
+    this.onFinally()
+
     assert(!this.aborted)
     assert(!this.completed)
 
-    return this[kHandler].onUpgrade(statusCode, headers, socket)
+    if (statusCode !== null) {
+      this.#publishUpgradeHeaders(statusCode, headers, statusText)
+    }
+
+    const result = this[kHandler].onUpgrade(statusCode, headers, socket)
+
+    if (!this.aborted) {
+      this.completed = true
+      if (statusCode !== null) {
+        this.#publishUpgradeTrailers()
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * @param {number} statusCode
+   * @param {import('node:http2').IncomingHttpHeaders} headers
+   * @param {(headers: import('node:http2').IncomingHttpHeaders) => Buffer[]} parseHeaders
+   * @param {string} [statusText]
+   */
+  onUpgradeResponse (statusCode, headers, parseHeaders, statusText = '') {
+    assert(!this.aborted)
+    assert(this.completed)
+
+    if (channels.headers.hasSubscribers) {
+      this.#publishUpgradeHeaders(statusCode, parseHeaders(headers), statusText)
+    }
+    this.#publishUpgradeTrailers()
+  }
+
+  /**
+   * @param {Error} error
+   */
+  onUpgradeError (error) {
+    assert(!this.aborted)
+    assert(this.completed)
+
+    if (channels.error.hasSubscribers) {
+      channels.error.publish({ request: this, error })
+    }
+  }
+
+  /**
+   * @param {number} statusCode
+   * @param {Buffer[]} headers
+   * @param {string} statusText
+   */
+  #publishUpgradeHeaders (statusCode, headers, statusText) {
+    if (channels.headers.hasSubscribers) {
+      channels.headers.publish({ request: this, response: { statusCode, headers, statusText } })
+    }
+  }
+
+  #publishUpgradeTrailers () {
+    if (channels.trailers.hasSubscribers) {
+      channels.trailers.publish({ request: this, trailers: [] })
+    }
   }
 
   onComplete (trailers) {
@@ -24678,7 +24090,7 @@ function defaultFactory (origin, opts) {
 }
 
 class Agent extends DispatcherBase {
-  constructor ({ factory = defaultFactory, maxRedirections = 0, connect, ...options } = {}) {
+  constructor ({ factory = defaultFactory, maxRedirections = 0, connect, tls, ...options } = {}) {
     if (typeof factory !== 'function') {
       throw new InvalidArgumentError('factory must be a function.')
     }
@@ -24697,11 +24109,15 @@ class Agent extends DispatcherBase {
       connect = { ...connect }
     }
 
+    if (tls && typeof tls !== 'function') {
+      tls = { ...tls }
+    }
+
     this[kInterceptors] = options.interceptors?.Agent && Array.isArray(options.interceptors.Agent)
       ? options.interceptors.Agent
       : [createRedirectInterceptor({ maxRedirections })]
 
-    this[kOptions] = { ...util.deepClone(options), connect }
+    this[kOptions] = { ...util.deepClone(options), connect, tls }
     this[kOptions].interceptors = options.interceptors
       ? { ...options.interceptors }
       : undefined
@@ -25439,7 +24855,7 @@ class Parser {
   }
 
   onUpgrade (head) {
-    const { upgrade, client, socket, headers, statusCode } = this
+    const { upgrade, client, socket, headers, statusCode, statusText } = this
 
     assert(upgrade)
     assert(client[kSocket] === socket)
@@ -25474,9 +24890,10 @@ class Parser {
     client.emit('disconnect', client[kUrl], [client], new InformationalError('upgrade'))
 
     try {
-      request.onUpgrade(statusCode, headers, socket)
-    } catch (err) {
-      util.destroy(socket, err)
+      request.onUpgrade(statusCode, headers, socket, statusText)
+    } catch (error) {
+      util.errorRequest(client, request, error)
+      util.destroy(socket, error)
     }
 
     client[kResume]()
@@ -25733,8 +25150,6 @@ async function connectH1 (client, socket) {
   socket[kParser] = new Parser(client, socket, llhttpInstance)
 
   addListener(socket, 'error', function (err) {
-    assert(err.code !== 'ERR_TLS_CERT_ALTNAME_INVALID')
-
     const parser = this[kParser]
 
     // On Mac OS, we get an ECONNRESET even if there is a full body to be forwarded
@@ -25883,7 +25298,7 @@ async function connectH1 (client, socket) {
 
 function clearIdleSocketValidation (socket) {
   if (socket[kIdleSocketValidationTimeout]) {
-    clearTimeout(socket[kIdleSocketValidationTimeout])
+    clearImmediate(socket[kIdleSocketValidationTimeout])
     socket[kIdleSocketValidationTimeout] = null
   }
 
@@ -25892,15 +25307,23 @@ function clearIdleSocketValidation (socket) {
 
 function scheduleIdleSocketValidation (client, socket) {
   socket[kIdleSocketValidation] = 1
-  socket[kIdleSocketValidationTimeout] = setTimeout(() => {
+  // Yield to the check phase (after poll) so unsolicited bytes / FIN / RST
+  // already pending on this idle keep-alive socket are processed before the
+  // next request is written (GHSA-35p6-xmwp-9g52).
+  //
+  // setTimeout(0) pays Node's ~1ms timer floor on every sequential reuse
+  // (#5493). setImmediate avoids that, but an *unref'd* Immediate lets poll
+  // block for ~500ms when the event loop is otherwise idle (#5600 / #5606).
+  // A ref'd Immediate both keeps the pending request alive and makes poll
+  // return immediately — the hybrid those issues asked for.
+  socket[kIdleSocketValidationTimeout] = setImmediate(() => {
     socket[kIdleSocketValidationTimeout] = null
     socket[kIdleSocketValidation] = 2
 
     if (client[kSocket] === socket && !socket.destroyed) {
       client[kResume]()
     }
-  }, 0)
-  socket[kIdleSocketValidationTimeout].unref?.()
+  })
 }
 
 /**
@@ -26049,12 +25472,22 @@ function writeH1 (client, request) {
   const socket = client[kSocket]
   clearIdleSocketValidation(socket)
 
-  const abort = (err) => {
-    if (request.aborted || request.completed) {
+  /**
+   * @param {Error} [error]
+   */
+  const abort = (error) => {
+    if (request.aborted) {
       return
     }
 
-    util.errorRequest(client, request, err || new RequestAbortedError())
+    if (request.completed) {
+      if (request.upgrade || request.method === 'CONNECT') {
+        util.destroy(socket, new InformationalError('aborted'))
+      }
+      return
+    }
+
+    util.errorRequest(client, request, error || new RequestAbortedError())
 
     util.destroy(body)
     util.destroy(socket, new InformationalError('aborted'))
@@ -26511,6 +25944,7 @@ module.exports = connectH1
 
 
 const assert = __nccwpck_require__(4589)
+const { errorMonitor } = __nccwpck_require__(8474)
 const { pipeline } = __nccwpck_require__(7075)
 const util = __nccwpck_require__(3440)
 const {
@@ -26587,6 +26021,15 @@ function parseH2Headers (headers) {
   return result
 }
 
+/**
+ * @param {import('node:http2').IncomingHttpHeaders} headers
+ * @returns {Buffer[]}
+ */
+function parseH2ResponseHeaders (headers) {
+  const { [HTTP2_HEADER_STATUS]: _statusCode, ...realHeaders } = headers
+  return parseH2Headers(realHeaders)
+}
+
 async function connectH2 (client, socket) {
   client[kSocket] = socket
 
@@ -26636,8 +26079,6 @@ async function connectH2 (client, socket) {
   socket[kHTTP2Session] = session
 
   util.addListener(socket, 'error', function (err) {
-    assert(err.code !== 'ERR_TLS_CERT_ALTNAME_INVALID')
-
     this[kError] = err
 
     this[kClient][kOnError](err)
@@ -26711,8 +26152,6 @@ function resumeH2 (client) {
 }
 
 function onHttp2SessionError (err) {
-  assert(err.code !== 'ERR_TLS_CERT_ALTNAME_INVALID')
-
   this[kSocket][kError] = err
   this[kClient][kOnError](err)
 }
@@ -26807,22 +26246,32 @@ function writeH2 (client, request) {
   headers[HTTP2_HEADER_AUTHORITY] = host || `${hostname}${port ? `:${port}` : ''}`
   headers[HTTP2_HEADER_METHOD] = method
 
-  const abort = (err) => {
-    if (request.aborted || request.completed) {
+  /**
+   * @param {Error} [error]
+   */
+  const abort = (error) => {
+    if (request.aborted) {
       return
     }
 
-    err = err || new RequestAbortedError()
+    if (request.completed) {
+      if (method === 'CONNECT' && stream != null) {
+        util.destroy(stream, error || new RequestAbortedError())
+      }
+      return
+    }
 
-    util.errorRequest(client, request, err)
+    error = error || new RequestAbortedError()
+
+    util.errorRequest(client, request, error)
 
     if (stream != null) {
-      util.destroy(stream, err)
+      util.destroy(stream, error)
     }
 
     // We do not destroy the socket as we can continue using the session
     // the stream get's destroyed and the session remains to create new streams
-    util.destroy(body, err)
+    util.destroy(body, error)
     client[kQueue][client[kRunningIdx]++] = null
     client[kResume]()
   }
@@ -26841,25 +26290,57 @@ function writeH2 (client, request) {
 
   if (method === 'CONNECT') {
     session.ref()
-    // We are already connected, streams are pending, first request
-    // will create a new stream. We trigger a request to create the stream and wait until
-    // `ready` event is triggered
     // We disabled endStream to allow the user to write to the stream
     stream = session.request(headers, { endStream: false, signal })
+    let upgradeResponseFinished = false
 
-    if (stream.id && !stream.pending) {
-      request.onUpgrade(null, null, stream)
-      ++session[kOpenStreams]
-      client[kQueue][client[kRunningIdx]++] = null
-    } else {
-      stream.once('ready', () => {
-        request.onUpgrade(null, null, stream)
-        ++session[kOpenStreams]
-        client[kQueue][client[kRunningIdx]++] = null
-      })
+    /**
+     * @param {import('node:http2').IncomingHttpHeaders} headers
+     */
+    const onResponse = (headers) => {
+      upgradeResponseFinished = true
+      stream.off(errorMonitor, onUpgradeError)
+      request.onUpgradeResponse(Number(headers[HTTP2_HEADER_STATUS]), headers, parseH2ResponseHeaders)
     }
 
+    /**
+     * @param {Error} error
+     */
+    const onUpgradeError = (error) => {
+      upgradeResponseFinished = true
+      stream.off('response', onResponse)
+      request.onUpgradeError(error)
+    }
+
+    const onReady = () => {
+      try {
+        request.onUpgrade(null, null, stream)
+      } catch (error) {
+        stream.off('response', onResponse)
+        abort(error)
+        return
+      }
+
+      if (request.aborted) {
+        return
+      }
+
+      stream.off('error', abort)
+      stream.once(errorMonitor, onUpgradeError)
+      client[kQueue][client[kRunningIdx]++] = null
+    }
+
+    stream.once('response', onResponse)
+    stream.once('error', abort)
+    ++session[kOpenStreams]
+    onReady()
+
     stream.once('close', () => {
+      if (!upgradeResponseFinished && request.completed) {
+        stream.off('response', onResponse)
+        stream.off(errorMonitor, onUpgradeError)
+        request.onUpgradeError(new InformationalError(`HTTP/2: "stream error" received - code ${stream.rstCode}`))
+      }
       session[kOpenStreams] -= 1
       if (session[kOpenStreams] === 0) session.unref()
     })
@@ -27368,9 +26849,10 @@ class Client extends DispatcherBase {
     // h2
     maxConcurrentStreams,
     allowH2,
-    webSocket
+    webSocket,
+    eventSource
   } = {}) {
-    super({ webSocket })
+    super({ webSocket, eventSource })
 
     if (keepAlive !== undefined) {
       throw new InvalidArgumentError('unsupported keepAlive, use pipelining=0 instead')
@@ -27891,6 +27373,7 @@ module.exports = Client
 
 
 
+const buffer = __nccwpck_require__(4573)
 const Dispatcher = __nccwpck_require__(883)
 const {
   ClientDestroyedError,
@@ -27903,6 +27386,7 @@ const kOnDestroyed = Symbol('onDestroyed')
 const kOnClosed = Symbol('onClosed')
 const kInterceptedDispatch = Symbol('Intercepted Dispatch')
 const kWebSocketOptions = Symbol('webSocketOptions')
+const kEventSourceOptions = Symbol('eventSourceOptions')
 
 class DispatcherBase extends Dispatcher {
   constructor (opts) {
@@ -27913,12 +27397,19 @@ class DispatcherBase extends Dispatcher {
     this[kClosed] = false
     this[kOnClosed] = []
     this[kWebSocketOptions] = opts?.webSocket ?? {}
+    this[kEventSourceOptions] = opts?.eventSource ?? {}
   }
 
   get webSocketOptions () {
     return {
       maxFragments: this[kWebSocketOptions].maxFragments ?? 131072,
       maxPayloadSize: this[kWebSocketOptions].maxPayloadSize ?? 128 * 1024 * 1024
+    }
+  }
+
+  get eventSourceOptions () {
+    return {
+      maxEventSize: this[kEventSourceOptions].maxEventSize ?? buffer.kStringMaxLength
     }
   }
 
@@ -29558,6 +29049,7 @@ class RetryHandler {
     this.end = null
     this.etag = null
     this.resume = null
+    this.headersSent = false
 
     // Handle possible onConnect duplication
     this.handler.onConnect(reason => {
@@ -29568,6 +29060,20 @@ class RetryHandler {
         this.reason = reason
       }
     })
+  }
+
+  checkpointResponseEnd (headers, resume) {
+    if (this.end == null && this.opts.method !== 'HEAD') {
+      const contentLength = headers['content-length']
+      this.end = contentLength != null ? Number(contentLength) - 1 : null
+
+      assert(
+        this.end == null || Number.isFinite(this.end),
+        'invalid content-length'
+      )
+    }
+
+    this.resume = this.end != null ? resume : null
   }
 
   onRequestSent () {
@@ -29658,7 +29164,12 @@ class RetryHandler {
     this.retryCount += 1
 
     if (statusCode >= 300) {
-      if (this.retryOpts.statusCodes.includes(statusCode) === false) {
+      // Only expose a response if no earlier attempt has reached the caller.
+      // Otherwise abort this attempt so the error settles the existing body
+      // instead of replacing it with a new response.
+      if (!this.headersSent && this.retryOpts.statusCodes.includes(statusCode) === false) {
+        this.headersSent = true
+        this.checkpointResponseEnd(headers, resume)
         return this.handler.onHeaders(
           statusCode,
           rawHeaders,
@@ -29727,8 +29238,15 @@ class RetryHandler {
 
       const { start, size, end = size - 1 } = contentRange
 
-      assert(this.start === start, 'content-range mismatch')
-      assert(this.end == null || this.end === end, 'content-range mismatch')
+      if (this.start !== start || (this.end != null && this.end !== end)) {
+        this.abort(
+          new RequestRetryError('Content-Range mismatch', statusCode, {
+            headers,
+            data: { count: this.retryCount }
+          })
+        )
+        return false
+      }
 
       this.resume = resume
       return true
@@ -29740,6 +29258,7 @@ class RetryHandler {
         const range = parseRangeHeader(headers['content-range'])
 
         if (range == null) {
+          this.headersSent = true
           return this.handler.onHeaders(
             statusCode,
             rawHeaders,
@@ -29778,6 +29297,7 @@ class RetryHandler {
       )
 
       this.resume = resume
+      this.headersSent = true
       this.etag = headers.etag != null ? headers.etag : null
 
       // Weak etags are not useful for comparison nor cache
@@ -29817,7 +29337,7 @@ class RetryHandler {
   }
 
   onError (err) {
-    if (this.aborted || isDisturbed(this.opts.body)) {
+    if (this.aborted || isDisturbed(this.opts.body) || (this.headersSent && this.resume == null)) {
       return this.handler.onError(err)
     }
 
@@ -34251,6 +33771,7 @@ module.exports = {
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
+const buffer = __nccwpck_require__(4573)
 const { Transform } = __nccwpck_require__(7075)
 const { isASCIINumber, isValidLastEventId } = __nccwpck_require__(4811)
 
@@ -34274,6 +33795,63 @@ const COLON = 0x3A
  * @type {32} SPACE
  */
 const SPACE = 0x20
+
+const defaultMaxEventSize = buffer.kStringMaxLength
+
+const DATA = Buffer.from('data')
+const EVENT = Buffer.from('event')
+const ID = Buffer.from('id')
+const RETRY = Buffer.from('retry')
+
+// Each data field creates a string node, and each unconsumed input chunk keeps
+// a Buffer wrapper. The absolute ceiling protects the large default byte limit.
+const minParserItems = 1024
+const maxParserItems = 131072
+const bytesPerParserItem = 128
+
+function isASCIINumberBytes (buffer, start) {
+  if (start >= buffer.length) {
+    return false
+  }
+
+  for (let i = start; i < buffer.length; i++) {
+    if (buffer[i] < 0x30 || buffer[i] > 0x39) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function isValidLastEventIdBytes (buffer, start) {
+  for (let i = start; i < buffer.length; i++) {
+    if (buffer[i] === 0x00) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function isFieldName (line, length, field) {
+  if (length !== field.length) {
+    return false
+  }
+
+  for (let i = 0; i < length; i++) {
+    if (line[i] !== field[i]) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function createMaxEventSizeExceededError () {
+  const error = new Error('EventSource message size exceeded')
+  error.aborted = false
+  return error
+}
 
 /**
  * @typedef {object} EventSourceStreamEvent
@@ -34315,11 +33893,21 @@ class EventSourceStream extends Transform {
   eventEndCheck = false
 
   /**
-   * @type {Buffer}
+   * @type {Buffer[]}
    */
-  buffer = null
+  chunks = []
 
+  chunkIndex = 0
   pos = 0
+  lineChunkIndex = 0
+  linePos = 0
+  lineLength = 0
+  eventSize = 0
+  eventFieldSizes = { data: 0, event: 0, id: 0, retry: 0 }
+  dataLineCount = 0
+  maxEventSize
+  maxDataLines
+  maxBufferedChunks
 
   event = {
     data: undefined,
@@ -34330,6 +33918,7 @@ class EventSourceStream extends Transform {
 
   /**
    * @param {object} options
+   * @param {number} [options.maxEventSize]
    * @param {eventSourceSettings} options.eventSourceSettings
    * @param {Function} [options.push]
    */
@@ -34341,6 +33930,12 @@ class EventSourceStream extends Transform {
     super(options)
 
     this.state = options.eventSourceSettings || {}
+    this.maxEventSize = options.maxEventSize ?? defaultMaxEventSize
+    const parserItemLimit = this.maxEventSize > 0
+      ? Math.min(maxParserItems, Math.max(minParserItems, Math.floor(this.maxEventSize / bytesPerParserItem)))
+      : 0
+    this.maxDataLines = parserItemLimit
+    this.maxBufferedChunks = parserItemLimit
     if (options.push) {
       this.push = options.push
     }
@@ -34358,92 +33953,28 @@ class EventSourceStream extends Transform {
       return
     }
 
-    // Cache the chunk in the buffer, as the data might not be complete while
-    // processing it
-    // TODO: Investigate if there is a more performant way to handle
-    // incoming chunks
-    // see: https://github.com/nodejs/undici/issues/2630
-    if (this.buffer) {
-      this.buffer = Buffer.concat([this.buffer, chunk])
-    } else {
-      this.buffer = chunk
+    // A leading line ending can immediately release the currently buffered
+    // line, even when it uses the final allowed chunk slot.
+    if (this.maxEventSize > 0 &&
+        this.chunks.length >= this.maxBufferedChunks &&
+        chunk[0] !== LF && chunk[0] !== CR) {
+      callback(createMaxEventSizeExceededError())
+      return
     }
+    this.chunks.push(chunk)
 
     // Strip leading byte-order-mark if we opened the stream and started
     // the processing of the incoming data
     if (this.checkBOM) {
-      switch (this.buffer.length) {
-        case 1:
-          // Check if the first byte is the same as the first byte of the BOM
-          if (this.buffer[0] === BOM[0]) {
-            // If it is, we need to wait for more data
-            callback()
-            return
-          }
-          // Set the checkBOM flag to false as we don't need to check for the
-          // BOM anymore
-          this.checkBOM = false
-
-          // The buffer only contains one byte so we need to wait for more data
-          callback()
-          return
-        case 2:
-          // Check if the first two bytes are the same as the first two bytes
-          // of the BOM
-          if (
-            this.buffer[0] === BOM[0] &&
-            this.buffer[1] === BOM[1]
-          ) {
-            // If it is, we need to wait for more data, because the third byte
-            // is needed to determine if it is the BOM or not
-            callback()
-            return
-          }
-
-          // Set the checkBOM flag to false as we don't need to check for the
-          // BOM anymore
-          this.checkBOM = false
-          break
-        case 3:
-          // Check if the first three bytes are the same as the first three
-          // bytes of the BOM
-          if (
-            this.buffer[0] === BOM[0] &&
-            this.buffer[1] === BOM[1] &&
-            this.buffer[2] === BOM[2]
-          ) {
-            // If it is, we can drop the buffered data, as it is only the BOM
-            this.buffer = Buffer.alloc(0)
-            // Set the checkBOM flag to false as we don't need to check for the
-            // BOM anymore
-            this.checkBOM = false
-
-            // Await more data
-            callback()
-            return
-          }
-          // If it is not the BOM, we can start processing the data
-          this.checkBOM = false
-          break
-        default:
-          // The buffer is longer than 3 bytes, so we can drop the BOM if it is
-          // present
-          if (
-            this.buffer[0] === BOM[0] &&
-            this.buffer[1] === BOM[1] &&
-            this.buffer[2] === BOM[2]
-          ) {
-            // Remove the BOM from the buffer
-            this.buffer = this.buffer.subarray(3)
-          }
-
-          // Set the checkBOM flag to false as we don't need to check for the
-          this.checkBOM = false
-          break
+      if (this.handleBOM()) {
+        callback()
+        return
       }
     }
 
-    while (this.pos < this.buffer.length) {
+    while (this.hasCurrentByte()) {
+      const byte = this.currentByte()
+
       // If the previous line ended with an end-of-line, we need to check
       // if the next character is also an end-of-line.
       if (this.eventEndCheck) {
@@ -34456,10 +33987,9 @@ class EventSourceStream extends Transform {
         if (this.crlfCheck) {
           // If the current character is a line feed, we can remove it
           // from the buffer and reset the crlfCheck flag
-          if (this.buffer[this.pos] === LF) {
-            this.buffer = this.buffer.subarray(this.pos + 1)
-            this.pos = 0
+          if (byte === LF) {
             this.crlfCheck = false
+            this.consumeCurrentByte()
 
             // It is possible that the line feed is not the end of the
             // event. We need to check if the next character is an
@@ -34475,19 +34005,17 @@ class EventSourceStream extends Transform {
           this.crlfCheck = false
         }
 
-        if (this.buffer[this.pos] === LF || this.buffer[this.pos] === CR) {
+        if (byte === LF || byte === CR) {
           // If the current character is a carriage return, we need to
           // set the crlfCheck flag to true, as we need to check if the
           // next character is a line feed so we can remove it from the
           // buffer
-          if (this.buffer[this.pos] === CR) {
+          if (byte === CR) {
             this.crlfCheck = true
           }
 
-          this.buffer = this.buffer.subarray(this.pos + 1)
-          this.pos = 0
-          if (
-            this.event.data !== undefined || this.event.event || this.event.id || this.event.retry) {
+          this.consumeCurrentByte()
+          if (this.hasPendingEvent()) {
             this.processEvent(this.event)
           }
           this.clearEvent()
@@ -34501,22 +34029,23 @@ class EventSourceStream extends Transform {
 
       // If the current character is an end-of-line, we can process the
       // line
-      if (this.buffer[this.pos] === LF || this.buffer[this.pos] === CR) {
+      if (byte === LF || byte === CR) {
         // If the current character is a carriage return, we need to
         // set the crlfCheck flag to true, as we need to check if the
         // next character is a line feed
-        if (this.buffer[this.pos] === CR) {
+        if (byte === CR) {
           this.crlfCheck = true
         }
 
         // In any case, we can process the line as we reached an
         // end-of-line character
-        this.parseLine(this.buffer.subarray(0, this.pos), this.event)
-
-        // Remove the processed line from the buffer
-        this.buffer = this.buffer.subarray(this.pos + 1)
-        // Reset the position as we removed the processed line from the buffer
-        this.pos = 0
+        try {
+          this.parseLine(this.readLine(), this.event)
+        } catch (error) {
+          callback(error)
+          return
+        }
+        this.consumeCurrentByte()
         // A line was processed and this could be the end of the event. We need
         // to check if the next line is empty to determine if the event is
         // finished.
@@ -34524,15 +34053,28 @@ class EventSourceStream extends Transform {
         continue
       }
 
-      this.pos++
+      // readLine() is only called after CR or LF. Reject an unfinished line
+      // before it can retain an unbounded number of decoded chunks. The seven
+      // extra bytes allow the longest field prefix ("event: " or "retry: ").
+      if (this.maxEventSize > 0 && ++this.lineLength > this.maxEventSize + 7) {
+        callback(createMaxEventSizeExceededError())
+        return
+      }
+      this.advanceCursor()
     }
 
     callback()
   }
 
+  _destroy (error, callback) {
+    this.chunks.length = 0
+    this.clearEvent()
+    super._destroy(error, callback)
+  }
+
   /**
    * @param {Buffer} line
-   * @param {EventStreamEvent} event
+   * @param {EventSourceStreamEvent} event
    */
   parseLine (line, event) {
     // If the line is empty (a blank line)
@@ -34549,65 +34091,72 @@ class EventSourceStream extends Transform {
       return
     }
 
-    let field = ''
-    let value = ''
+    let fieldLength = line.length
+    let valueStart = line.length
 
     // If the line contains a U+003A COLON character (:)
     if (colonPosition !== -1) {
-      // Collect the characters on the line before the first U+003A COLON
-      // character (:), and let field be that string.
-      // TODO: Investigate if there is a more performant way to extract the
-      // field
-      // see: https://github.com/nodejs/undici/issues/2630
-      field = line.subarray(0, colonPosition).toString('utf8')
+      fieldLength = colonPosition
 
       // Collect the characters on the line after the first U+003A COLON
       // character (:), and let value be that string.
       // If value starts with a U+0020 SPACE character, remove it from value.
-      let valueStart = colonPosition + 1
+      valueStart = colonPosition + 1
       if (line[valueStart] === SPACE) {
         ++valueStart
       }
-      // TODO: Investigate if there is a more performant way to extract the
-      // value
-      // see: https://github.com/nodejs/undici/issues/2630
-      value = line.subarray(valueStart).toString('utf8')
-
-      // Otherwise, the string is not empty but does not contain a U+003A COLON
-      // character (:)
-    } else {
-      // Process the field using the steps described below, using the whole
-      // line as the field name, and the empty string as the field value.
-      field = line.toString('utf8')
-      value = ''
     }
 
-    // Modify the event with the field name and value. The value is also
-    // decoded as UTF-8
-    switch (field) {
-      case 'data':
-        if (event[field] === undefined) {
-          event[field] = value
-        } else {
-          event[field] += `\n${value}`
-        }
-        break
-      case 'retry':
-        if (isASCIINumber(value)) {
-          event[field] = value
-        }
-        break
-      case 'id':
-        if (isValidLastEventId(value)) {
-          event[field] = value
-        }
-        break
-      case 'event':
-        if (value.length > 0) {
-          event[field] = value
-        }
-        break
+    if (isFieldName(line, fieldLength, DATA)) {
+      if (this.maxEventSize > 0 && this.dataLineCount >= this.maxDataLines) {
+        throw createMaxEventSizeExceededError()
+      }
+      const valueBytes = line.length - valueStart
+      const dataSize = this.eventFieldSizes.data + (event.data === undefined ? 0 : 1) + valueBytes
+      this.setEventFieldSize('data', dataSize)
+
+      const value = line.toString('utf8', valueStart)
+
+      if (event.data === undefined) {
+        event.data = value
+      } else {
+        event.data += `\n${value}`
+      }
+      this.dataLineCount++
+      return
     }
+
+    if (isFieldName(line, fieldLength, RETRY)) {
+      if (isASCIINumberBytes(line, valueStart)) {
+        this.setEventFieldSize('retry', line.length - valueStart)
+        event.retry = line.toString('utf8', valueStart)
+      }
+      return
+    }
+
+    if (isFieldName(line, fieldLength, ID)) {
+      if (isValidLastEventIdBytes(line, valueStart)) {
+        this.setEventFieldSize('id', line.length - valueStart)
+        event.id = line.toString('utf8', valueStart)
+      }
+      return
+    }
+
+    if (isFieldName(line, fieldLength, EVENT)) {
+      if (valueStart < line.length) {
+        this.setEventFieldSize('event', line.length - valueStart)
+        event.event = line.toString('utf8', valueStart)
+      }
+    }
+  }
+
+  setEventFieldSize (field, size) {
+    const eventSize = this.eventSize - this.eventFieldSizes[field] + size
+    if (this.maxEventSize > 0 && eventSize > this.maxEventSize) {
+      throw createMaxEventSizeExceededError()
+    }
+    this.eventSize = eventSize
+    this.eventFieldSizes[field] = size
   }
 
   /**
@@ -34636,12 +34185,159 @@ class EventSourceStream extends Transform {
   }
 
   clearEvent () {
-    this.event = {
-      data: undefined,
-      event: undefined,
-      id: undefined,
-      retry: undefined
+    this.event.data = undefined
+    this.event.event = undefined
+    this.event.id = undefined
+    this.event.retry = undefined
+    this.eventSize = 0
+    this.dataLineCount = 0
+    this.eventFieldSizes.data = 0
+    this.eventFieldSizes.event = 0
+    this.eventFieldSizes.id = 0
+    this.eventFieldSizes.retry = 0
+  }
+
+  hasPendingEvent () {
+    return this.event.data !== undefined ||
+      this.event.event !== undefined ||
+      this.event.id !== undefined ||
+      this.event.retry !== undefined
+  }
+
+  hasCurrentByte () {
+    return this.chunkIndex < this.chunks.length &&
+      this.pos < this.chunks[this.chunkIndex].length
+  }
+
+  currentByte () {
+    return this.chunks[this.chunkIndex][this.pos]
+  }
+
+  consumeCurrentByte () {
+    this.advanceCursor()
+    this.syncLineStartToCursor()
+  }
+
+  advanceCursor () {
+    this.pos++
+
+    while (this.chunkIndex < this.chunks.length && this.pos >= this.chunks[this.chunkIndex].length) {
+      this.chunkIndex++
+      this.pos = 0
     }
+  }
+
+  syncLineStartToCursor () {
+    this.lineChunkIndex = this.chunkIndex
+    this.linePos = this.pos
+    this.lineLength = 0
+    this.dropConsumedChunks()
+  }
+
+  dropConsumedChunks () {
+    if (this.lineChunkIndex > 0) {
+      const consumed = this.lineChunkIndex
+      this.chunks.splice(0, consumed)
+      this.lineChunkIndex = 0
+      this.chunkIndex -= consumed
+    }
+
+    if (this.chunkIndex === this.chunks.length) {
+      this.chunks.length = 0
+      this.chunkIndex = 0
+      this.pos = 0
+      this.lineChunkIndex = 0
+      this.linePos = 0
+    }
+  }
+
+  readLine () {
+    if (this.lineChunkIndex === this.chunkIndex) {
+      return this.chunks[this.chunkIndex].subarray(this.linePos, this.pos)
+    }
+
+    const chunks = []
+    let length = 0
+
+    for (let i = this.lineChunkIndex; i <= this.chunkIndex; i++) {
+      const chunk = this.chunks[i]
+      const start = i === this.lineChunkIndex ? this.linePos : 0
+      const end = i === this.chunkIndex ? this.pos : chunk.length
+      const slice = chunk.subarray(start, end)
+      length += slice.length
+      chunks.push(slice)
+    }
+
+    return Buffer.concat(chunks, length)
+  }
+
+  peekBufferedByte (offset) {
+    let chunkIndex = this.lineChunkIndex
+    let pos = this.linePos
+
+    while (chunkIndex < this.chunks.length) {
+      const chunk = this.chunks[chunkIndex]
+      const remaining = chunk.length - pos
+
+      if (offset < remaining) {
+        return chunk[pos + offset]
+      }
+
+      offset -= remaining
+      chunkIndex++
+      pos = 0
+    }
+  }
+
+  discardLeadingBytes (count) {
+    while (count > 0 && this.lineChunkIndex < this.chunks.length) {
+      const chunk = this.chunks[this.lineChunkIndex]
+      const remaining = chunk.length - this.linePos
+
+      if (count < remaining) {
+        this.linePos += count
+        count = 0
+      } else {
+        count -= remaining
+        this.lineChunkIndex++
+        this.linePos = 0
+      }
+    }
+
+    this.chunkIndex = this.lineChunkIndex
+    this.pos = this.linePos
+    this.dropConsumedChunks()
+  }
+
+  handleBOM () {
+    const first = this.peekBufferedByte(0)
+    const second = this.peekBufferedByte(1)
+    const third = this.peekBufferedByte(2)
+
+    if (second === undefined) {
+      if (first === BOM[0]) {
+        return true
+      }
+
+      this.checkBOM = false
+      return true
+    }
+
+    if (third === undefined) {
+      if (first === BOM[0] && second === BOM[1]) {
+        return true
+      }
+
+      this.checkBOM = false
+      return false
+    }
+
+    if (first === BOM[0] && second === BOM[1] && third === BOM[2]) {
+      this.discardLeadingBytes(3)
+    }
+
+    this.checkBOM = false
+    return !this.hasCurrentByte()
   }
 }
 
@@ -34668,6 +34364,7 @@ const { isNetworkError } = __nccwpck_require__(9051)
 const { delay } = __nccwpck_require__(4811)
 const { kEnumerableProperty } = __nccwpck_require__(3440)
 const { environmentSettingsObject } = __nccwpck_require__(3168)
+const { getGlobalDispatcher } = __nccwpck_require__(2581)
 
 let experimentalWarned = false
 
@@ -34949,6 +34646,7 @@ class EventSource extends EventTarget {
 
       const eventSourceStream = new EventSourceStream({
         eventSourceSettings: this.#state,
+        maxEventSize: this.#dispatcher.eventSourceOptions?.maxEventSize,
         push: (event) => {
           this.dispatchEvent(createFastMessageEvent(
             event.type,
@@ -35127,7 +34825,8 @@ webidl.converters.EventSourceInitDict = webidl.dictionaryConverter([
   },
   {
     key: 'dispatcher', // undici only
-    converter: webidl.converters.any
+    converter: webidl.converters.any,
+    defaultValue: () => getGlobalDispatcher()
   }
 ])
 
@@ -40223,8 +39922,10 @@ async function httpNetworkFetch (
   // 19. Run these steps in parallel:
 
   //    1. Run these steps, but abort when fetchParams is canceled:
-  fetchParams.controller.onAborted = onAborted
-  fetchParams.controller.on('terminated', onAborted)
+  if (!fetchParams.controller.resume) {
+    fetchParams.controller.on('terminated', onAborted)
+  }
+
   fetchParams.controller.resume = async () => {
     // 1. While true
     while (true) {
@@ -40393,8 +40094,6 @@ async function httpNetworkFetch (
           }
           location = headersList.get('location', true)
 
-          this.body = new Readable({ read: resume })
-
           const decoders = []
 
           const willFollow = location && request.redirect === 'follow' &&
@@ -40412,7 +40111,7 @@ async function httpNetworkFetch (
             // CVE fix similar to urllib3 (GHSA-gm62-xv2j-4w53) and curl (CVE-2022-32206).
             const maxContentEncodings = 5
             if (codings.length > maxContentEncodings) {
-              reject(new Error(`too many content-encodings in response: ${codings.length}, maximum allowed is ${maxContentEncodings}`))
+              this.abort(new Error(`too many content-encodings in response: ${codings.length}, maximum allowed is ${maxContentEncodings}`))
               return true
             }
 
@@ -40444,6 +40143,8 @@ async function httpNetworkFetch (
               }
             }
           }
+
+          this.body = new Readable({ read: resume })
 
           const onError = this.onError.bind(this)
 
@@ -40489,10 +40190,6 @@ async function httpNetworkFetch (
         onComplete () {
           if (this.abort) {
             fetchParams.controller.off('terminated', this.abort)
-          }
-
-          if (fetchParams.controller.onAborted) {
-            fetchParams.controller.off('terminated', fetchParams.controller.onAborted)
           }
 
           fetchParams.controller.ended = true
@@ -45910,7 +45607,7 @@ function establishWebSocketConnection (url, protocols, client, ws, onEstablish, 
         // is specified, the server needs to include the same field and one of
         // the selected subprotocol values in its response for the connection to
         // be established.
-        if (!requestProtocols.includes(secProtocol)) {
+        if (requestProtocols === null || !requestProtocols.includes(secProtocol)) {
           failWebsocketConnection(ws, 'Protocol was not set in the opening handshake.')
           return
         }
@@ -46671,7 +46368,12 @@ class PerMessageDeflate {
 
         if (this.#maxPayloadSize > 0 && this.#inflate[kLength] > this.#maxPayloadSize) {
           callback(new MessageSizeExceededError())
+          // The inflater may still hold buffered input that can emit a late
+          // zlib error. Remove the data listener, then deterministically stop
+          // the stream so a subsequent 'error' cannot fire without a listener
+          // (which would terminate the process as an unhandled error event).
           this.#inflate.removeAllListeners()
+          this.#inflate.destroy()
           this.#inflate = null
           return
         }
@@ -46964,6 +46666,20 @@ class ByteParser extends Writable {
         if (isControlFrame(this.#info.opcode)) {
           this.#loop = this.parseControlFrame(body)
           this.#state = parserStates.INFO
+
+          // If the automatic PONG/CLOSE reply filled the socket's write buffer,
+          // stop parsing and resume on drain so a PING flood cannot grow the
+          // outbound queue without bound.
+          const socket = this.ws[kResponse].socket
+          if (this.#loop && socket.writableNeedDrain) {
+            this.#loop = false
+            socket.once('drain', () => {
+              if (this.destroyed) return
+              this.#loop = true
+              this.run(callback)
+            })
+            return
+          }
         } else {
           if (!this.#info.compressed) {
             if (!this.writeFragments(body)) {
@@ -48305,7 +48021,7 @@ __nccwpck_require__.a(module, async (__webpack_handle_async_dependencies__, __we
 /* harmony import */ var _core_config_js__WEBPACK_IMPORTED_MODULE_4__ = __nccwpck_require__(4489);
 /* harmony import */ var _core_embed_snippet_js__WEBPACK_IMPORTED_MODULE_5__ = __nccwpck_require__(7402);
 /* harmony import */ var _core_fetch_js__WEBPACK_IMPORTED_MODULE_6__ = __nccwpck_require__(6657);
-/* harmony import */ var _core_pipeline_js__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(6924);
+/* harmony import */ var _core_pipeline_js__WEBPACK_IMPORTED_MODULE_7__ = __nccwpck_require__(6718);
 /* harmony import */ var _core_profile_login_js__WEBPACK_IMPORTED_MODULE_13__ = __nccwpck_require__(198);
 /* harmony import */ var _core_publish_js__WEBPACK_IMPORTED_MODULE_8__ = __nccwpck_require__(1677);
 /* harmony import */ var _node_fonts_js__WEBPACK_IMPORTED_MODULE_9__ = __nccwpck_require__(514);
@@ -50956,7 +50672,7 @@ function apiSourcedTextPathData(fontName, text, x, y, fontSize) {
 
 /***/ }),
 
-/***/ 6924:
+/***/ 6718:
 /***/ ((__unused_webpack_module, __webpack_exports__, __nccwpck_require__) => {
 
 
@@ -52813,6 +52529,690 @@ const createPreset = ({ name, plugins }) => {
     },
   };
 };
+
+// EXTERNAL MODULE: ./node_modules/boolbase/index.js
+var boolbase = __nccwpck_require__(5265);
+;// CONCATENATED MODULE: ./node_modules/css-what/dist/esm/types.js
+var types_SelectorType;
+(function (SelectorType) {
+    SelectorType["Attribute"] = "attribute";
+    SelectorType["Pseudo"] = "pseudo";
+    SelectorType["PseudoElement"] = "pseudo-element";
+    SelectorType["Tag"] = "tag";
+    SelectorType["Universal"] = "universal";
+    // Traversals
+    SelectorType["Adjacent"] = "adjacent";
+    SelectorType["Child"] = "child";
+    SelectorType["Descendant"] = "descendant";
+    SelectorType["Parent"] = "parent";
+    SelectorType["Sibling"] = "sibling";
+    SelectorType["ColumnCombinator"] = "column-combinator";
+})(types_SelectorType || (types_SelectorType = {}));
+/**
+ * Modes for ignore case.
+ *
+ * This could be updated to an enum, and the object is
+ * the current stand-in that will allow code to be updated
+ * without big changes.
+ */
+const IgnoreCaseMode = {
+    Unknown: null,
+    QuirksMode: "quirks",
+    IgnoreCase: true,
+    CaseSensitive: false,
+};
+var types_AttributeAction;
+(function (AttributeAction) {
+    AttributeAction["Any"] = "any";
+    AttributeAction["Element"] = "element";
+    AttributeAction["End"] = "end";
+    AttributeAction["Equals"] = "equals";
+    AttributeAction["Exists"] = "exists";
+    AttributeAction["Hyphen"] = "hyphen";
+    AttributeAction["Not"] = "not";
+    AttributeAction["Start"] = "start";
+})(types_AttributeAction || (types_AttributeAction = {}));
+
+;// CONCATENATED MODULE: ./node_modules/css-what/dist/esm/parse.js
+
+const reName = /^[^#\\]?(?:\\(?:[\da-f]{1,6}\s?|.)|[\w\u00B0-\uFFFF-])+/;
+const reEscape = /\\([\da-f]{1,6}\s?|(\s)|.)/gi;
+var CharCode;
+(function (CharCode) {
+    CharCode[CharCode["LeftParenthesis"] = 40] = "LeftParenthesis";
+    CharCode[CharCode["RightParenthesis"] = 41] = "RightParenthesis";
+    CharCode[CharCode["LeftSquareBracket"] = 91] = "LeftSquareBracket";
+    CharCode[CharCode["RightSquareBracket"] = 93] = "RightSquareBracket";
+    CharCode[CharCode["Comma"] = 44] = "Comma";
+    CharCode[CharCode["Period"] = 46] = "Period";
+    CharCode[CharCode["Colon"] = 58] = "Colon";
+    CharCode[CharCode["SingleQuote"] = 39] = "SingleQuote";
+    CharCode[CharCode["DoubleQuote"] = 34] = "DoubleQuote";
+    CharCode[CharCode["Plus"] = 43] = "Plus";
+    CharCode[CharCode["Tilde"] = 126] = "Tilde";
+    CharCode[CharCode["QuestionMark"] = 63] = "QuestionMark";
+    CharCode[CharCode["ExclamationMark"] = 33] = "ExclamationMark";
+    CharCode[CharCode["Slash"] = 47] = "Slash";
+    CharCode[CharCode["Equal"] = 61] = "Equal";
+    CharCode[CharCode["Dollar"] = 36] = "Dollar";
+    CharCode[CharCode["Pipe"] = 124] = "Pipe";
+    CharCode[CharCode["Circumflex"] = 94] = "Circumflex";
+    CharCode[CharCode["Asterisk"] = 42] = "Asterisk";
+    CharCode[CharCode["GreaterThan"] = 62] = "GreaterThan";
+    CharCode[CharCode["LessThan"] = 60] = "LessThan";
+    CharCode[CharCode["Hash"] = 35] = "Hash";
+    CharCode[CharCode["LowerI"] = 105] = "LowerI";
+    CharCode[CharCode["LowerS"] = 115] = "LowerS";
+    CharCode[CharCode["BackSlash"] = 92] = "BackSlash";
+    // Whitespace
+    CharCode[CharCode["Space"] = 32] = "Space";
+    CharCode[CharCode["Tab"] = 9] = "Tab";
+    CharCode[CharCode["NewLine"] = 10] = "NewLine";
+    CharCode[CharCode["FormFeed"] = 12] = "FormFeed";
+    CharCode[CharCode["CarriageReturn"] = 13] = "CarriageReturn";
+})(CharCode || (CharCode = {}));
+const actionTypes = new Map([
+    [CharCode.Tilde, types_AttributeAction.Element],
+    [CharCode.Circumflex, types_AttributeAction.Start],
+    [CharCode.Dollar, types_AttributeAction.End],
+    [CharCode.Asterisk, types_AttributeAction.Any],
+    [CharCode.ExclamationMark, types_AttributeAction.Not],
+    [CharCode.Pipe, types_AttributeAction.Hyphen],
+]);
+// Pseudos, whose data property is parsed as well.
+const unpackPseudos = new Set([
+    "has",
+    "not",
+    "matches",
+    "is",
+    "where",
+    "host",
+    "host-context",
+]);
+/**
+ * Pseudo elements defined in CSS Level 1 and CSS Level 2 can be written with
+ * a single colon; eg. :before will turn into ::before.
+ *
+ * @see {@link https://www.w3.org/TR/2018/WD-selectors-4-20181121/#pseudo-element-syntax}
+ */
+const pseudosToPseudoElements = new Set([
+    "before",
+    "after",
+    "first-line",
+    "first-letter",
+]);
+/**
+ * Checks whether a specific selector is a traversal.
+ * This is useful eg. in swapping the order of elements that
+ * are not traversals.
+ *
+ * @param selector Selector to check.
+ */
+function isTraversal(selector) {
+    switch (selector.type) {
+        case types_SelectorType.Adjacent:
+        case types_SelectorType.Child:
+        case types_SelectorType.Descendant:
+        case types_SelectorType.Parent:
+        case types_SelectorType.Sibling:
+        case types_SelectorType.ColumnCombinator: {
+            return true;
+        }
+        default: {
+            return false;
+        }
+    }
+}
+const stripQuotesFromPseudos = new Set(["contains", "icontains"]);
+// Unescape function taken from https://github.com/jquery/sizzle/blob/master/src/sizzle.js#L152
+function funescape(_, escaped, escapedWhitespace) {
+    const high = Number.parseInt(escaped, 16) - 65536;
+    // NaN means non-codepoint
+    return high !== high || escapedWhitespace
+        ? escaped
+        : high < 0
+            ? // BMP codepoint
+                String.fromCharCode(high + 65536)
+            : // Supplemental Plane codepoint (surrogate pair)
+                String.fromCharCode((high >> 10) | 55296, (high & 1023) | 56320);
+}
+function unescapeCSS(cssString) {
+    return cssString.replace(reEscape, funescape);
+}
+function isQuote(c) {
+    return c === CharCode.SingleQuote || c === CharCode.DoubleQuote;
+}
+function isWhitespace(c) {
+    return (c === CharCode.Space ||
+        c === CharCode.Tab ||
+        c === CharCode.NewLine ||
+        c === CharCode.FormFeed ||
+        c === CharCode.CarriageReturn);
+}
+/**
+ * Parses `selector`.
+ *
+ * @param selector Selector to parse.
+ * @returns Returns a two-dimensional array.
+ * The first dimension represents selectors separated by commas (eg. `sub1, sub2`),
+ * the second contains the relevant tokens for that selector.
+ */
+function parse_parse(selector) {
+    const subselects = [];
+    const endIndex = parseSelector(subselects, `${selector}`, 0);
+    if (endIndex < selector.length) {
+        throw new Error(`Unmatched selector: ${selector.slice(endIndex)}`);
+    }
+    return subselects;
+}
+function parseSelector(subselects, selector, selectorIndex) {
+    let tokens = [];
+    function getName(offset) {
+        const match = selector.slice(selectorIndex + offset).match(reName);
+        if (!match) {
+            throw new Error(`Expected name, found ${selector.slice(selectorIndex)}`);
+        }
+        const [name] = match;
+        selectorIndex += offset + name.length;
+        return unescapeCSS(name);
+    }
+    function stripWhitespace(offset) {
+        selectorIndex += offset;
+        while (selectorIndex < selector.length &&
+            isWhitespace(selector.charCodeAt(selectorIndex))) {
+            selectorIndex++;
+        }
+    }
+    function readValueWithParenthesis() {
+        selectorIndex += 1;
+        const start = selectorIndex;
+        for (let counter = 1; selectorIndex < selector.length; selectorIndex++) {
+            switch (selector.charCodeAt(selectorIndex)) {
+                case CharCode.BackSlash: {
+                    // Skip next character
+                    selectorIndex += 1;
+                    break;
+                }
+                case CharCode.LeftParenthesis: {
+                    counter += 1;
+                    break;
+                }
+                case CharCode.RightParenthesis: {
+                    counter -= 1;
+                    if (counter === 0) {
+                        return unescapeCSS(selector.slice(start, selectorIndex++));
+                    }
+                    break;
+                }
+            }
+        }
+        throw new Error("Parenthesis not matched");
+    }
+    function ensureNotTraversal() {
+        if (tokens.length > 0 && isTraversal(tokens[tokens.length - 1])) {
+            throw new Error("Did not expect successive traversals.");
+        }
+    }
+    function addTraversal(type) {
+        if (tokens.length > 0 &&
+            tokens[tokens.length - 1].type === types_SelectorType.Descendant) {
+            tokens[tokens.length - 1].type = type;
+            return;
+        }
+        ensureNotTraversal();
+        tokens.push({ type });
+    }
+    function addSpecialAttribute(name, action) {
+        tokens.push({
+            type: types_SelectorType.Attribute,
+            name,
+            action,
+            value: getName(1),
+            namespace: null,
+            ignoreCase: "quirks",
+        });
+    }
+    /**
+     * We have finished parsing the current part of the selector.
+     *
+     * Remove descendant tokens at the end if they exist,
+     * and return the last index, so that parsing can be
+     * picked up from here.
+     */
+    function finalizeSubselector() {
+        if (tokens.length > 0 &&
+            tokens[tokens.length - 1].type === types_SelectorType.Descendant) {
+            tokens.pop();
+        }
+        if (tokens.length === 0) {
+            throw new Error("Empty sub-selector");
+        }
+        subselects.push(tokens);
+    }
+    stripWhitespace(0);
+    if (selector.length === selectorIndex) {
+        return selectorIndex;
+    }
+    loop: while (selectorIndex < selector.length) {
+        const firstChar = selector.charCodeAt(selectorIndex);
+        switch (firstChar) {
+            // Whitespace
+            case CharCode.Space:
+            case CharCode.Tab:
+            case CharCode.NewLine:
+            case CharCode.FormFeed:
+            case CharCode.CarriageReturn: {
+                if (tokens.length === 0 ||
+                    tokens[0].type !== types_SelectorType.Descendant) {
+                    ensureNotTraversal();
+                    tokens.push({ type: types_SelectorType.Descendant });
+                }
+                stripWhitespace(1);
+                break;
+            }
+            // Traversals
+            case CharCode.GreaterThan: {
+                addTraversal(types_SelectorType.Child);
+                stripWhitespace(1);
+                break;
+            }
+            case CharCode.LessThan: {
+                addTraversal(types_SelectorType.Parent);
+                stripWhitespace(1);
+                break;
+            }
+            case CharCode.Tilde: {
+                addTraversal(types_SelectorType.Sibling);
+                stripWhitespace(1);
+                break;
+            }
+            case CharCode.Plus: {
+                addTraversal(types_SelectorType.Adjacent);
+                stripWhitespace(1);
+                break;
+            }
+            // Special attribute selectors: .class, #id
+            case CharCode.Period: {
+                addSpecialAttribute("class", types_AttributeAction.Element);
+                break;
+            }
+            case CharCode.Hash: {
+                addSpecialAttribute("id", types_AttributeAction.Equals);
+                break;
+            }
+            case CharCode.LeftSquareBracket: {
+                stripWhitespace(1);
+                // Determine attribute name and namespace
+                let name;
+                let namespace = null;
+                if (selector.charCodeAt(selectorIndex) === CharCode.Pipe) {
+                    // Equivalent to no namespace
+                    name = getName(1);
+                }
+                else if (selector.startsWith("*|", selectorIndex)) {
+                    namespace = "*";
+                    name = getName(2);
+                }
+                else {
+                    name = getName(0);
+                    if (selector.charCodeAt(selectorIndex) === CharCode.Pipe &&
+                        selector.charCodeAt(selectorIndex + 1) !==
+                            CharCode.Equal) {
+                        namespace = name;
+                        name = getName(1);
+                    }
+                }
+                stripWhitespace(0);
+                // Determine comparison operation
+                let action = types_AttributeAction.Exists;
+                const possibleAction = actionTypes.get(selector.charCodeAt(selectorIndex));
+                if (possibleAction) {
+                    action = possibleAction;
+                    if (selector.charCodeAt(selectorIndex + 1) !==
+                        CharCode.Equal) {
+                        throw new Error("Expected `=`");
+                    }
+                    stripWhitespace(2);
+                }
+                else if (selector.charCodeAt(selectorIndex) === CharCode.Equal) {
+                    action = types_AttributeAction.Equals;
+                    stripWhitespace(1);
+                }
+                // Determine value
+                let value = "";
+                let ignoreCase = null;
+                if (action !== "exists") {
+                    if (isQuote(selector.charCodeAt(selectorIndex))) {
+                        const quote = selector.charCodeAt(selectorIndex);
+                        selectorIndex += 1;
+                        const sectionStart = selectorIndex;
+                        while (selectorIndex < selector.length &&
+                            selector.charCodeAt(selectorIndex) !== quote) {
+                            selectorIndex +=
+                                // Skip next character if it is escaped
+                                selector.charCodeAt(selectorIndex) ===
+                                    CharCode.BackSlash
+                                    ? 2
+                                    : 1;
+                        }
+                        if (selector.charCodeAt(selectorIndex) !== quote) {
+                            throw new Error("Attribute value didn't end");
+                        }
+                        value = unescapeCSS(selector.slice(sectionStart, selectorIndex));
+                        selectorIndex += 1;
+                    }
+                    else {
+                        const valueStart = selectorIndex;
+                        while (selectorIndex < selector.length &&
+                            !isWhitespace(selector.charCodeAt(selectorIndex)) &&
+                            selector.charCodeAt(selectorIndex) !==
+                                CharCode.RightSquareBracket) {
+                            selectorIndex +=
+                                // Skip next character if it is escaped
+                                selector.charCodeAt(selectorIndex) ===
+                                    CharCode.BackSlash
+                                    ? 2
+                                    : 1;
+                        }
+                        value = unescapeCSS(selector.slice(valueStart, selectorIndex));
+                    }
+                    stripWhitespace(0);
+                    // See if we have a force ignore flag
+                    switch (selector.charCodeAt(selectorIndex) | 0x20) {
+                        // If the forceIgnore flag is set (either `i` or `s`), use that value
+                        case CharCode.LowerI: {
+                            ignoreCase = true;
+                            stripWhitespace(1);
+                            break;
+                        }
+                        case CharCode.LowerS: {
+                            ignoreCase = false;
+                            stripWhitespace(1);
+                            break;
+                        }
+                    }
+                }
+                if (selector.charCodeAt(selectorIndex) !==
+                    CharCode.RightSquareBracket) {
+                    throw new Error("Attribute selector didn't terminate");
+                }
+                selectorIndex += 1;
+                const attributeSelector = {
+                    type: types_SelectorType.Attribute,
+                    name,
+                    action,
+                    value,
+                    namespace,
+                    ignoreCase,
+                };
+                tokens.push(attributeSelector);
+                break;
+            }
+            case CharCode.Colon: {
+                if (selector.charCodeAt(selectorIndex + 1) === CharCode.Colon) {
+                    tokens.push({
+                        type: types_SelectorType.PseudoElement,
+                        name: getName(2).toLowerCase(),
+                        data: selector.charCodeAt(selectorIndex) ===
+                            CharCode.LeftParenthesis
+                            ? readValueWithParenthesis()
+                            : null,
+                    });
+                    break;
+                }
+                const name = getName(1).toLowerCase();
+                if (pseudosToPseudoElements.has(name)) {
+                    tokens.push({
+                        type: types_SelectorType.PseudoElement,
+                        name,
+                        data: null,
+                    });
+                    break;
+                }
+                let data = null;
+                if (selector.charCodeAt(selectorIndex) ===
+                    CharCode.LeftParenthesis) {
+                    if (unpackPseudos.has(name)) {
+                        if (isQuote(selector.charCodeAt(selectorIndex + 1))) {
+                            throw new Error(`Pseudo-selector ${name} cannot be quoted`);
+                        }
+                        data = [];
+                        selectorIndex = parseSelector(data, selector, selectorIndex + 1);
+                        if (selector.charCodeAt(selectorIndex) !==
+                            CharCode.RightParenthesis) {
+                            throw new Error(`Missing closing parenthesis in :${name} (${selector})`);
+                        }
+                        selectorIndex += 1;
+                    }
+                    else {
+                        data = readValueWithParenthesis();
+                        if (stripQuotesFromPseudos.has(name)) {
+                            const quot = data.charCodeAt(0);
+                            if (quot === data.charCodeAt(data.length - 1) &&
+                                isQuote(quot)) {
+                                data = data.slice(1, -1);
+                            }
+                        }
+                        data = unescapeCSS(data);
+                    }
+                }
+                tokens.push({ type: types_SelectorType.Pseudo, name, data });
+                break;
+            }
+            case CharCode.Comma: {
+                finalizeSubselector();
+                tokens = [];
+                stripWhitespace(1);
+                break;
+            }
+            default: {
+                if (selector.startsWith("/*", selectorIndex)) {
+                    const endIndex = selector.indexOf("*/", selectorIndex + 2);
+                    if (endIndex < 0) {
+                        throw new Error("Comment was not terminated");
+                    }
+                    selectorIndex = endIndex + 2;
+                    // Remove leading whitespace
+                    if (tokens.length === 0) {
+                        stripWhitespace(0);
+                    }
+                    break;
+                }
+                let namespace = null;
+                let name;
+                if (firstChar === CharCode.Asterisk) {
+                    selectorIndex += 1;
+                    name = "*";
+                }
+                else if (firstChar === CharCode.Pipe) {
+                    name = "";
+                    if (selector.charCodeAt(selectorIndex + 1) === CharCode.Pipe) {
+                        addTraversal(types_SelectorType.ColumnCombinator);
+                        stripWhitespace(2);
+                        break;
+                    }
+                }
+                else if (reName.test(selector.slice(selectorIndex))) {
+                    name = getName(0);
+                }
+                else {
+                    break loop;
+                }
+                if (selector.charCodeAt(selectorIndex) === CharCode.Pipe &&
+                    selector.charCodeAt(selectorIndex + 1) !== CharCode.Pipe) {
+                    namespace = name;
+                    if (selector.charCodeAt(selectorIndex + 1) ===
+                        CharCode.Asterisk) {
+                        name = "*";
+                        selectorIndex += 2;
+                    }
+                    else {
+                        name = getName(1);
+                    }
+                }
+                tokens.push(name === "*"
+                    ? { type: types_SelectorType.Universal, namespace }
+                    : { type: types_SelectorType.Tag, name, namespace });
+            }
+        }
+    }
+    finalizeSubselector();
+    return selectorIndex;
+}
+
+;// CONCATENATED MODULE: ./node_modules/css-what/dist/esm/stringify.js
+
+const attribValueChars = ["\\", '"'];
+const pseudoValueChars = [...attribValueChars, "(", ")"];
+const charsToEscapeInAttributeValue = new Set(attribValueChars.map((c) => c.charCodeAt(0)));
+const charsToEscapeInPseudoValue = new Set(pseudoValueChars.map((c) => c.charCodeAt(0)));
+const charsToEscapeInName = new Set([
+    ...pseudoValueChars,
+    "~",
+    "^",
+    "$",
+    "*",
+    "+",
+    "!",
+    "|",
+    ":",
+    "[",
+    "]",
+    " ",
+    ".",
+    "%",
+].map((c) => c.charCodeAt(0)));
+/**
+ * Turns `selector` back into a string.
+ *
+ * @param selector Selector to stringify.
+ */
+function stringify(selector) {
+    return selector
+        .map((token) => token
+        .map((token, index, array) => stringifyToken(token, index, array))
+        .join(""))
+        .join(", ");
+}
+function stringifyToken(token, index, array) {
+    switch (token.type) {
+        // Simple types
+        case SelectorType.Child: {
+            return index === 0 ? "> " : " > ";
+        }
+        case SelectorType.Parent: {
+            return index === 0 ? "< " : " < ";
+        }
+        case SelectorType.Sibling: {
+            return index === 0 ? "~ " : " ~ ";
+        }
+        case SelectorType.Adjacent: {
+            return index === 0 ? "+ " : " + ";
+        }
+        case SelectorType.Descendant: {
+            return " ";
+        }
+        case SelectorType.ColumnCombinator: {
+            return index === 0 ? "|| " : " || ";
+        }
+        case SelectorType.Universal: {
+            // Return an empty string if the selector isn't needed.
+            return token.namespace === "*" &&
+                index + 1 < array.length &&
+                "name" in array[index + 1]
+                ? ""
+                : `${getNamespace(token.namespace)}*`;
+        }
+        case SelectorType.Tag: {
+            return getNamespacedName(token);
+        }
+        case SelectorType.PseudoElement: {
+            return `::${escapeName(token.name, charsToEscapeInName)}${token.data === null
+                ? ""
+                : `(${escapeName(token.data, charsToEscapeInPseudoValue)})`}`;
+        }
+        case SelectorType.Pseudo: {
+            return `:${escapeName(token.name, charsToEscapeInName)}${token.data === null
+                ? ""
+                : `(${typeof token.data === "string"
+                    ? escapeName(token.data, charsToEscapeInPseudoValue)
+                    : stringify(token.data)})`}`;
+        }
+        case SelectorType.Attribute: {
+            if (token.name === "id" &&
+                token.action === AttributeAction.Equals &&
+                token.ignoreCase === "quirks" &&
+                !token.namespace) {
+                return `#${escapeName(token.value, charsToEscapeInName)}`;
+            }
+            if (token.name === "class" &&
+                token.action === AttributeAction.Element &&
+                token.ignoreCase === "quirks" &&
+                !token.namespace) {
+                return `.${escapeName(token.value, charsToEscapeInName)}`;
+            }
+            const name = getNamespacedName(token);
+            if (token.action === AttributeAction.Exists) {
+                return `[${name}]`;
+            }
+            return `[${name}${getActionValue(token.action)}="${escapeName(token.value, charsToEscapeInAttributeValue)}"${token.ignoreCase === null ? "" : token.ignoreCase ? " i" : " s"}]`;
+        }
+    }
+}
+function getActionValue(action) {
+    switch (action) {
+        case AttributeAction.Equals: {
+            return "";
+        }
+        case AttributeAction.Element: {
+            return "~";
+        }
+        case AttributeAction.Start: {
+            return "^";
+        }
+        case AttributeAction.End: {
+            return "$";
+        }
+        case AttributeAction.Any: {
+            return "*";
+        }
+        case AttributeAction.Not: {
+            return "!";
+        }
+        case AttributeAction.Hyphen: {
+            return "|";
+        }
+        default: {
+            throw new Error("Shouldn't be here");
+        }
+    }
+}
+function getNamespacedName(token) {
+    return `${getNamespace(token.namespace)}${escapeName(token.name, charsToEscapeInName)}`;
+}
+function getNamespace(namespace) {
+    return namespace === null
+        ? ""
+        : `${namespace === "*"
+            ? "*"
+            : escapeName(namespace, charsToEscapeInName)}|`;
+}
+function escapeName(name, charsToEscape) {
+    let lastIndex = 0;
+    let escapedName = "";
+    for (let index = 0; index < name.length; index++) {
+        if (charsToEscape.has(name.charCodeAt(index))) {
+            escapedName += `${name.slice(lastIndex, index)}\\${name.charAt(index)}`;
+            lastIndex = index + 1;
+        }
+    }
+    return escapedName.length > 0 ? escapedName + name.slice(lastIndex) : name;
+}
+
+;// CONCATENATED MODULE: ./node_modules/css-what/dist/esm/index.js
+
+
+
 
 ;// CONCATENATED MODULE: ./node_modules/domelementtype/lib/esm/index.js
 /** Types of elements found in htmlparser2's DOM */
@@ -55486,91 +55886,7 @@ function isValidFeed(value) {
 /** @deprecated Use these methods from `domhandler` directly. */
 
 //# sourceMappingURL=index.js.map
-// EXTERNAL MODULE: ./node_modules/boolbase/index.js
-var boolbase = __nccwpck_require__(5265);
-// EXTERNAL MODULE: ./node_modules/css-what/lib/commonjs/index.js
-var commonjs = __nccwpck_require__(5667);
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/sort.js
-
-const procedure = new Map([
-    [commonjs.SelectorType.Universal, 50],
-    [commonjs.SelectorType.Tag, 30],
-    [commonjs.SelectorType.Attribute, 1],
-    [commonjs.SelectorType.Pseudo, 0],
-]);
-function isTraversal(token) {
-    return !procedure.has(token.type);
-}
-const attributes = new Map([
-    [commonjs.AttributeAction.Exists, 10],
-    [commonjs.AttributeAction.Equals, 8],
-    [commonjs.AttributeAction.Not, 7],
-    [commonjs.AttributeAction.Start, 6],
-    [commonjs.AttributeAction.End, 6],
-    [commonjs.AttributeAction.Any, 5],
-]);
-/**
- * Sort the parts of the passed selector,
- * as there is potential for optimization
- * (some types of selectors are faster than others)
- *
- * @param arr Selector to sort
- */
-function sortByProcedure(arr) {
-    const procs = arr.map(getProcedure);
-    for (let i = 1; i < arr.length; i++) {
-        const procNew = procs[i];
-        if (procNew < 0)
-            continue;
-        for (let j = i - 1; j >= 0 && procNew < procs[j]; j--) {
-            const token = arr[j + 1];
-            arr[j + 1] = arr[j];
-            arr[j] = token;
-            procs[j + 1] = procs[j];
-            procs[j] = procNew;
-        }
-    }
-}
-function getProcedure(token) {
-    var _a, _b;
-    let proc = (_a = procedure.get(token.type)) !== null && _a !== void 0 ? _a : -1;
-    if (token.type === commonjs.SelectorType.Attribute) {
-        proc = (_b = attributes.get(token.action)) !== null && _b !== void 0 ? _b : 4;
-        if (token.action === commonjs.AttributeAction.Equals && token.name === "id") {
-            // Prefer ID selectors (eg. #ID)
-            proc = 9;
-        }
-        if (token.ignoreCase) {
-            /*
-             * IgnoreCase adds some overhead, prefer "normal" token
-             * this is a binary operation, to ensure it's still an int
-             */
-            proc >>= 1;
-        }
-    }
-    else if (token.type === commonjs.SelectorType.Pseudo) {
-        if (!token.data) {
-            proc = 3;
-        }
-        else if (token.name === "has" || token.name === "contains") {
-            proc = 0; // Expensive in any case
-        }
-        else if (Array.isArray(token.data)) {
-            // Eg. :matches, :not
-            proc = Math.min(...token.data.map((d) => Math.min(...d.map(getProcedure))));
-            // If we have traversals, try to avoid executing this selector
-            if (proc < 0) {
-                proc = 0;
-            }
-        }
-        else {
-            proc = 2;
-        }
-    }
-    return proc;
-}
-//# sourceMappingURL=sort.js.map
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/attributes.js
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/attributes.js
 
 /**
  * All reserved characters in a regex, used for escaping.
@@ -55722,11 +56038,8 @@ const attributeRules = {
                     next(elem));
             };
         }
-        return (elem) => {
-            var _a;
-            return !!((_a = adapter.getAttributeValue(elem, name)) === null || _a === void 0 ? void 0 : _a.startsWith(value)) &&
-                next(elem);
-        };
+        return (elem) => !!adapter.getAttributeValue(elem, name)?.startsWith(value) &&
+            next(elem);
     },
     end(next, data, options) {
         const { adapter } = options;
@@ -55738,17 +56051,13 @@ const attributeRules = {
         }
         if (shouldIgnoreCase(data, options)) {
             value = value.toLowerCase();
-            return (elem) => {
-                var _a;
-                return ((_a = adapter
-                    .getAttributeValue(elem, name)) === null || _a === void 0 ? void 0 : _a.substr(len).toLowerCase()) === value && next(elem);
-            };
+            return (elem) => adapter
+                .getAttributeValue(elem, name)
+                ?.substr(len)
+                .toLowerCase() === value && next(elem);
         }
-        return (elem) => {
-            var _a;
-            return !!((_a = adapter.getAttributeValue(elem, name)) === null || _a === void 0 ? void 0 : _a.endsWith(value)) &&
-                next(elem);
-        };
+        return (elem) => !!adapter.getAttributeValue(elem, name)?.endsWith(value) &&
+            next(elem);
     },
     any(next, data, options) {
         const { adapter } = options;
@@ -55766,11 +56075,8 @@ const attributeRules = {
                     next(elem));
             };
         }
-        return (elem) => {
-            var _a;
-            return !!((_a = adapter.getAttributeValue(elem, name)) === null || _a === void 0 ? void 0 : _a.includes(value)) &&
-                next(elem);
-        };
+        return (elem) => !!adapter.getAttributeValue(elem, name)?.includes(value) &&
+            next(elem);
     },
     not(next, data, options) {
         const { adapter } = options;
@@ -55779,7 +56085,7 @@ const attributeRules = {
         if (value === "") {
             return (elem) => !!adapter.getAttributeValue(elem, name) && next(elem);
         }
-        else if (shouldIgnoreCase(data, options)) {
+        if (shouldIgnoreCase(data, options)) {
             value = value.toLowerCase();
             return (elem) => {
                 const attr = adapter.getAttributeValue(elem, name);
@@ -55793,6 +56099,171 @@ const attributeRules = {
     },
 };
 //# sourceMappingURL=attributes.js.map
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/helpers/querying.js
+/**
+ * Find all elements matching the query. If not in XML mode, the query will ignore
+ * the contents of `<template>` elements.
+ *
+ * @param query - Function that returns true if the element matches the query.
+ * @param elems - Nodes to query. If a node is an element, its children will be queried.
+ * @param options - Options for querying the document.
+ * @returns All matching elements.
+ */
+function querying_findAll(query, elems, options) {
+    const { adapter, xmlMode = false } = options;
+    const result = [];
+    /** Stack of the arrays we are looking at. */
+    const nodeStack = [elems];
+    /** Stack of the indices within the arrays. */
+    const indexStack = [0];
+    for (;;) {
+        // First, check if the current array has any more elements to look at.
+        if (indexStack[0] >= nodeStack[0].length) {
+            // If we have no more arrays to look at, we are done.
+            if (nodeStack.length === 1) {
+                return result;
+            }
+            nodeStack.shift();
+            indexStack.shift();
+            // Loop back to the start to continue with the next array.
+            continue;
+        }
+        const elem = nodeStack[0][indexStack[0]++];
+        if (!adapter.isTag(elem)) {
+            continue;
+        }
+        if (query(elem)) {
+            result.push(elem);
+        }
+        if (xmlMode || adapter.getName(elem) !== "template") {
+            /*
+             * Add the children to the stack. We are depth-first, so this is
+             * the next array we look at.
+             */
+            const children = adapter.getChildren(elem);
+            if (children.length > 0) {
+                nodeStack.unshift(children);
+                indexStack.unshift(0);
+            }
+        }
+    }
+}
+/**
+ * Find the first element matching the query. If not in XML mode, the query will ignore
+ * the contents of `<template>` elements.
+ *
+ * @param query - Function that returns true if the element matches the query.
+ * @param elems - Nodes to query. If a node is an element, its children will be queried.
+ * @param options - Options for querying the document.
+ * @returns The first matching element, or null if there was no match.
+ */
+function querying_findOne(query, elems, options) {
+    const { adapter, xmlMode = false } = options;
+    /** Stack of the arrays we are looking at. */
+    const nodeStack = [elems];
+    /** Stack of the indices within the arrays. */
+    const indexStack = [0];
+    for (;;) {
+        // First, check if the current array has any more elements to look at.
+        if (indexStack[0] >= nodeStack[0].length) {
+            // If we have no more arrays to look at, we are done.
+            if (nodeStack.length === 1) {
+                return null;
+            }
+            nodeStack.shift();
+            indexStack.shift();
+            // Loop back to the start to continue with the next array.
+            continue;
+        }
+        const elem = nodeStack[0][indexStack[0]++];
+        if (!adapter.isTag(elem)) {
+            continue;
+        }
+        if (query(elem)) {
+            return elem;
+        }
+        if (xmlMode || adapter.getName(elem) !== "template") {
+            /*
+             * Add the children to the stack. We are depth-first, so this is
+             * the next array we look at.
+             */
+            const children = adapter.getChildren(elem);
+            if (children.length > 0) {
+                nodeStack.unshift(children);
+                indexStack.unshift(0);
+            }
+        }
+    }
+}
+function getNextSiblings(elem, adapter) {
+    const siblings = adapter.getSiblings(elem);
+    if (siblings.length <= 1) {
+        return [];
+    }
+    const elemIndex = siblings.indexOf(elem);
+    if (elemIndex < 0 || elemIndex === siblings.length - 1) {
+        return [];
+    }
+    return siblings.slice(elemIndex + 1).filter(adapter.isTag);
+}
+function getElementParent(node, adapter) {
+    const parent = adapter.getParent(node);
+    return parent != null && adapter.isTag(parent) ? parent : null;
+}
+//# sourceMappingURL=querying.js.map
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/pseudo-selectors/aliases.js
+/**
+ * Only text controls can be made read-only, since for other controls (such
+ * as checkboxes and buttons) there is no useful distinction between being
+ * read-only and being disabled.
+ *
+ * @see {@link https://html.spec.whatwg.org/multipage/input.html#attr-input-readonly}
+ */
+const textControl = "input:is([type=text i],[type=search i],[type=url i],[type=tel i],[type=email i],[type=password i],[type=date i],[type=month i],[type=week i],[type=time i],[type=datetime-local i],[type=number i])";
+/**
+ * Aliases are pseudos that are expressed as selectors.
+ */
+const aliases = {
+    // Links
+    "any-link": ":is(a, area, link)[href]",
+    link: ":any-link:not(:visited)",
+    // Forms
+    // https://html.spec.whatwg.org/multipage/scripting.html#disabled-elements
+    disabled: `:is(
+        :is(button, input, select, textarea, optgroup, option)[disabled],
+        optgroup[disabled] > option,
+        fieldset[disabled]:not(fieldset[disabled] legend:first-of-type *)
+    )`,
+    enabled: ":not(:disabled)",
+    checked: ":is(:is(input[type=radio], input[type=checkbox])[checked], :selected)",
+    required: ":is(input, select, textarea)[required]",
+    optional: ":is(input, select, textarea):not([required])",
+    "read-only": `[readonly]:is(textarea, ${textControl})`,
+    "read-write": `:not([readonly]):is(textarea, ${textControl})`,
+    // JQuery extensions
+    /**
+     * `:selected` matches option elements that have the `selected` attribute,
+     * or are the first option element in a select element that does not have
+     * the `multiple` attribute and does not have any option elements with the
+     * `selected` attribute.
+     *
+     * @see https://html.spec.whatwg.org/multipage/form-elements.html#concept-option-selectedness
+     */
+    selected: "option:is([selected], select:not([multiple]):not(:has(> option[selected])) > :first-of-type)",
+    checkbox: "[type=checkbox]",
+    file: "[type=file]",
+    password: "[type=password]",
+    radio: "[type=radio]",
+    reset: "[type=reset]",
+    image: "[type=image]",
+    submit: "[type=submit]",
+    parent: ":not(:empty)",
+    header: ":is(h1, h2, h3, h4, h5, h6)",
+    button: ":is(button, input[type=button])",
+    input: ":is(input, textarea, select, button)",
+    text: "input:is(:not([type!='']), [type=text])",
+};
+//# sourceMappingURL=aliases.js.map
 ;// CONCATENATED MODULE: ./node_modules/nth-check/lib/esm/parse.js
 // Following http://www.w3.org/TR/css3-selectors/#nth-child-pseudo
 // Whitespace as per https://www.w3.org/TR/selectors-3/#lex is " \t\r\n\f"
@@ -55806,7 +56277,7 @@ const NINE = "9".charCodeAt(0);
  * @returns An array containing the integer step size and the integer offset of the nth rule.
  * @example nthCheck.parse("2n+3"); // returns [2, 3]
  */
-function parse_parse(formula) {
+function esm_parse_parse(formula) {
     formula = formula.trim().toLowerCase();
     if (formula === "even") {
         return [2, 0];
@@ -56009,7 +56480,7 @@ function compile_generate(parsed) {
  * check(6); // `true`
  */
 function nthCheck(formula) {
-    return compile(parse_parse(formula));
+    return compile(esm_parse_parse(formula));
 }
 /**
  * Parses and compiles a formula to a generator that produces a sequence of indices.
@@ -56045,41 +56516,80 @@ function sequence(formula) {
     return generate(parse(formula));
 }
 //# sourceMappingURL=index.js.map
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/pseudo-selectors/filters.js
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/helpers/cache.js
 
-
-function getChildFunc(next, adapter) {
-    return (elem) => {
-        const parent = adapter.getParent(elem);
-        return parent != null && adapter.isTag(parent) && next(elem);
+/**
+ * Some selectors such as `:contains` and (non-relative) `:has` will only be
+ * able to match elements if their parents match the selector (as they contain
+ * a subset of the elements that the parent contains).
+ *
+ * This function wraps the given `matches` function in a function that caches
+ * the results of the parent elements, so that the `matches` function only
+ * needs to be called once for each subtree.
+ */
+function cacheParentResults(next, { adapter, cacheResults }, matches) {
+    if (cacheResults === false || typeof WeakMap === "undefined") {
+        return (elem) => next(elem) && matches(elem);
+    }
+    // Use a cache to avoid re-checking children of an element.
+    // @ts-expect-error `Node` is not extending object
+    const resultCache = new WeakMap();
+    function addResultToCache(elem) {
+        const result = matches(elem);
+        resultCache.set(elem, result);
+        return result;
+    }
+    return function cachedMatcher(elem) {
+        if (!next(elem)) {
+            return false;
+        }
+        if (resultCache.has(elem)) {
+            return resultCache.get(elem);
+        }
+        // Check all of the element's parents.
+        let node = elem;
+        do {
+            const parent = getElementParent(node, adapter);
+            if (parent === null) {
+                return addResultToCache(elem);
+            }
+            node = parent;
+        } while (!resultCache.has(node));
+        return resultCache.get(node) && addResultToCache(elem);
     };
 }
+//# sourceMappingURL=cache.js.map
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/pseudo-selectors/filters.js
+
+
+
+
 const filters = {
-    contains(next, text, { adapter }) {
-        return function contains(elem) {
-            return next(elem) && adapter.getText(elem).includes(text);
-        };
+    contains(next, text, options) {
+        const { getText } = options.adapter;
+        return cacheParentResults(next, options, (elem) => getText(elem).includes(text));
     },
-    icontains(next, text, { adapter }) {
+    icontains(next, text, options) {
         const itext = text.toLowerCase();
-        return function icontains(elem) {
-            return (next(elem) &&
-                adapter.getText(elem).toLowerCase().includes(itext));
-        };
+        const { getText } = options.adapter;
+        return cacheParentResults(next, options, (elem) => getText(elem).toLowerCase().includes(itext));
     },
     // Location specific methods
     "nth-child"(next, rule, { adapter, equals }) {
         const func = nthCheck(rule);
-        if (func === boolbase.falseFunc)
+        if (func === boolbase.falseFunc) {
             return boolbase.falseFunc;
-        if (func === boolbase.trueFunc)
-            return getChildFunc(next, adapter);
+        }
+        if (func === boolbase.trueFunc) {
+            return (elem) => getElementParent(elem, adapter) !== null && next(elem);
+        }
         return function nthChild(elem) {
             const siblings = adapter.getSiblings(elem);
             let pos = 0;
             for (let i = 0; i < siblings.length; i++) {
-                if (equals(elem, siblings[i]))
+                if (equals(elem, siblings[i])) {
                     break;
+                }
                 if (adapter.isTag(siblings[i])) {
                     pos++;
                 }
@@ -56089,16 +56599,19 @@ const filters = {
     },
     "nth-last-child"(next, rule, { adapter, equals }) {
         const func = nthCheck(rule);
-        if (func === boolbase.falseFunc)
+        if (func === boolbase.falseFunc) {
             return boolbase.falseFunc;
-        if (func === boolbase.trueFunc)
-            return getChildFunc(next, adapter);
+        }
+        if (func === boolbase.trueFunc) {
+            return (elem) => getElementParent(elem, adapter) !== null && next(elem);
+        }
         return function nthLastChild(elem) {
             const siblings = adapter.getSiblings(elem);
             let pos = 0;
             for (let i = siblings.length - 1; i >= 0; i--) {
-                if (equals(elem, siblings[i]))
+                if (equals(elem, siblings[i])) {
                     break;
+                }
                 if (adapter.isTag(siblings[i])) {
                     pos++;
                 }
@@ -56108,17 +56621,20 @@ const filters = {
     },
     "nth-of-type"(next, rule, { adapter, equals }) {
         const func = nthCheck(rule);
-        if (func === boolbase.falseFunc)
+        if (func === boolbase.falseFunc) {
             return boolbase.falseFunc;
-        if (func === boolbase.trueFunc)
-            return getChildFunc(next, adapter);
+        }
+        if (func === boolbase.trueFunc) {
+            return (elem) => getElementParent(elem, adapter) !== null && next(elem);
+        }
         return function nthOfType(elem) {
             const siblings = adapter.getSiblings(elem);
             let pos = 0;
             for (let i = 0; i < siblings.length; i++) {
                 const currentSibling = siblings[i];
-                if (equals(elem, currentSibling))
+                if (equals(elem, currentSibling)) {
                     break;
+                }
                 if (adapter.isTag(currentSibling) &&
                     adapter.getName(currentSibling) === adapter.getName(elem)) {
                     pos++;
@@ -56129,17 +56645,20 @@ const filters = {
     },
     "nth-last-of-type"(next, rule, { adapter, equals }) {
         const func = nthCheck(rule);
-        if (func === boolbase.falseFunc)
+        if (func === boolbase.falseFunc) {
             return boolbase.falseFunc;
-        if (func === boolbase.trueFunc)
-            return getChildFunc(next, adapter);
+        }
+        if (func === boolbase.trueFunc) {
+            return (elem) => getElementParent(elem, adapter) !== null && next(elem);
+        }
         return function nthLastOfType(elem) {
             const siblings = adapter.getSiblings(elem);
             let pos = 0;
             for (let i = siblings.length - 1; i >= 0; i--) {
                 const currentSibling = siblings[i];
-                if (equals(elem, currentSibling))
+                if (equals(elem, currentSibling)) {
                     break;
+                }
                 if (adapter.isTag(currentSibling) &&
                     adapter.getName(currentSibling) === adapter.getName(elem)) {
                     pos++;
@@ -56150,10 +56669,7 @@ const filters = {
     },
     // TODO determine the actual root element
     root(next, _rule, { adapter }) {
-        return (elem) => {
-            const parent = adapter.getParent(elem);
-            return (parent == null || !adapter.isTag(parent)) && next(elem);
-        };
+        return (elem) => getElementParent(elem, adapter) === null && next(elem);
     },
     scope(next, rule, options, context) {
         const { equals } = options;
@@ -56189,13 +56705,26 @@ function dynamicStatePseudo(name) {
     };
 }
 //# sourceMappingURL=filters.js.map
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/pseudo-selectors/pseudos.js
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/pseudo-selectors/pseudos.js
+/**
+ * CSS limits the characters considered as whitespace to space, tab & line
+ * feed. We add carriage returns as htmlparser2 doesn't normalize them to
+ * line feeds.
+ *
+ * @see {@link https://www.w3.org/TR/css-text-3/#white-space}
+ */
+const isDocumentWhiteSpace = /^[ \t\r\n]*$/;
 // While filters are precompiled, pseudos get called when they are needed
 const pseudos = {
     empty(elem, { adapter }) {
-        return !adapter.getChildren(elem).some((elem) => 
-        // FIXME: `getText` call is potentially expensive.
-        adapter.isTag(elem) || adapter.getText(elem) !== "");
+        const children = adapter.getChildren(elem);
+        return (
+        // First, make sure the tag does not have any element children.
+        children.every((elem) => !adapter.isTag(elem)) &&
+            // Then, check that the text content is only whitespace.
+            children.every((elem) => 
+            // FIXME: `getText` call is potentially expensive.
+            isDocumentWhiteSpace.test(adapter.getText(elem))));
     },
     "first-child"(elem, { adapter, equals }) {
         if (adapter.prevElementSibling) {
@@ -56209,10 +56738,12 @@ const pseudos = {
     "last-child"(elem, { adapter, equals }) {
         const siblings = adapter.getSiblings(elem);
         for (let i = siblings.length - 1; i >= 0; i--) {
-            if (equals(elem, siblings[i]))
+            if (equals(elem, siblings[i])) {
                 return true;
-            if (adapter.isTag(siblings[i]))
+            }
+            if (adapter.isTag(siblings[i])) {
                 break;
+            }
         }
         return false;
     },
@@ -56221,8 +56752,9 @@ const pseudos = {
         const elemName = adapter.getName(elem);
         for (let i = 0; i < siblings.length; i++) {
             const currentSibling = siblings[i];
-            if (equals(elem, currentSibling))
+            if (equals(elem, currentSibling)) {
                 return true;
+            }
             if (adapter.isTag(currentSibling) &&
                 adapter.getName(currentSibling) === elemName) {
                 break;
@@ -56235,8 +56767,9 @@ const pseudos = {
         const elemName = adapter.getName(elem);
         for (let i = siblings.length - 1; i >= 0; i--) {
             const currentSibling = siblings[i];
-            if (equals(elem, currentSibling))
+            if (equals(elem, currentSibling)) {
                 return true;
+            }
             if (adapter.isTag(currentSibling) &&
                 adapter.getName(currentSibling) === elemName) {
                 break;
@@ -56269,60 +56802,130 @@ function verifyPseudoArgs(func, name, subselect, argIndex) {
     }
 }
 //# sourceMappingURL=pseudos.js.map
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/pseudo-selectors/aliases.js
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/helpers/selectors.js
+
+function selectors_isTraversal(token) {
+    return token.type === "_flexibleDescendant" || isTraversal(token);
+}
 /**
- * Aliases are pseudos that are expressed as selectors.
+ * Sort the parts of the passed selector, as there is potential for
+ * optimization (some types of selectors are faster than others).
+ *
+ * @param arr Selector to sort
  */
-const aliases = {
-    // Links
-    "any-link": ":is(a, area, link)[href]",
-    link: ":any-link:not(:visited)",
-    // Forms
-    // https://html.spec.whatwg.org/multipage/scripting.html#disabled-elements
-    disabled: `:is(
-        :is(button, input, select, textarea, optgroup, option)[disabled],
-        optgroup[disabled] > option,
-        fieldset[disabled]:not(fieldset[disabled] legend:first-of-type *)
-    )`,
-    enabled: ":not(:disabled)",
-    checked: ":is(:is(input[type=radio], input[type=checkbox])[checked], option:selected)",
-    required: ":is(input, select, textarea)[required]",
-    optional: ":is(input, select, textarea):not([required])",
-    // JQuery extensions
-    // https://html.spec.whatwg.org/multipage/form-elements.html#concept-option-selectedness
-    selected: "option:is([selected], select:not([multiple]):not(:has(> option[selected])) > :first-of-type)",
-    checkbox: "[type=checkbox]",
-    file: "[type=file]",
-    password: "[type=password]",
-    radio: "[type=radio]",
-    reset: "[type=reset]",
-    image: "[type=image]",
-    submit: "[type=submit]",
-    parent: ":not(:empty)",
-    header: ":is(h1, h2, h3, h4, h5, h6)",
-    button: ":is(button, input[type=button])",
-    input: ":is(input, textarea, select, button)",
-    text: "input:is(:not([type!='']), [type=text])",
-};
-//# sourceMappingURL=aliases.js.map
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/pseudo-selectors/subselects.js
+function sortRules(arr) {
+    const ratings = arr.map(getQuality);
+    for (let i = 1; i < arr.length; i++) {
+        const procNew = ratings[i];
+        if (procNew < 0) {
+            continue;
+        }
+        // Use insertion sort to move the token to the correct position.
+        for (let j = i; j > 0 && procNew < ratings[j - 1]; j--) {
+            const token = arr[j];
+            arr[j] = arr[j - 1];
+            arr[j - 1] = token;
+            ratings[j] = ratings[j - 1];
+            ratings[j - 1] = procNew;
+        }
+    }
+}
+function getAttributeQuality(token) {
+    switch (token.action) {
+        case types_AttributeAction.Exists: {
+            return 10;
+        }
+        case types_AttributeAction.Equals: {
+            // Prefer ID selectors (eg. #ID)
+            return token.name === "id" ? 9 : 8;
+        }
+        case types_AttributeAction.Not: {
+            return 7;
+        }
+        case types_AttributeAction.Start: {
+            return 6;
+        }
+        case types_AttributeAction.End: {
+            return 6;
+        }
+        case types_AttributeAction.Any: {
+            return 5;
+        }
+        case types_AttributeAction.Hyphen: {
+            return 4;
+        }
+        case types_AttributeAction.Element: {
+            return 3;
+        }
+    }
+}
+/**
+ * Determine the quality of the passed token. The higher the number, the
+ * faster the token is to execute.
+ *
+ * @param token Token to get the quality of.
+ * @returns The token's quality.
+ */
+function getQuality(token) {
+    switch (token.type) {
+        case types_SelectorType.Universal: {
+            return 50;
+        }
+        case types_SelectorType.Tag: {
+            return 30;
+        }
+        case types_SelectorType.Attribute: {
+            return Math.floor(getAttributeQuality(token) /
+                // `ignoreCase` adds some overhead, half the result if applicable.
+                (token.ignoreCase ? 2 : 1));
+        }
+        case types_SelectorType.Pseudo: {
+            return !token.data
+                ? 3
+                : token.name === "has" ||
+                    token.name === "contains" ||
+                    token.name === "icontains"
+                    ? // Expensive in any case — run as late as possible.
+                        0
+                    : Array.isArray(token.data)
+                        ? // Eg. `:is`, `:not`
+                            Math.max(
+                            // If we have traversals, try to avoid executing this selector
+                            0, Math.min(...token.data.map((d) => Math.min(...d.map(getQuality)))))
+                        : 2;
+        }
+        default: {
+            return -1;
+        }
+    }
+}
+function includesScopePseudo(t) {
+    return (t.type === types_SelectorType.Pseudo &&
+        (t.name === "scope" ||
+            (Array.isArray(t.data) &&
+                t.data.some((data) => data.some(includesScopePseudo)))));
+}
+//# sourceMappingURL=selectors.js.map
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/pseudo-selectors/subselects.js
+
+
 
 
 /** Used as a placeholder for :has. Will be replaced with the actual element. */
 const PLACEHOLDER_ELEMENT = {};
-function ensureIsTag(next, adapter) {
-    if (next === boolbase.falseFunc)
-        return boolbase.falseFunc;
-    return (elem) => adapter.isTag(elem) && next(elem);
-}
-function getNextSiblings(elem, adapter) {
-    const siblings = adapter.getSiblings(elem);
-    if (siblings.length <= 1)
-        return [];
-    const elemIndex = siblings.indexOf(elem);
-    if (elemIndex < 0 || elemIndex === siblings.length - 1)
-        return [];
-    return siblings.slice(elemIndex + 1).filter(adapter.isTag);
+/**
+ * Check if the selector has any properties that rely on the current element.
+ * If not, we can cache the result of the selector.
+ *
+ * We can't cache selectors that start with a traversal (e.g. `>`, `+`, `~`),
+ * or include a `:scope`.
+ *
+ * @param selector - The selector to check.
+ * @returns Whether the selector has any properties that rely on the current element.
+ */
+function hasDependsOnCurrentElement(selector) {
+    return selector.some((sel) => sel.length > 0 &&
+        (selectors_isTraversal(sel[0]) || sel.some(includesScopePseudo)));
 }
 function copyOptions(options) {
     // Not copied: context, rootFunc
@@ -56369,38 +56972,58 @@ const subselects = {
         const { adapter } = options;
         const opts = copyOptions(options);
         opts.relativeSelector = true;
-        const context = subselect.some((s) => s.some(isTraversal))
+        const context = subselect.some((s) => s.some(selectors_isTraversal))
             ? // Used as a placeholder. Will be replaced with the actual element.
                 [PLACEHOLDER_ELEMENT]
             : undefined;
+        const skipCache = hasDependsOnCurrentElement(subselect);
         const compiled = compileToken(subselect, opts, context);
-        if (compiled === boolbase.falseFunc)
+        if (compiled === boolbase.falseFunc) {
             return boolbase.falseFunc;
-        const hasElement = ensureIsTag(compiled, adapter);
+        }
         // If `compiled` is `trueFunc`, we can skip this.
         if (context && compiled !== boolbase.trueFunc) {
-            /*
-             * `shouldTestNextSiblings` will only be true if the query starts with
-             * a traversal (sibling or adjacent). That means we will always have a context.
-             */
-            const { shouldTestNextSiblings = false } = compiled;
-            return (elem) => {
-                if (!next(elem))
-                    return false;
-                context[0] = elem;
-                const childs = adapter.getChildren(elem);
-                const nextElements = shouldTestNextSiblings
-                    ? [...childs, ...getNextSiblings(elem, adapter)]
-                    : childs;
-                return adapter.existsOne(hasElement, nextElements);
-            };
+            return skipCache
+                ? (elem) => {
+                    if (!next(elem)) {
+                        return false;
+                    }
+                    context[0] = elem;
+                    const childs = adapter.getChildren(elem);
+                    return (querying_findOne(compiled, compiled.shouldTestNextSiblings
+                        ? [
+                            ...childs,
+                            ...getNextSiblings(elem, adapter),
+                        ]
+                        : childs, options) !== null);
+                }
+                : cacheParentResults(next, options, (elem) => {
+                    context[0] = elem;
+                    return (querying_findOne(compiled, adapter.getChildren(elem), options) !== null);
+                });
         }
-        return (elem) => next(elem) &&
-            adapter.existsOne(hasElement, adapter.getChildren(elem));
+        const hasOne = (elem) => querying_findOne(compiled, adapter.getChildren(elem), options) !== null;
+        return skipCache
+            ? (elem) => next(elem) && hasOne(elem)
+            : cacheParentResults(next, options, hasOne);
     },
 };
 //# sourceMappingURL=subselects.js.map
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/pseudo-selectors/index.js
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/pseudo-selectors/index.js
+/*
+ * Pseudo selectors
+ *
+ * Pseudo selectors are available in three forms:
+ *
+ * 1. Filters are called when the selector is compiled and return a function
+ *  that has to return either false, or the results of `next()`.
+ * 2. Pseudos are called on execution. They have to return a boolean.
+ * 3. Subselects work like filters, but have an embedded selector that will be run separately.
+ *
+ * Filters are great if you want to do some pre-processing, or change the call order
+ * of `next()` and your code.
+ * Pseudos should be used to implement simple checks.
+ */
 
 
 
@@ -56408,7 +57031,6 @@ const subselects = {
 
 
 function compilePseudoSelector(next, selector, options, context, compileToken) {
-    var _a;
     const { name, data } = selector;
     if (Array.isArray(data)) {
         if (!(name in subselects)) {
@@ -56416,14 +57038,14 @@ function compilePseudoSelector(next, selector, options, context, compileToken) {
         }
         return subselects[name](next, data, options, context, compileToken);
     }
-    const userPseudo = (_a = options.pseudos) === null || _a === void 0 ? void 0 : _a[name];
+    const userPseudo = options.pseudos?.[name];
     const stringPseudo = typeof userPseudo === "string" ? userPseudo : aliases[name];
     if (typeof stringPseudo === "string") {
         if (data != null) {
             throw new Error(`Pseudo ${name} doesn't have any arguments`);
         }
         // The alias has to be parsed here, to make sure options are respected.
-        const alias = (0,commonjs.parse)(stringPseudo);
+        const alias = parse_parse(stringPseudo);
         return subselects["is"](next, alias, options, context, compileToken);
     }
     if (typeof userPseudo === "function") {
@@ -56441,30 +57063,24 @@ function compilePseudoSelector(next, selector, options, context, compileToken) {
     throw new Error(`Unknown pseudo-class :${name}`);
 }
 //# sourceMappingURL=index.js.map
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/general.js
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/general.js
 
 
 
-function getElementParent(node, adapter) {
-    const parent = adapter.getParent(node);
-    if (parent && adapter.isTag(parent)) {
-        return parent;
-    }
-    return null;
-}
+
 /*
  * All available rules
  */
-function compileGeneralSelector(next, selector, options, context, compileToken) {
-    const { adapter, equals } = options;
+function compileGeneralSelector(next, selector, options, context, compileToken, hasExpensiveSubselector) {
+    const { adapter, equals, cacheResults } = options;
     switch (selector.type) {
-        case commonjs.SelectorType.PseudoElement: {
+        case types_SelectorType.PseudoElement: {
             throw new Error("Pseudo-elements are not supported by css-select");
         }
-        case commonjs.SelectorType.ColumnCombinator: {
+        case types_SelectorType.ColumnCombinator: {
             throw new Error("Column combinators are not yet supported by css-select");
         }
-        case commonjs.SelectorType.Attribute: {
+        case types_SelectorType.Attribute: {
             if (selector.namespace != null) {
                 throw new Error("Namespaced attributes are not yet supported by css-select");
             }
@@ -56473,11 +57089,11 @@ function compileGeneralSelector(next, selector, options, context, compileToken) 
             }
             return attributeRules[selector.action](next, selector, options);
         }
-        case commonjs.SelectorType.Pseudo: {
+        case types_SelectorType.Pseudo: {
             return compilePseudoSelector(next, selector, options, context, compileToken);
         }
         // Tags
-        case commonjs.SelectorType.Tag: {
+        case types_SelectorType.Tag: {
             if (selector.namespace != null) {
                 throw new Error("Namespaced tag names are not yet supported by css-select");
             }
@@ -56490,11 +57106,13 @@ function compileGeneralSelector(next, selector, options, context, compileToken) 
             };
         }
         // Traversal
-        case commonjs.SelectorType.Descendant: {
-            if (options.cacheResults === false ||
-                typeof WeakSet === "undefined") {
+        case types_SelectorType.Descendant: {
+            if (!hasExpensiveSubselector ||
+                cacheResults === false ||
+                typeof WeakMap === "undefined") {
                 return function descendant(elem) {
                     let current = elem;
+                    // biome-ignore lint/suspicious/noAssignInExpressions: TODO
                     while ((current = getElementParent(current, adapter))) {
                         if (next(current)) {
                             return true;
@@ -56503,16 +57121,26 @@ function compileGeneralSelector(next, selector, options, context, compileToken) 
                     return false;
                 };
             }
-            // @ts-expect-error `ElementNode` is not extending object
-            const isFalseCache = new WeakSet();
+            const resultCache = new WeakMap();
             return function cachedDescendant(elem) {
                 let current = elem;
+                let result;
+                // biome-ignore lint/suspicious/noAssignInExpressions: TODO
                 while ((current = getElementParent(current, adapter))) {
-                    if (!isFalseCache.has(current)) {
-                        if (adapter.isTag(current) && next(current)) {
+                    const cached = resultCache.get(current);
+                    if (cached === undefined) {
+                        result ?? (result = { matches: false });
+                        result.matches = next(current);
+                        resultCache.set(current, result);
+                        if (result.matches) {
                             return true;
                         }
-                        isFalseCache.add(current);
+                    }
+                    else {
+                        if (result) {
+                            result.matches = cached.matches;
+                        }
+                        return cached.matches;
                     }
                 }
                 return false;
@@ -56523,32 +57151,35 @@ function compileGeneralSelector(next, selector, options, context, compileToken) 
             return function flexibleDescendant(elem) {
                 let current = elem;
                 do {
-                    if (next(current))
+                    if (next(current)) {
                         return true;
-                } while ((current = getElementParent(current, adapter)));
+                    }
+                    current = getElementParent(current, adapter);
+                } while (current);
                 return false;
             };
         }
-        case commonjs.SelectorType.Parent: {
+        case types_SelectorType.Parent: {
             return function parent(elem) {
                 return adapter
                     .getChildren(elem)
                     .some((elem) => adapter.isTag(elem) && next(elem));
             };
         }
-        case commonjs.SelectorType.Child: {
+        case types_SelectorType.Child: {
             return function child(elem) {
-                const parent = adapter.getParent(elem);
-                return parent != null && adapter.isTag(parent) && next(parent);
+                const parent = getElementParent(elem, adapter);
+                return parent !== null && next(parent);
             };
         }
-        case commonjs.SelectorType.Sibling: {
+        case types_SelectorType.Sibling: {
             return function sibling(elem) {
                 const siblings = adapter.getSiblings(elem);
                 for (let i = 0; i < siblings.length; i++) {
                     const currentSibling = siblings[i];
-                    if (equals(elem, currentSibling))
+                    if (equals(elem, currentSibling)) {
                         break;
+                    }
                     if (adapter.isTag(currentSibling) && next(currentSibling)) {
                         return true;
                     }
@@ -56556,7 +57187,7 @@ function compileGeneralSelector(next, selector, options, context, compileToken) 
                 return false;
             };
         }
-        case commonjs.SelectorType.Adjacent: {
+        case types_SelectorType.Adjacent: {
             if (adapter.prevElementSibling) {
                 return function adjacent(elem) {
                     const previous = adapter.prevElementSibling(elem);
@@ -56568,8 +57199,9 @@ function compileGeneralSelector(next, selector, options, context, compileToken) 
                 let lastElement;
                 for (let i = 0; i < siblings.length; i++) {
                     const currentSibling = siblings[i];
-                    if (equals(elem, currentSibling))
+                    if (equals(elem, currentSibling)) {
                         break;
+                    }
                     if (adapter.isTag(currentSibling)) {
                         lastElement = currentSibling;
                     }
@@ -56577,7 +57209,7 @@ function compileGeneralSelector(next, selector, options, context, compileToken) 
                 return !!lastElement && next(lastElement);
             };
         }
-        case commonjs.SelectorType.Universal: {
+        case types_SelectorType.Universal: {
             if (selector.namespace != null && selector.namespace !== "*") {
                 throw new Error("Namespaced universal selectors are not yet supported by css-select");
             }
@@ -56586,39 +57218,19 @@ function compileGeneralSelector(next, selector, options, context, compileToken) 
     }
 }
 //# sourceMappingURL=general.js.map
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/compile.js
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/compile.js
 
 
 
 
 
-/**
- * Compiles a selector to an executable function.
- *
- * @param selector Selector to compile.
- * @param options Compilation options.
- * @param context Optional context for the selector.
- */
-function compile_compile(selector, options, context) {
-    const next = compileUnsafe(selector, options, context);
-    return ensureIsTag(next, options.adapter);
-}
-function compileUnsafe(selector, options, context) {
-    const token = typeof selector === "string" ? (0,commonjs.parse)(selector) : selector;
-    return compileToken(token, options, context);
-}
-function includesScopePseudo(t) {
-    return (t.type === commonjs.SelectorType.Pseudo &&
-        (t.name === "scope" ||
-            (Array.isArray(t.data) &&
-                t.data.some((data) => data.some(includesScopePseudo)))));
-}
-const DESCENDANT_TOKEN = { type: commonjs.SelectorType.Descendant };
+
+const DESCENDANT_TOKEN = { type: types_SelectorType.Descendant };
 const FLEXIBLE_DESCENDANT_TOKEN = {
     type: "_flexibleDescendant",
 };
 const SCOPE_TOKEN = {
-    type: commonjs.SelectorType.Pseudo,
+    type: types_SelectorType.Pseudo,
     name: "scope",
     data: null,
 };
@@ -56628,14 +57240,12 @@ const SCOPE_TOKEN = {
  */
 function absolutize(token, { adapter }, context) {
     // TODO Use better check if the context is a document
-    const hasContext = !!(context === null || context === void 0 ? void 0 : context.every((e) => {
-        const parent = adapter.isTag(e) && adapter.getParent(e);
-        return e === PLACEHOLDER_ELEMENT || (parent && adapter.isTag(parent));
-    }));
+    const hasContext = !!context?.every((e) => e === PLACEHOLDER_ELEMENT ||
+        (adapter.isTag(e) && getElementParent(e, adapter) !== null));
     for (const t of token) {
         if (t.length > 0 &&
-            isTraversal(t[0]) &&
-            t[0].type !== commonjs.SelectorType.Descendant) {
+            selectors_isTraversal(t[0]) &&
+            t[0].type !== types_SelectorType.Descendant) {
             // Don't continue in else branch
         }
         else if (hasContext && !t.some(includesScopePseudo)) {
@@ -56647,62 +57257,63 @@ function absolutize(token, { adapter }, context) {
         t.unshift(SCOPE_TOKEN);
     }
 }
-function compileToken(token, options, context) {
-    var _a;
-    token.forEach(sortByProcedure);
-    context = (_a = options.context) !== null && _a !== void 0 ? _a : context;
+function compileToken(token, options, ctx) {
+    token.forEach(sortRules);
+    const { context = ctx, rootFunc = boolbase.trueFunc } = options;
     const isArrayContext = Array.isArray(context);
     const finalContext = context && (Array.isArray(context) ? context : [context]);
     // Check if the selector is relative
     if (options.relativeSelector !== false) {
         absolutize(token, options, finalContext);
     }
-    else if (token.some((t) => t.length > 0 && isTraversal(t[0]))) {
+    else if (token.some((t) => t.length > 0 && selectors_isTraversal(t[0]))) {
         throw new Error("Relative selectors are not allowed when the `relativeSelector` option is disabled");
     }
     let shouldTestNextSiblings = false;
-    const query = token
-        .map((rules) => {
+    let query = boolbase.falseFunc;
+    combineLoop: for (const rules of token) {
         if (rules.length >= 2) {
             const [first, second] = rules;
-            if (first.type !== commonjs.SelectorType.Pseudo ||
-                first.name !== "scope") {
+            if (first.type !== types_SelectorType.Pseudo || first.name !== "scope") {
                 // Ignore
             }
             else if (isArrayContext &&
-                second.type === commonjs.SelectorType.Descendant) {
+                second.type === types_SelectorType.Descendant) {
                 rules[1] = FLEXIBLE_DESCENDANT_TOKEN;
             }
-            else if (second.type === commonjs.SelectorType.Adjacent ||
-                second.type === commonjs.SelectorType.Sibling) {
+            else if (second.type === types_SelectorType.Adjacent ||
+                second.type === types_SelectorType.Sibling) {
                 shouldTestNextSiblings = true;
             }
         }
-        return compileRules(rules, options, finalContext);
-    })
-        .reduce(reduceRules, boolbase.falseFunc);
+        let next = rootFunc;
+        let hasExpensiveSubselector = false;
+        for (const rule of rules) {
+            next = compileGeneralSelector(next, rule, options, finalContext, compileToken, hasExpensiveSubselector);
+            const quality = getQuality(rule);
+            if (quality === 0) {
+                hasExpensiveSubselector = true;
+            }
+            // If the sub-selector won't match any elements, skip it.
+            if (next === boolbase.falseFunc) {
+                continue combineLoop;
+            }
+        }
+        // If we have a function that always returns true, we can stop here.
+        if (next === rootFunc) {
+            return rootFunc;
+        }
+        query = query === boolbase.falseFunc ? next : or(query, next);
+    }
     query.shouldTestNextSiblings = shouldTestNextSiblings;
     return query;
 }
-function compileRules(rules, options, context) {
-    var _a;
-    return rules.reduce((previous, rule) => previous === boolbase.falseFunc
-        ? boolbase.falseFunc
-        : compileGeneralSelector(previous, rule, options, context, compileToken), (_a = options.rootFunc) !== null && _a !== void 0 ? _a : boolbase.trueFunc);
-}
-function reduceRules(a, b) {
-    if (b === boolbase.falseFunc || a === boolbase.trueFunc) {
-        return a;
-    }
-    if (a === boolbase.falseFunc || b === boolbase.trueFunc) {
-        return b;
-    }
-    return function combine(elem) {
-        return a(elem) || b(elem);
-    };
+function or(a, b) {
+    return (elem) => a(elem) || b(elem);
 }
 //# sourceMappingURL=compile.js.map
-;// CONCATENATED MODULE: ./node_modules/css-select/lib/esm/index.js
+;// CONCATENATED MODULE: ./node_modules/css-select/dist/esm/index.js
+
 
 
 
@@ -56713,35 +57324,51 @@ const defaultOptions = {
     equals: defaultEquals,
 };
 function convertOptionFormats(options) {
-    var _a, _b, _c, _d;
     /*
      * We force one format of options to the other one.
      */
     // @ts-expect-error Default options may have incompatible `Node` / `ElementNode`.
-    const opts = options !== null && options !== void 0 ? options : defaultOptions;
+    const opts = options ?? defaultOptions;
     // @ts-expect-error Same as above.
-    (_a = opts.adapter) !== null && _a !== void 0 ? _a : (opts.adapter = domutils_lib_esm_namespaceObject);
+    opts.adapter ?? (opts.adapter = domutils_lib_esm_namespaceObject);
     // @ts-expect-error `equals` does not exist on `Options`
-    (_b = opts.equals) !== null && _b !== void 0 ? _b : (opts.equals = (_d = (_c = opts.adapter) === null || _c === void 0 ? void 0 : _c.equals) !== null && _d !== void 0 ? _d : defaultEquals);
+    opts.equals ?? (opts.equals = opts.adapter?.equals ?? defaultEquals);
     return opts;
 }
-function wrapCompile(func) {
-    return function addAdapter(selector, options, context) {
-        const opts = convertOptionFormats(options);
-        return func(selector, opts, context);
-    };
+/**
+ * Compiles a selector to an executable function.
+ *
+ * The returned function checks if each passed node is an element. Use
+ * `_compileUnsafe` to skip this check.
+ *
+ * @param selector Selector to compile.
+ * @param options Compilation options.
+ * @param context Optional context for the selector.
+ */
+function esm_compile(selector, options, context) {
+    const opts = convertOptionFormats(options);
+    const next = _compileUnsafe(selector, opts, context);
+    return next === boolbase.falseFunc
+        ? boolbase.falseFunc
+        : (elem) => opts.adapter.isTag(elem) && next(elem);
 }
 /**
- * Compiles the query, returns a function.
+ * Like `compile`, but does not add a check if elements are tags.
  */
-const esm_compile = wrapCompile(compile_compile);
-const _compileUnsafe = wrapCompile(compileUnsafe);
-const _compileToken = wrapCompile(compileToken);
+function _compileUnsafe(selector, options, context) {
+    return _compileToken(typeof selector === "string" ? parse_parse(selector) : selector, options, context);
+}
+/**
+ * @deprecated Use `_compileUnsafe` instead.
+ */
+function _compileToken(selector, options, context) {
+    return compileToken(selector, convertOptionFormats(options), context);
+}
 function getSelectorFunc(searchFunc) {
     return function select(query, elements, options) {
         const opts = convertOptionFormats(options);
         if (typeof query !== "function") {
-            query = compileUnsafe(query, opts, elements);
+            query = _compileUnsafe(query, opts, elements);
         }
         const filteredElements = prepareContext(elements, opts.adapter, query.shouldTestNextSiblings);
         return searchFunc(query, filteredElements, opts);
@@ -56772,7 +57399,7 @@ function appendNextSiblings(elem, adapter) {
 /**
  * @template Node The generic Node type for the DOM adapter being used.
  * @template ElementNode The Node type for elements for the DOM adapter being used.
- * @param elems Elements to query. If it is an element, its children will be queried..
+ * @param elems Elements to query. If it is an element, its children will be queried.
  * @param query can be either a CSS selector string or a compiled query function.
  * @param [options] options for querying the document.
  * @see compile for supported selector queries.
@@ -56781,11 +57408,11 @@ function appendNextSiblings(elem, adapter) {
  */
 const selectAll = getSelectorFunc((query, elems, options) => query === boolbase.falseFunc || !elems || elems.length === 0
     ? []
-    : options.adapter.findAll(query, elems));
+    : querying_findAll(query, elems, options));
 /**
  * @template Node The generic Node type for the DOM adapter being used.
  * @template ElementNode The Node type for elements for the DOM adapter being used.
- * @param elems Elements to query. If it is an element, its children will be queried..
+ * @param elems Elements to query. If it is an element, its children will be queried.
  * @param query can be either a CSS selector string or a compiled query function.
  * @param [options] options for querying the document.
  * @see compile for supported selector queries.
@@ -56793,7 +57420,7 @@ const selectAll = getSelectorFunc((query, elems, options) => query === boolbase.
  */
 const selectOne = getSelectorFunc((query, elems, options) => query === boolbase.falseFunc || !elems || elems.length === 0
     ? null
-    : options.adapter.findOne(query, elems));
+    : querying_findOne(query, elems, options));
 /**
  * Tests whether or not an element is matched by query.
  *
@@ -56806,14 +57433,13 @@ const selectOne = getSelectorFunc((query, elems, options) => query === boolbase.
  * @returns
  */
 function esm_is(elem, query, options) {
-    const opts = convertOptionFormats(options);
-    return (typeof query === "function" ? query : compile_compile(query, opts))(elem);
+    return (typeof query === "function" ? query : esm_compile(query, options))(elem);
 }
 /**
  * Alias for selectAll(query, elems, options).
  * @see [compile] for supported selector queries.
  */
-/* harmony default export */ const css_select_lib_esm = ((/* unused pure expression or super */ null && (selectAll)));
+/* harmony default export */ const dist_esm = ((/* unused pure expression or super */ null && (selectAll)));
 // Export filters, pseudos and aliases to allow users to supply their own.
 /** @deprecated Use the `pseudos` option instead. */
 
@@ -56857,13 +57483,6 @@ const css_select_adapter_isTag = (node) => {
   return node.type === 'element';
 };
 
-/** @type {Required<import('css-select').Options<import('../types.js').XastNode & { children?: any }, import('../types.js').XastElement>>['adapter']['existsOne']} */
-const css_select_adapter_existsOne = (test, elems) => {
-  return elems.some((elem) => {
-    return css_select_adapter_isTag(elem) && (test(elem) || css_select_adapter_existsOne(test, css_select_adapter_getChildren(elem)));
-  });
-};
-
 /** @type {Required<import('css-select').Options<import('../types.js').XastNode & { children?: any }, import('../types.js').XastElement>>['adapter']['getAttributeValue']} */
 const css_select_adapter_getAttributeValue = (elem, name) => {
   return elem.attributes[name];
@@ -56890,36 +57509,6 @@ const css_select_adapter_getText = (node) => {
 /** @type {Required<import('css-select').Options<import('../types.js').XastNode & { children?: any }, import('../types.js').XastElement>>['adapter']['hasAttrib']} */
 const css_select_adapter_hasAttrib = (elem, name) => {
   return elem.attributes[name] !== undefined;
-};
-
-/** @type {Required<import('css-select').Options<import('../types.js').XastNode & { children?: any }, import('../types.js').XastElement>>['adapter']['findAll']} */
-const css_select_adapter_findAll = (test, elems) => {
-  const result = [];
-  for (const elem of elems) {
-    if (css_select_adapter_isTag(elem)) {
-      if (test(elem)) {
-        result.push(elem);
-      }
-      result.push(...css_select_adapter_findAll(test, css_select_adapter_getChildren(elem)));
-    }
-  }
-  return result;
-};
-
-/** @type {Required<import('css-select').Options<import('../types.js').XastNode & { children?: any }, import('../types.js').XastElement>>['adapter']['findOne']} */
-const css_select_adapter_findOne = (test, elems) => {
-  for (const elem of elems) {
-    if (css_select_adapter_isTag(elem)) {
-      if (test(elem)) {
-        return elem;
-      }
-      const result = css_select_adapter_findOne(test, css_select_adapter_getChildren(elem));
-      if (result) {
-        return result;
-      }
-    }
-  }
-  return null;
 };
 
 /**
@@ -56980,7 +57569,6 @@ function createAdapter(relativeNode, parents) {
 
   return {
     isTag: css_select_adapter_isTag,
-    existsOne: css_select_adapter_existsOne,
     getAttributeValue: css_select_adapter_getAttributeValue,
     getChildren: css_select_adapter_getChildren,
     getName: css_select_adapter_getName,
@@ -56989,8 +57577,6 @@ function createAdapter(relativeNode, parents) {
     getText: css_select_adapter_getText,
     hasAttrib: css_select_adapter_hasAttrib,
     removeSubsets,
-    findAll: css_select_adapter_findAll,
-    findOne: css_select_adapter_findOne,
   };
 }
 
@@ -57037,6 +57623,9 @@ const querySelector = (node, selector, parents) => {
  * @returns {boolean}
  */
 const matches = (node, selector, parents) => {
+  if (selector === '') {
+    return false;
+  }
   return esm_is(node, selector, createCssSelectOptions(node, parents));
 };
 
@@ -57078,6 +57667,7 @@ const description = 'removes doctype declaration';
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.1
  */
 const fn = () => {
   return {
@@ -57104,6 +57694,7 @@ const removeXMLProcInst_description = 'removes XML processing instructions';
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.1
  */
 const removeXMLProcInst_fn = () => {
   return {
@@ -57144,6 +57735,7 @@ const DEFAULT_PRESERVE_PATTERNS = [/^!/];
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<RemoveCommentsParams>}
+ * @since 0.0.1
  */
 const removeComments_fn = (_root, params) => {
   const { preservePatterns = DEFAULT_PRESERVE_PATTERNS } = params;
@@ -85370,8 +85962,8 @@ const includesAttrSelector = (
 ) => {
   const selectors =
     typeof selector === 'string'
-      ? commonjs.parse(selector)
-      : commonjs.parse(lib_generate(selector.data));
+      ? parse_parse(selector)
+      : parse_parse(lib_generate(selector.data));
 
   for (const subselector of selectors) {
     const hasAttrSelector = subselector.some((segment, index) => {
@@ -85380,7 +85972,7 @@ const includesAttrSelector = (
           return false;
         }
 
-        const isNextTraversal = commonjs.isTraversal(subselector[index + 1]);
+        const isNextTraversal = isTraversal(subselector[index + 1]);
 
         if (!isNextTraversal) {
           return false;
@@ -85423,7 +86015,7 @@ function extractAttributesInStylesheet(stylesheet) {
   const attributesInStylesheet = new Set();
 
   stylesheet.rules.forEach((rule) => {
-    const selectors = commonjs.parse(rule.selector);
+    const selectors = parse_parse(rule.selector);
     selectors.forEach((subselector) => {
       subselector.forEach((segment) => {
         if (segment.type !== 'attribute') {
@@ -85477,6 +86069,7 @@ function processAttributes(
  * Remove deprecated attributes.
  *
  * @type {import('../lib/types.js').Plugin<RemoveDeprecatedAttrsParams>}
+ * @since 3.3.0
  */
 function removeDeprecatedAttrs_fn(root, params) {
   const stylesheet = collectStylesheet(root);
@@ -85538,6 +86131,7 @@ const removeMetadata_description = 'removes <metadata>';
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.1
  */
 const removeMetadata_fn = () => {
   return {
@@ -85575,6 +86169,7 @@ const removeEditorsNSData_description =
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<RemoveEditorsNSDataParams>}
+ * @since 0.0.1
  */
 const removeEditorsNSData_fn = (_root, params) => {
   let namespaces = [...editorNamespaces];
@@ -85640,6 +86235,7 @@ const regSpaces = /\s{2,}/g;
  *
  * @author Kir Belevich
  * @type {import('../lib/types.js').Plugin<CleanupAttrsParams>}
+ * @since 0.0.1
  */
 const cleanupAttrs_fn = (root, params) => {
   const { newlines = true, trim = true, spaces = true } = params;
@@ -85687,6 +86283,7 @@ const mergeStyles_description = 'merge multiple style elements into one';
  * @author strarsis <strarsis@gmail.com>
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 2.3.0
  */
 const mergeStyles_fn = () => {
   /** @type {?import('../lib/types.js').XastElement} */
@@ -85801,6 +86398,7 @@ const preservedPseudos = [
  *
  * @type {import('../lib/types.js').Plugin<InlineStylesParams>}
  * @author strarsis <strarsis@gmail.com>
+ * @since 1.0.0
  */
 const inlineStyles_fn = (root, params) => {
   const {
@@ -85850,8 +86448,8 @@ const inlineStyles_fn = (root, params) => {
           .map((child) => child.value)
           .join('');
 
-        /** @type {?csstree.CssNode} */
-        let cssAst = null;
+        /** @type {csstree.CssNode} */
+        let cssAst;
         try {
           cssAst = lib_parse(cssText, {
             parseValue: false,
@@ -85867,6 +86465,10 @@ const inlineStyles_fn = (root, params) => {
         // collect selectors
         lib_walk(cssAst, {
           visit: 'Rule',
+          /**
+           * @this {csstree.WalkContext}
+           * @param {csstree.Rule} node
+           */
           enter(node) {
             const atrule = this.atrule;
 
@@ -85991,6 +86593,10 @@ const inlineStyles_fn = (root, params) => {
 
             lib_walk(styleDeclarationList, {
               visit: 'Declaration',
+              /**
+               * @param {csstree.Declaration} node
+               * @param {csstree.ListItem<csstree.CssNode>} item
+               */
               enter(node, item) {
                 if (firstListItem == null) {
                   firstListItem = item;
@@ -86002,6 +86608,7 @@ const inlineStyles_fn = (root, params) => {
             // merge declarations
             lib_walk(selector.rule, {
               visit: 'Declaration',
+              /** @param {csstree.Declaration} ruleDeclaration */
               enter(ruleDeclaration) {
                 // existing inline styles have higher priority
                 // no inline styles, external styles,                                    external styles used
@@ -86124,6 +86731,11 @@ const inlineStyles_fn = (root, params) => {
         for (const style of styles) {
           lib_walk(style.cssAst, {
             visit: 'Rule',
+            /**
+             * @param {csstree.Rule} node
+             * @param {csstree.ListItem<csstree.CssNode>} item
+             * @param {csstree.List<csstree.CssNode>} list
+             */
             enter: function (node, item, list) {
               // clean up <style/> rulesets without any css selectors left
               if (
@@ -86308,6 +86920,55 @@ const hasScriptsEventAttrs = [
   ...attrsGroups.graphicalEvent,
 ];
 
+const executableDataMediaTypes = new Set([
+  'application/xhtml+xml',
+  'image/svg+xml',
+  'text/html',
+]);
+
+/**
+ * Check whether a URL can contain executable content in a browser.
+ *
+ * @param {string} value
+ * @returns {boolean}
+ */
+const isExecutableUrl = (value) => {
+  // Browsers remove ASCII tabs and newlines from URLs before parsing them.
+  // Normalize them here too so they cannot be embedded in a scheme name.
+  const normalizedValue = value
+    .replace(/[\t\n\r]/g, '')
+    .trimStart()
+    .toLowerCase();
+
+  // `javascript:` is executable in modern browsers. `vbscript:` was only
+  // implemented by legacy Internet Explorer, but rejecting it is inexpensive,
+  // provides defense in depth for old environments, and keeps this security-
+  // oriented plugin's scheme denylist explicit and complete.
+  if (
+    normalizedValue.startsWith('javascript:') ||
+    normalizedValue.startsWith('vbscript:')
+  ) {
+    return true;
+  }
+
+  // A `data:` URL is not inherently executable: images and other inert media
+  // are common in SVGs and should remain intact. Only reject media types that
+  // browsers parse as active HTML, XHTML, or SVG documents.
+  if (!normalizedValue.startsWith('data:')) {
+    return false;
+  }
+
+  // Data URLs separate the media type from parameters with `;` and from the
+  // payload with `,`. A URL without either separator has no valid media type.
+  const mediaTypeEnd = normalizedValue.slice(5).search(/[;,]/);
+  if (mediaTypeEnd === -1) {
+    return false;
+  }
+
+  const mediaType = normalizedValue.slice(5, mediaTypeEnd + 5).trim();
+  return executableDataMediaTypes.has(mediaType);
+};
+
 /**
  * If the current node contains any scripts. This does not check parents or
  * children of the node, only the properties and attributes of the node itself.
@@ -86321,14 +86982,14 @@ const hasScripts = (node) => {
   }
 
   if (node.name === 'a') {
-    const hasJsLinks = Object.entries(node.attributes).some(
+    const hasExecutableLinks = Object.entries(node.attributes).some(
       ([attrKey, attrValue]) =>
         (attrKey === 'href' || attrKey.endsWith(':href')) &&
         attrValue != null &&
-        attrValue.trimStart().toLowerCase().startsWith('javascript:'),
+        isExecutableUrl(attrValue),
     );
 
-    if (hasJsLinks) {
+    if (hasExecutableLinks) {
       return true;
     }
   }
@@ -86441,6 +87102,7 @@ const minifyStyles_description = 'minifies styles and removes unused styles';
  *
  * @author strarsis <strarsis@gmail.com>
  * @type {import('../lib/types.js').Plugin<MinifyStylesParams>}
+ * @since 0.6.0
  */
 const minifyStyles_fn = (_root, { usage, ...params }) => {
   /** @type {Map<import('../lib/types.js').XastElement, import('../lib/types.js').XastParent>} */
@@ -86695,6 +87357,7 @@ const getIdString = (arr) => {
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<CleanupIdsParams>}
+ * @since 0.1.9
  */
 const cleanupIds_fn = (_root, params) => {
   const {
@@ -86845,6 +87508,7 @@ const removeUselessDefs_description = 'removes elements in <defs> without id';
  * @author Lev Solntsev
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.5.1
  */
 const removeUselessDefs_fn = () => {
   return {
@@ -86918,6 +87582,7 @@ const absoluteLengths = {
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<CleanupNumericValuesParams>}
+ * @since 0.1.3
  */
 const cleanupNumericValues_fn = (_root, params) => {
   const {
@@ -87071,6 +87736,7 @@ const convertRgbToHex = ([r, g, b]) => {
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<ConvertColorsParams>}
+ * @since 0.0.1
  */
 const convertColors_fn = (_root, params) => {
   const {
@@ -87268,6 +87934,7 @@ for (const [name, config] of Object.entries(elems)) {
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<RemoveUnknownsAndDefaultsParams>}
+ * @since 0.1.0
  */
 const removeUnknownsAndDefaults_fn = (root, params) => {
   const {
@@ -87404,6 +88071,7 @@ const removeNonInheritableGroupAttrs_description =
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.2.3
  */
 const removeNonInheritableGroupAttrs_fn = () => {
   return {
@@ -87448,6 +88116,7 @@ const removeUselessStrokeAndFill_description = 'removes useless stroke and fill 
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<RemoveUselessStrokeAndFillParams>}
+ * @since 0.1.8
  */
 const removeUselessStrokeAndFill_fn = (root, params) => {
   const {
@@ -87594,6 +88263,7 @@ const regEnableBackground =
  * <svg width="100" height="50">
  * @author Kir Belevich
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.4
  */
 const cleanupEnableBackground_fn = (root) => {
   let hasFilter = false;
@@ -88155,6 +88825,7 @@ const removeHiddenElems_description =
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<RemoveHiddenElemsParams>}
+ * @since 0.0.1
  */
 const removeHiddenElems_fn = (root, params) => {
   const {
@@ -88598,6 +89269,7 @@ const removeEmptyText_description = 'removes empty <text> elements';
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<RemoveEmptyTextParams>}
+ * @since 0.0.1
  */
 const removeEmptyText_fn = (root, params) => {
   const { text = true, tspan = true, tref = true } = params;
@@ -88649,6 +89321,7 @@ const regNumber = /[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g;
  * @author Lev Solntsev
  *
  * @type {import('../lib/types.js').Plugin<ConvertShapeToPathParams>}
+ * @since 0.4.3
  */
 const convertShapeToPath_fn = (root, params) => {
   const { convertArcs = false, floatPrecision: precision } = params;
@@ -88802,6 +89475,7 @@ const convertEllipseToCircle_description = 'converts non-eccentric <ellipse>s to
  * @author Taylor Hunt
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 1.3.0
  */
 const convertEllipseToCircle_fn = () => {
   return {
@@ -88856,6 +89530,7 @@ const moveElemsAttrsToGroup_description =
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.1
  */
 const moveElemsAttrsToGroup_fn = (root) => {
   // find if any style element is present
@@ -88985,6 +89660,7 @@ const pathElemsWithGroupsAndText = [...pathElems, 'g', 'text'];
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.1
  */
 const moveGroupAttrsToElems_fn = () => {
   return {
@@ -89074,6 +89750,7 @@ const hasAnimatedAttr = (node, name) => {
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.1
  */
 const collapseGroups_fn = (root) => {
   const stylesheet = collectStylesheet(root);
@@ -89499,7 +90176,7 @@ const intersects = function (path1, path2) {
     let value;
     while ((value = dot(polygon.list[index], direction)) > max) {
       max = value;
-      index = ++index % polygon.list.length;
+      index = (index + 1) % polygon.list.length;
     }
     return polygon.list[(index || polygon.list.length) - 1];
   }
@@ -89757,7 +90434,6 @@ function gatherPoints(pathData) {
           for (
             var cData;
             (cData = curves.splice(0, 6).map(toAbsolute)).length;
-
           ) {
             if (basePoint != null) {
               addPoint(subPath, [
@@ -89824,7 +90500,7 @@ function convexHull(points) {
   const upper = [];
   let maxY = points.list.length - 1;
   let top = 0;
-  for (let i = points.list.length; i--; ) {
+  for (let i = points.list.length; i--;) {
     while (
       upper.length >= 2 &&
       cross(upper[upper.length - 2], upper[upper.length - 1], points.list[i]) <=
@@ -90734,7 +91410,6 @@ const smartRound = (precision, data) => {
     let i = data.length,
       tolerance = +Math.pow(0.1, precision).toFixed(precision);
     i--;
-
   ) {
     if (toFixed(data[i], precision) !== data[i]) {
       const rounded = +data[i].toFixed(precision - 1);
@@ -91210,6 +91885,7 @@ let arcTolerance;
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<ConvertPathDataParams>}
+ * @since 0.0.7
  */
 const convertPathData_fn = (root, params) => {
   const {
@@ -91632,7 +92308,6 @@ function convertPathData_filters(path, params, { isSafeToUseZ, isSafeToRemove, h
         for (
           var j = index;
           (next = path[++j]) && (next.command === 'c' || next.command === 's');
-
         ) {
           let nextData = next.args;
           if (next.command == 's') {
@@ -91750,7 +92425,7 @@ function convertPathData_filters(path, params, { isSafeToUseZ, isSafeToRemove, h
           command === 's' ||
           command === 'c'
         ) {
-          for (let i = data.length; i--; ) {
+          for (let i = data.length; i--;) {
             // @ts-expect-error
             data[i] += item.base[i % 2] - relSubpoint[i % 2];
           }
@@ -92117,7 +92792,7 @@ function convertToMixed(path, params) {
       command === 's' ||
       command === 'c'
     ) {
-      for (let i = adata.length; i--; ) {
+      for (let i = adata.length; i--;) {
         // @ts-expect-error
         adata[i] += item.base[i % 2];
       }
@@ -92241,7 +92916,7 @@ function getIntersection(coords) {
  */
 function strongRound(data) {
   const precisionNum = precision || 0;
-  for (let i = data.length; i-- > 0; ) {
+  for (let i = data.length; i-- > 0;) {
     const fixed = toFixed(data[i], precisionNum);
     if (fixed !== data[i]) {
       const rounded = toFixed(data[i], precisionNum - 1);
@@ -92261,7 +92936,7 @@ function strongRound(data) {
  * @returns {number[]}
  */
 function convertPathData_round(data) {
-  for (let i = data.length; i-- > 0; ) {
+  for (let i = data.length; i-- > 0;) {
     data[i] = Math.round(data[i]);
   }
   return data;
@@ -92552,6 +93227,7 @@ const convertTransform_description =
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<ConvertTransformParams>}
+ * @since 0.0.8
  */
 const convertTransform_fn = (_root, params) => {
   const {
@@ -92817,6 +93493,7 @@ const removeEmptyAttrs_description = 'removes empty attributes';
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.1
  */
 const removeEmptyAttrs_fn = () => {
   return {
@@ -92859,6 +93536,7 @@ const removeEmptyContainers_description = 'removes empty container elements';
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.1
  */
 const removeEmptyContainers_fn = (root) => {
   const stylesheet = collectStylesheet(root);
@@ -92982,6 +93660,7 @@ function elementHasUrl(computedStyle, attName) {
  * @author Kir Belevich, Lev Solntsev
  *
  * @type {import('../lib/types.js').Plugin<MergePathsParams>}
+ * @since 0.3.0
  */
 const mergePaths_fn = (root, params) => {
   const {
@@ -93128,6 +93807,7 @@ const removeUnusedNS_description = 'removes unused namespaces declaration';
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.8
  */
 const removeUnusedNS_fn = () => {
   /** @type {Set<string>} */
@@ -93190,6 +93870,7 @@ const sortAttrs_description = 'Sort element attributes for better compression';
  * @author Nikolay Frantsev
  *
  * @type {import('../lib/types.js').Plugin<SortAttrsParams>}
+ * @since 0.3.2
  */
 const sortAttrs_fn = (_root, params) => {
   const {
@@ -93301,6 +93982,7 @@ const sortDefsChildren_description = 'Sorts children of <defs> to improve compre
  * @author David Leston
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 1.3.0
  */
 const sortDefsChildren_fn = () => {
   return {
@@ -93369,6 +94051,7 @@ const standardDescs = /^(Created with|Created using)/;
  * @see https://developer.mozilla.org/en-US/docs/Web/SVG/Element/desc
  *
  * @type {import('../lib/types.js').Plugin<RemoveDescParams>}
+ * @since 0.5.0
  */
 const removeDesc_fn = (root, params) => {
   const { removeAny = false } = params;
@@ -93524,6 +94207,7 @@ plugins: [
  * @author April Arcus
  *
  * @type {import('../lib/types.js').Plugin<AddAttributesToSVGElementParams>}
+ * @since 0.7.0
  */
 const addAttributesToSVGElement_fn = (root, params) => {
   if (!Array.isArray(params.attributes) && !params.attribute) {
@@ -93614,6 +94298,7 @@ plugins: [
  * @author April Arcus
  *
  * @type {import('../lib/types.js').Plugin<AddClassesToSVGElementParams>}
+ * @since 0.5.2
  */
 const addClassesToSVGElement_fn = (root, params, info) => {
   if (
@@ -93691,6 +94376,7 @@ const cleanupListOfValues_absoluteLengths = {
  * @author kiyopikko
  *
  * @type {import('../lib/types.js').Plugin<CleanupListOfValuesParams>}
+ * @since 0.5.1
  */
 const cleanupListOfValues_fn = (_root, params) => {
   const {
@@ -93815,6 +94501,7 @@ const convertOneStopGradients_description =
  *
  * @author Seth Falco <seth@falco.fun>
  * @type {import('../lib/types.js').Plugin}
+ * @since 3.0.3
  * @see https://developer.mozilla.org/en-US/docs/Web/SVG/Element/linearGradient
  * @see https://developer.mozilla.org/en-US/docs/Web/SVG/Element/radialGradient
  */
@@ -94036,6 +94723,7 @@ const regStripComments = new RegExp(
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin<ConvertStyleToAttrsParams>}
+ * @since 0.0.1
  */
 const convertStyleToAttrs_fn = (_root, params) => {
   const { keepImportant = false } = params;
@@ -94061,7 +94749,7 @@ const convertStyleToAttrs_fn = (_root, params) => {
           );
 
           regDeclarationBlock.lastIndex = 0;
-          for (var rule; (rule = regDeclarationBlock.exec(styleValue)); ) {
+          for (var rule; (rule = regDeclarationBlock.exec(styleValue));) {
             if (!keepImportant || !rule[3]) {
               styles.push([rule[1], rule[2]]);
             }
@@ -94231,6 +94919,7 @@ const generatePrefix = (body, node, info, prefixGenerator, delim, history) => {
  *
  * @author strarsis <strarsis@gmail.com>
  * @type {import('../lib/types.js').Plugin<PrefixIdsParams>}
+ * @since 1.0.0
  */
 const prefixIds_fn = (_root, params, info) => {
   const {
@@ -94475,6 +95164,7 @@ Without either, the plugin is a noop.`;
  * @author Bradley Mease
  *
  * @type {import('../lib/types.js').Plugin<RemoveAttributesBySelectorParams>}
+ * @since 1.2.0
  */
 const removeAttributesBySelector_fn = (root, params) => {
   if (
@@ -94595,6 +95285,7 @@ plugins: [
  * @author Benny Schudel
  *
  * @type {import('../lib/types.js').Plugin<RemoveAttrsParams>}
+ * @since 0.5.3
  */
 const removeAttrs_fn = (root, params) => {
   if (typeof params.attrs == 'undefined') {
@@ -94676,6 +95367,7 @@ const removeDimensions_description =
  * @author Benny Schudel
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.5.3
  */
 const removeDimensions_fn = () => {
   return {
@@ -94747,6 +95439,7 @@ const removeElementsByAttr_description = 'removes arbitrary elements by ID or cl
  * @author Eli Dupuis (@elidupuis)
  *
  * @type {import('../lib/types.js').Plugin<RemoveElementsByAttrParams>}
+ * @since 0.7.0
  */
 const removeElementsByAttr_fn = (root, params) => {
   const ids =
@@ -94797,6 +95490,7 @@ const removeOffCanvasPaths_description =
  * @author JoshyPHP
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 1.2.0
  */
 const removeOffCanvasPaths_fn = () => {
   /**
@@ -94926,6 +95620,7 @@ const removeRasterImages_description = 'removes raster images';
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.2.3
  */
 const removeRasterImages_fn = () => {
   return {
@@ -94947,6 +95642,7 @@ const removeRasterImages_fn = () => {
 
 
 
+
 const removeScripts_name = 'removeScripts';
 const removeScripts_description = 'removes scripts';
 
@@ -94959,11 +95655,19 @@ const eventAttrs = [
   ...attrsGroups.graphicalEvent,
 ];
 
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
+/** Namespaces that support SVG <foreignObject> elements. */
+const FOREIGN_OBJECT_NAMESPACES = [SVG_NAMESPACE];
+
+/** Namespaces that support SVG <a> elements. */
+const ANCHOR_NAMESPACES = [SVG_NAMESPACE];
+
 /** Namespaces that support executable <script> elements. */
-const SCRIPT_NAMESPACES = [
-  'http://www.w3.org/2000/svg',
-  'http://www.w3.org/1999/xhtml',
-];
+const SCRIPT_NAMESPACES = [SVG_NAMESPACE, 'http://www.w3.org/1999/xhtml'];
+
+/** Attributes that can load or navigate to executable documents in HTML. */
+const HTML_URL_ATTRS = new Set(['action', 'data', 'formaction', 'href', 'src']);
 
 /**
  * @param {string} elem
@@ -94997,6 +95701,7 @@ function isNamespaceAwareElem(elem, targetElem, prefixes, targetNamespaces) {
  *
  * @author Patrick Klingemann
  * @type {import('../lib/types.js').Plugin}
+ * @since 1.0.0
  */
 const removeScripts_fn = () => {
   /**
@@ -95006,6 +95711,7 @@ const removeScripts_fn = () => {
    *
    * @type {Map<string, string[]>} */
   const prefixes = new Map();
+  let foreignObjectDepth = 0;
 
   return {
     element: {
@@ -95025,19 +95731,54 @@ const removeScripts_fn = () => {
         }
 
         if (
+          isNamespaceAwareElem(
+            node.name,
+            'foreignObject',
+            prefixes,
+            FOREIGN_OBJECT_NAMESPACES,
+          )
+        ) {
+          foreignObjectDepth += 1;
+        }
+
+        if (
           isNamespaceAwareElem(node.name, 'script', prefixes, SCRIPT_NAMESPACES)
         ) {
           detachNodeFromParent(node, parentNode);
           return;
         }
 
-        for (const attr of eventAttrs) {
-          if (node.attributes[attr] != null) {
+        for (const [attr, value] of Object.entries(node.attributes)) {
+          const localAttr = attr.slice(attr.lastIndexOf(':') + 1).toLowerCase();
+          const isEventAttr =
+            eventAttrs.includes(attr) ||
+            (foreignObjectDepth > 0 && localAttr.startsWith('on'));
+          const isEmbeddedDocumentAttr =
+            foreignObjectDepth > 0 && localAttr === 'srcdoc';
+          const isExecutableHtmlUrl =
+            foreignObjectDepth > 0 &&
+            HTML_URL_ATTRS.has(localAttr) &&
+            isExecutableUrl(value);
+
+          if (isEventAttr || isEmbeddedDocumentAttr || isExecutableHtmlUrl) {
             delete node.attributes[attr];
           }
         }
       },
       exit: (node, parentNode) => {
+        const isForeignObject = isNamespaceAwareElem(
+          node.name,
+          'foreignObject',
+          prefixes,
+          FOREIGN_OBJECT_NAMESPACES,
+        );
+        const isAnchor = isNamespaceAwareElem(
+          node.name,
+          'a',
+          prefixes,
+          ANCHOR_NAMESPACES,
+        );
+
         for (const k of Object.keys(node.attributes)) {
           if (!k.startsWith('xmlns:')) {
             continue;
@@ -95047,28 +95788,27 @@ const removeScripts_fn = () => {
           /** @type {string[]} */ (prefixes.get(prefix)).pop();
         }
 
-        if (node.name !== 'a') {
-          return;
+        if (isAnchor) {
+          for (const attr of Object.keys(node.attributes)) {
+            if (attr === 'href' || attr.endsWith(':href')) {
+              if (
+                node.attributes[attr] == null ||
+                !isExecutableUrl(node.attributes[attr])
+              ) {
+                continue;
+              }
+
+              const index = parentNode.children.indexOf(node);
+              const usefulChildren = node.children.filter(
+                (child) => child.type !== 'text',
+              );
+              parentNode.children.splice(index, 1, ...usefulChildren);
+            }
+          }
         }
 
-        for (const attr of Object.keys(node.attributes)) {
-          if (attr === 'href' || attr.endsWith(':href')) {
-            if (
-              node.attributes[attr] == null ||
-              !node.attributes[attr]
-                .trimStart()
-                .toLowerCase()
-                .startsWith('javascript:')
-            ) {
-              continue;
-            }
-
-            const index = parentNode.children.indexOf(node);
-            const usefulChildren = node.children.filter(
-              (child) => child.type !== 'text',
-            );
-            parentNode.children.splice(index, 1, ...usefulChildren);
-          }
+        if (isForeignObject) {
+          foreignObjectDepth -= 1;
         }
       },
     },
@@ -95089,6 +95829,7 @@ const removeStyleElement_description = 'removes <style> element';
  * @author Betsy Dupuis
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.6.0
  */
 const removeStyleElement_fn = () => {
   return {
@@ -95116,6 +95857,7 @@ const removeTitle_description = 'removes <title>';
  * @author Igor Kalashnikov
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.4.4
  */
 const removeTitle_fn = () => {
   return {
@@ -95148,6 +95890,7 @@ const viewBoxElems = new Set(['pattern', 'svg', 'symbol']);
  * @author Kir Belevich
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.0.4
  */
 const removeViewBox_fn = () => {
   return {
@@ -95242,6 +95985,7 @@ const findPrefixedAttrs = (node, prefixes, attr) => {
  *
  * @type {import('../lib/types.js').Plugin<RemoveXlinkParams>}
  * @see https://developer.mozilla.org/en-US/docs/Web/SVG/Attribute/xlink:href
+ * @since 3.0.4
  */
 const removeXlink_fn = (_, params) => {
   const { includeLegacy } = params;
@@ -95422,6 +96166,7 @@ const removeXMLNS_description = 'removes xmlns attribute (for inline svg)';
  * @author Ricardo Tomasi
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 0.7.0
  */
 const removeXMLNS_fn = () => {
   return {
@@ -95452,6 +96197,7 @@ const reusePaths_description =
  * @author Jacob Howcroft
  *
  * @type {import('../lib/types.js').Plugin}
+ * @since 1.2.0
  */
 const reusePaths_fn = (root) => {
   const stylesheet = collectStylesheet(root);
@@ -96264,7 +97010,7 @@ for (const plugin of builtinPlugins) {
 
 /**
  * @param {string} name
- * @returns {import('./types.js').BuiltinPluginOrPreset<?, ?>}
+ * @returns {import('./types.js').BuiltinPluginOrPreset<string, any>}
  */
 function getPlugin(name) {
   if (name === 'removeScriptElement') {
@@ -96430,6 +97176,7 @@ const isFile = async (file) => {
  *
  * @type {<T extends string | null>(configFile?: T, cwd?: string) => Promise<T extends string ? import('./svgo.js').Config : import('./svgo.js').Config | null>}
  */
+// @ts-expect-error https://github.com/microsoft/TypeScript/issues/33912
 const loadConfig = async (configFile, cwd = process.cwd()) => {
   if (configFile != null) {
     if (path.isAbsolute(configFile)) {
@@ -96455,7 +97202,6 @@ const loadConfig = async (configFile, cwd = process.cwd()) => {
     }
     const parent = path.dirname(dir);
     if (dir === parent) {
-      // @ts-expect-error https://github.com/microsoft/TypeScript/issues/33912
       return null;
     }
     dir = parent;
